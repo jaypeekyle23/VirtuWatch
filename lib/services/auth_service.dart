@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -80,6 +81,57 @@ class AuthService {
       await _auth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
       throw _mapAuthError(e);
+    }
+  }
+
+  /// Used by an Admin to create a Merchant or Admin account without
+  /// disrupting their own logged-in session. Uses a secondary Firebase
+  /// app instance so the admin stays signed in on the main app.
+  Future<void> createAccountForRole({
+    required String email,
+    required String password,
+    required String username,
+    required String role, // 'customer', 'merchant', or 'admin'
+    List<String> stylePreferences = const [],
+  }) async {
+      if (role != 'customer' && role != 'merchant' && role != 'admin') {
+        throw 'Invalid role specified.';
+    }
+
+    FirebaseApp? secondaryApp;
+    try {
+      secondaryApp = await Firebase.initializeApp(
+        name: 'AdminCreateUser_${DateTime.now().millisecondsSinceEpoch}',
+        options: Firebase.app().options,
+      );
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final newUser = credential.user;
+      if (newUser == null) {
+        throw 'Account creation failed.';
+      }
+
+      await _firestore.collection('users').doc(newUser.uid).set({
+        'uid': newUser.uid,
+        'email': email,
+        'username': username,
+        'role': role,
+        'stylePreferences': stylePreferences,
+        'accountStatus': 'active',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      await secondaryAuth.signOut();
+    } on FirebaseAuthException catch (e) {
+      throw _mapAuthError(e);
+    } finally {
+      if (secondaryApp != null) {
+        await secondaryApp.delete();
+      }
     }
   }
 
