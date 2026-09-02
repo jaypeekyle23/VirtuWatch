@@ -3,6 +3,9 @@ import 'package:flutter/gestures.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'register_screen.dart';
+import 'customer_home_screen.dart';
+import 'merchant_home_screen.dart';
+import 'admin_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,17 +40,31 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _authService.loginWithEmail(
+      final profile = await _authService.loginWithEmail(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
-      // Role-based routing (Customer / Merchant / Admin) will be added
-      // once we build RBAC in the next step. For now, login just succeeds.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Logged in successfully!')),
-        );
+
+      if (profile == null || !mounted) return;
+
+      final role = profile['role'] as String? ?? 'customer';
+      final username = profile['username'] as String? ?? 'User';
+
+      Widget destination;
+      switch (role) {
+        case 'admin':
+          destination = AdminHomeScreen(username: username);
+          break;
+        case 'merchant':
+          destination = MerchantHomeScreen(username: username);
+          break;
+        default:
+          destination = CustomerHomeScreen(username: username);
       }
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => destination),
+      );
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
