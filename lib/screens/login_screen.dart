@@ -3,7 +3,7 @@ import 'package:flutter/gestures.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'register_screen.dart';
-import 'customer_home_screen.dart';
+import 'customer/customer_shell.dart';
 import 'merchant/merchant_shell.dart';
 import 'admin_home_screen.dart';
 
@@ -59,9 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
           destination = MerchantShell(username: username);
           break;
         default:
-          destination = CustomerHomeScreen(username: username);
-      }
-
+          destination = CustomerShell(username: username);      }
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => destination),
       );
