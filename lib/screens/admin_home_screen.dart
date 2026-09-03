@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
-import 'admin_create_account_screen.dart';
+import 'admin/admin_create_account_screen.dart';
 
 class AdminHomeScreen extends StatelessWidget {
   final String username;

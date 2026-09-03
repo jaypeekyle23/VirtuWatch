@@ -5,7 +5,7 @@ import '../theme/app_theme.dart';
 import 'register_screen.dart';
 import 'customer/customer_shell.dart';
 import 'merchant/merchant_shell.dart';
-import 'admin_home_screen.dart';
+import 'admin/admin_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -53,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Widget destination;
       switch (role) {
         case 'admin':
-          destination = AdminHomeScreen(username: username);
+          destination = AdminShell(username: username);
           break;
         case 'merchant':
           destination = MerchantShell(username: username);
