@@ -135,6 +135,27 @@ class AuthService {
     }
   }
 
+  /// Updates the currently logged-in user's own editable profile fields.
+  /// Cannot touch role or accountStatus (blocked by Security Rules anyway).
+  Future<void> updateOwnProfile({
+    required String username,
+    List<String> stylePreferences = const [],
+    List<String> preferredBrands = const [],
+    double? budgetMin,
+    double? budgetMax,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw 'You must be logged in.';
+
+    await _firestore.collection('users').doc(uid).update({
+      'username': username,
+      'stylePreferences': stylePreferences,
+      'preferredBrands': preferredBrands,
+      'budgetMin': ?budgetMin,
+      'budgetMax': ?budgetMax,
+    });
+  }
+
   String _mapAuthError(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use':

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
+import 'edit_profile_screen.dart';
 
 class CustomerProfileTab extends StatelessWidget {
   const CustomerProfileTab({super.key});
@@ -29,6 +30,12 @@ class CustomerProfileTab extends StatelessWidget {
                 final email = data['email'] as String? ?? '';
                 final stylePreferences =
                     (data['stylePreferences'] as List?)?.cast<String>() ?? [];
+                final preferredBrands =
+                    (data['preferredBrands'] as List?)?.cast<String>() ?? [];
+                final budgetMin =
+                    (data['budgetMin'] as num?)?.toDouble() ?? 5000;
+                final budgetMax =
+                    (data['budgetMax'] as num?)?.toDouble() ?? 50000;
                 final initials = username.isNotEmpty
                     ? username.trim().split(' ').map((e) => e[0]).take(2).join()
                     : '?';
@@ -60,6 +67,28 @@ class CustomerProfileTab extends StatelessWidget {
                       Text(
                         email,
                         style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.gold,
+                          side: const BorderSide(color: AppTheme.gold),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EditProfileScreen(
+                                currentUsername: username,
+                                currentEmail: email,
+                                currentStylePreferences: stylePreferences,
+                                currentPreferredBrands: preferredBrands,
+                                currentBudgetMin: budgetMin,
+                                currentBudgetMax: budgetMax,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Edit Profile'),
                       ),
                       const SizedBox(height: 20),
 
