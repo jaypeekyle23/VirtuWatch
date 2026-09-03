@@ -4,7 +4,7 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'register_screen.dart';
 import 'customer_home_screen.dart';
-import 'merchant_home_screen.dart';
+import 'merchant/merchant_shell.dart';
 import 'admin_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -56,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
           destination = AdminHomeScreen(username: username);
           break;
         case 'merchant':
-          destination = MerchantHomeScreen(username: username);
+          destination = MerchantShell(username: username);
           break;
         default:
           destination = CustomerHomeScreen(username: username);
