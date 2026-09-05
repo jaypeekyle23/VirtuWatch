@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -63,6 +64,58 @@ class AuthService {
       final data = doc.data()!;
       if (data['accountStatus'] == 'suspended') {
         await _auth.signOut();
+        throw 'This account has been suspended. Please contact support.';
+      }
+
+      return data;
+    } on FirebaseAuthException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
+  /// Signs in with Google. Creates a Firestore profile automatically
+  /// on first sign-in (defaulting to the 'customer' role), or returns
+  /// the existing profile for returning users.
+  Future<Map<String, dynamic>?> signInWithGoogle() async {
+    try {
+      final googleSignIn = GoogleSignIn();
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled the sign-in flow.
+        return null;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+      if (user == null) return null;
+
+      final docRef = _firestore.collection('users').doc(user.uid);
+      final doc = await docRef.get();
+
+      if (!doc.exists) {
+        final newProfile = {
+          'uid': user.uid,
+          'email': user.email ?? '',
+          'username': user.displayName ?? 'User',
+          'role': 'customer',
+          'stylePreferences': <String>[],
+          'accountStatus': 'active',
+          'createdAt': FieldValue.serverTimestamp(),
+        };
+        await docRef.set(newProfile);
+        return newProfile;
+      }
+
+      final data = doc.data()!;
+      if (data['accountStatus'] == 'suspended') {
+        await _auth.signOut();
+        await googleSignIn.signOut();
         throw 'This account has been suspended. Please contact support.';
       }
 

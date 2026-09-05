@@ -6,6 +6,7 @@ import 'register_screen.dart';
 import 'customer/customer_shell.dart';
 import 'merchant/merchant_shell.dart';
 import 'admin/admin_shell.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -59,7 +60,8 @@ class _LoginScreenState extends State<LoginScreen> {
           destination = MerchantShell(username: username);
           break;
         default:
-          destination = CustomerShell(username: username);      }
+          destination = CustomerShell(username: username);
+      }
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => destination),
       );
@@ -95,6 +97,47 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _errorMessage = e.toString();
       });
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final profile = await _authService.signInWithGoogle();
+
+      if (profile == null || !mounted) return;
+
+      final role = profile['role'] as String? ?? 'customer';
+      final username = profile['username'] as String? ?? 'User';
+
+      Widget destination;
+      switch (role) {
+        case 'admin':
+          destination = AdminShell(username: username);
+          break;
+        case 'merchant':
+          destination = MerchantShell(username: username);
+          break;
+        default:
+          destination = CustomerShell(username: username);
+      }
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => destination),
+      );
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -225,6 +268,48 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('Log In'),
+                ),
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: Divider(
+                        color: AppTheme.textSecondary.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'OR',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    Expanded(
+                      child: Divider(
+                        color: AppTheme.textSecondary.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _handleGoogleSignIn,
+                  icon: SvgPicture.asset(
+                    'assets/icons/google_logo.svg',
+                    width: 20,
+                    height: 20,
+                  ),
+                  label: const Text('Continue with Google'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.textPrimary,
+                    side: const BorderSide(color: AppTheme.textSecondary),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
 
