@@ -137,6 +137,38 @@ class AuthService {
     }
   }
 
+  /// Whether the currently logged-in user can change a password at all
+  /// (i.e. they signed up with email/password, not just Google).
+  bool get canChangePassword {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    return user.providerData.any((p) => p.providerId == 'password');
+  }
+
+  /// Changes the current user's password. Requires re-authentication with
+  /// their current password first, since Firebase blocks sensitive
+  /// operations like this after a certain time since last login.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) {
+      throw 'You must be logged in.';
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
   /// Used by an Admin to create a Merchant or Admin account without
   /// disrupting their own logged-in session. Uses a secondary Firebase
   /// app instance so the admin stays signed in on the main app.

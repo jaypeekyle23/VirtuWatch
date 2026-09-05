@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
+import '../change_password_screen.dart';
 
 class CustomerProfileTab extends StatelessWidget {
   const CustomerProfileTab({super.key});
@@ -133,9 +134,10 @@ class CustomerProfileTab extends StatelessWidget {
 
                       _menuTile(context, 'Change Password', Icons.lock_outline,
                           () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Change Password coming soon')),
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ChangePasswordScreen(),
+                          ),
                         );
                       }),
                       _menuTile(context, 'About VirtuWatch', Icons.info_outline,

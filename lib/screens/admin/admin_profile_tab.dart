@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../change_password_screen.dart';
 
 class AdminProfileTab extends StatelessWidget {
   const AdminProfileTab({super.key});
@@ -100,7 +101,14 @@ class AdminProfileTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 20),
 
-                      _menuTile(context, 'Change Password', Icons.lock_outline),
+                      _menuTile(context, 'Change Password', Icons.lock_outline,
+                          () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ChangePasswordScreen(),
+                          ),
+                        );
+                      }),
                       _menuTile(
                           context, 'About VirtuWatch', Icons.info_outline),
                       _menuTile(context, 'Version Info (v1.0.0)',
@@ -154,15 +162,17 @@ class AdminProfileTab extends StatelessWidget {
     );
   }
 
-  Widget _menuTile(BuildContext context, String title, IconData icon) {
+  Widget _menuTile(BuildContext context, String title, IconData icon,
+      [VoidCallback? onTap]) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: InkWell(
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$title coming soon')),
-          );
-        },
+        onTap: onTap ??
+            () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('$title coming soon')),
+              );
+            },
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
