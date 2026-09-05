@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
+import 'saved_watches_screen.dart';
 import '../change_password_screen.dart';
 
 class CustomerProfileTab extends StatelessWidget {
@@ -132,6 +133,14 @@ class CustomerProfileTab extends StatelessWidget {
                         const SizedBox(height: 24),
                       ],
 
+                      _menuTile(context, 'Saved Watches',
+                          Icons.favorite_border, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SavedWatchesScreen(),
+                          ),
+                        );
+                      }),
                       _menuTile(context, 'Change Password', Icons.lock_outline,
                           () {
                         Navigator.of(context).push(

@@ -1,4 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 
 class WatchDetailScreen extends StatelessWidget {
@@ -25,17 +27,47 @@ class WatchDetailScreen extends StatelessWidget {
     final waterResistance = data['waterResistance'] as String? ?? '';
     final bandMaterial = data['bandMaterial'] as String? ?? '';
     final caseMaterial = data['caseMaterial'] as String? ?? '';
+    final userService = UserService();
 
     return Scaffold(
       appBar: AppBar(
         title: Text(name, overflow: TextOverflow.ellipsis),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.favorite_border),
-            onPressed: () {
-              // Saved Watches feature — to be built later
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Saved Watches coming soon')),
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: userService.currentUserStream(),
+            builder: (context, snapshot) {
+              final saved = (snapshot.data?.data()?['savedWatches'] as List?)
+                      ?.cast<String>() ??
+                  [];
+              final isSaved = saved.contains(watchId);
+
+              return IconButton(
+                icon: Icon(
+                  isSaved ? Icons.favorite : Icons.favorite_border,
+                  color: isSaved ? Colors.redAccent : null,
+                ),
+                onPressed: () async {
+                  try {
+                    await userService.toggleSavedWatch(watchId);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isSaved
+                                ? 'Removed from saved watches'
+                                : 'Saved to your favorites',
+                          ),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(e.toString())),
+                      );
+                    }
+                  }
+                },
               );
             },
           ),
