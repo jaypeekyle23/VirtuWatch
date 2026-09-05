@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'register_screen.dart';
+import 'verify_email_screen.dart';
 import 'customer/customer_shell.dart';
 import 'merchant/merchant_shell.dart';
 import 'admin/admin_shell.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
+  bool _showResendVerification = false;
 
   @override
   void dispose() {
@@ -38,6 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _showResendVerification = false;
     });
 
     try {
@@ -66,14 +69,52 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => destination),
       );
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-      });
+      if (e.toString() == 'EMAIL_NOT_VERIFIED') {
+        setState(() {
+          _errorMessage =
+              'Please verify your email before logging in. Check your inbox for the verification link.';
+          _showResendVerification = true;
+        });
+      } else {
+        setState(() {
+          _errorMessage = e.toString();
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
+      }
+    }
+  }
+
+  Future<void> _handleGoToVerify() async {
+    setState(() => _isLoading = true);
+    try {
+      // Re-authenticate without the verification gate so we can land on
+      // the verify-email screen (which itself can resend/check status).
+      await _authService.signInWithoutVerificationCheck(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => VerifyEmailScreen(
+              email: _emailController.text.trim(),
+              username: 'User',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -104,6 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _showResendVerification = false;
     });
 
     try {
@@ -251,11 +293,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 if (_errorMessage != null)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: Text(
                       _errorMessage!,
                       style: const TextStyle(color: Colors.redAccent),
                       textAlign: TextAlign.center,
+                    ),
+                  ),
+
+                if (_showResendVerification)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _handleGoToVerify,
+                      child: const Text(
+                        'Resend verification email',
+                        style: TextStyle(color: AppTheme.gold),
+                      ),
                     ),
                   ),
 

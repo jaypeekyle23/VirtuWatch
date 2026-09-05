@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
+import 'verify_email_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -66,10 +67,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         stylePreferences: _selectedStyles.toList(),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created successfully!')),
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => VerifyEmailScreen(
+              email: _emailController.text.trim(),
+              username: _usernameController.text.trim(),
+            ),
+          ),
         );
-        Navigator.of(context).pop();
       }
     } catch (e) {
       setState(() {

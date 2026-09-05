@@ -11,8 +11,17 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
+  /// Whether the currently logged-in user can change a password at all
+  /// (i.e. they signed up with email/password, not just Google).
+  bool get canChangePassword {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    return user.providerData.any((p) => p.providerId == 'password');
+  }
+
   /// Registers a new Customer account (the only self-service role).
-  /// Creates both the Firebase Auth user and their Firestore profile.
+  /// Creates both the Firebase Auth user and their Firestore profile,
+  /// and sends a verification email since this is an email/password account.
   Future<User?> registerWithEmail({
     required String email,
     required String password,
@@ -35,6 +44,7 @@ class AuthService {
           'accountStatus': 'active',
           'createdAt': FieldValue.serverTimestamp(),
         });
+        await user.sendEmailVerification();
       }
       return user;
     } on FirebaseAuthException catch (e) {
@@ -43,7 +53,9 @@ class AuthService {
   }
 
   /// Logs in an existing user and returns their profile document,
-  /// which includes their role for routing purposes.
+  /// which includes their role for routing purposes. Email/password
+  /// accounts must have a verified email; Google accounts are exempt
+  /// since Google has already verified their email address.
   Future<Map<String, dynamic>?> loginWithEmail(
     String email,
     String password,
@@ -55,6 +67,18 @@ class AuthService {
       );
       final user = credential.user;
       if (user == null) return null;
+
+      final isGoogleAccount =
+          user.providerData.any((p) => p.providerId == 'google.com');
+
+      if (!isGoogleAccount) {
+        await user.reload();
+        final refreshedUser = _auth.currentUser;
+        if (refreshedUser != null && !refreshedUser.emailVerified) {
+          await _auth.signOut();
+          throw 'EMAIL_NOT_VERIFIED';
+        }
+      }
 
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (!doc.exists) {
@@ -71,6 +95,29 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw _mapAuthError(e);
     }
+  }
+
+  /// Signs in with a raw email/password without the verification check,
+  /// solely so the verify-email screen can re-authenticate to send another
+  /// verification email or refresh status. Not used for normal login.
+  Future<User?> signInWithoutVerificationCheck(
+      String email, String password) async {
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return credential.user;
+    } on FirebaseAuthException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
+  /// Resends the verification email to the currently signed-in user.
+  Future<void> resendVerificationEmail() async {
+    final user = _auth.currentUser;
+    if (user == null) throw 'You must be logged in to resend a verification email.';
+    await user.sendEmailVerification();
   }
 
   /// Signs in with Google. Creates a Firestore profile automatically
@@ -137,14 +184,6 @@ class AuthService {
     }
   }
 
-  /// Whether the currently logged-in user can change a password at all
-  /// (i.e. they signed up with email/password, not just Google).
-  bool get canChangePassword {
-    final user = _auth.currentUser;
-    if (user == null) return false;
-    return user.providerData.any((p) => p.providerId == 'password');
-  }
-
   /// Changes the current user's password. Requires re-authentication with
   /// their current password first, since Firebase blocks sensitive
   /// operations like this after a certain time since last login.
@@ -209,6 +248,10 @@ class AuthService {
         'accountStatus': 'active',
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // Even admin-created accounts must verify their email before their
+      // first login, confirming the address is real and accessible.
+      await newUser.sendEmailVerification();
 
       await secondaryAuth.signOut();
     } on FirebaseAuthException catch (e) {
