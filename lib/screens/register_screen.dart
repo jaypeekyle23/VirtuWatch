@@ -3,6 +3,8 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'verify_email_screen.dart';
+import 'terms_of_service_screen.dart';
+import 'privacy_policy_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -248,16 +250,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: RichText(
                           text: TextSpan(
                             style: Theme.of(context).textTheme.bodyMedium,
-                            children: const [
-                              TextSpan(text: 'I agree to the '),
+                            children: [
+                              const TextSpan(text: 'I agree to the '),
                               TextSpan(
                                 text: 'Terms of Service',
-                                style: TextStyle(color: AppTheme.gold),
+                                style: const TextStyle(color: AppTheme.gold),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const TermsOfServiceScreen(),
+                                      ),
+                                    );
+                                  },
                               ),
-                              TextSpan(text: ' and '),
+                              const TextSpan(text: ' and '),
                               TextSpan(
                                 text: 'Privacy Policy',
-                                style: TextStyle(color: AppTheme.gold),
+                                style: const TextStyle(color: AppTheme.gold),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const PrivacyPolicyScreen(),
+                                      ),
+                                    );
+                                  },
                               ),
                             ],
                           ),
