@@ -58,4 +58,13 @@ class UserService {
   Future<void> deleteAccountProfile(String uid) async {
     await _users.doc(uid).delete();
   }
+
+  /// Updates a user's role. Used by admins to promote/demote accounts
+  /// between customer, merchant, and admin.
+  Future<void> updateUserRole(String uid, String newRole) async {
+    if (!['customer', 'merchant', 'admin'].contains(newRole)) {
+      throw 'Invalid role: $newRole';
+    }
+    await _users.doc(uid).update({'role': newRole});
+  }
 }

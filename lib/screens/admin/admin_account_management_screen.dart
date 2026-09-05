@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
@@ -187,6 +188,7 @@ class _AccountTile extends StatelessWidget {
     final role = (data['role'] as String? ?? 'customer');
     final status = (data['accountStatus'] as String? ?? 'active');
     final isActive = status == 'active';
+    final isSelf = uid == FirebaseAuth.instance.currentUser?.uid;
     final initials = username.isNotEmpty
         ? username.trim().split(' ').map((e) => e[0]).take(2).join()
         : '?';
@@ -245,6 +247,7 @@ class _AccountTile extends StatelessWidget {
                       isActive ? 'ACTIVE' : 'DISABLED',
                       isActive ? Colors.greenAccent : Colors.redAccent,
                     ),
+                    if (isSelf) _badge('YOU', AppTheme.textSecondary),
                   ],
                 ),
               ],
@@ -262,6 +265,12 @@ class _AccountTile extends StatelessWidget {
                   style: const TextStyle(color: AppTheme.textPrimary),
                 ),
               ),
+              if (!isSelf)
+                const PopupMenuItem(
+                  value: 'change_role',
+                  child: Text('Change Role',
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                ),
               const PopupMenuItem(
                 value: 'delete',
                 child: Text('Delete Account',
@@ -303,6 +312,8 @@ class _AccountTile extends StatelessWidget {
           const SnackBar(content: Text('Account re-enabled.')),
         );
       }
+    } else if (action == 'change_role') {
+      await _showChangeRoleDialog(context);
     } else if (action == 'delete') {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -333,6 +344,114 @@ class _AccountTile extends StatelessWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Account profile deleted.')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showChangeRoleDialog(BuildContext context) async {
+    final currentRole = data['role'] as String? ?? 'customer';
+    String selectedRole = currentRole;
+
+    final confirmedRole = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppTheme.surface,
+            title: Text(
+              'Change Role for ${data['username']}',
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+            content: RadioGroup<String>(
+              groupValue: selectedRole,
+              onChanged: (value) {
+                setDialogState(() => selectedRole = value!);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: ['customer', 'merchant', 'admin'].map((r) {
+                  return RadioListTile<String>(
+                    value: r,
+                    activeColor: AppTheme.gold,
+                    title: Text(
+                      r[0].toUpperCase() + r.substring(1),
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: selectedRole == currentRole
+                    ? null
+                    : () => Navigator.of(context).pop(selectedRole),
+                child: const Text('Continue'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmedRole == null || !context.mounted) return;
+
+    final isPromotingToAdmin = confirmedRole == 'admin';
+    final finalConfirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: Text(
+          isPromotingToAdmin ? 'Grant Admin Access?' : 'Confirm Role Change',
+          style: const TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          isPromotingToAdmin
+              ? '"${data['username']}" will gain full administrative access, including account and catalog management for the entire platform. Are you sure?'
+              : 'Change "${data['username']}"\'s role from ${currentRole.toUpperCase()} to ${confirmedRole.toUpperCase()}?',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              isPromotingToAdmin ? 'Grant Admin Access' : 'Confirm',
+              style: TextStyle(
+                color: isPromotingToAdmin
+                    ? Colors.redAccent
+                    : AppTheme.gold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (finalConfirm == true) {
+      try {
+        await userService.updateUserRole(uid, confirmedRole);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Role updated to ${confirmedRole.toUpperCase()}.'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString())),
           );
         }
       }
