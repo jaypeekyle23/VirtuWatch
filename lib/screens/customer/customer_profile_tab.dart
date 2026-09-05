@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
 import 'saved_watches_screen.dart';
 import '../change_password_screen.dart';
+import '../about_screen.dart';
 
 class CustomerProfileTab extends StatelessWidget {
   const CustomerProfileTab({super.key});
@@ -151,9 +152,10 @@ class CustomerProfileTab extends StatelessWidget {
                       }),
                       _menuTile(context, 'About VirtuWatch', Icons.info_outline,
                           () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('About VirtuWatch coming soon')),
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AboutScreen(),
+                          ),
                         );
                       }),
                       const SizedBox(height: 20),

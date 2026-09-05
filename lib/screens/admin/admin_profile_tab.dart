@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../change_password_screen.dart';
+import '../about_screen.dart';
 
 class AdminProfileTab extends StatelessWidget {
   const AdminProfileTab({super.key});
@@ -109,8 +110,14 @@ class AdminProfileTab extends StatelessWidget {
                           ),
                         );
                       }),
-                      _menuTile(
-                          context, 'About VirtuWatch', Icons.info_outline),
+                      _menuTile(context, 'About VirtuWatch', Icons.info_outline,
+                          () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AboutScreen(),
+                          ),
+                        );
+                      }),
                       _menuTile(context, 'Version Info (v1.0.0)',
                           Icons.numbers_outlined),
                       const SizedBox(height: 20),
