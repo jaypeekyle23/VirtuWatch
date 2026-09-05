@@ -4,6 +4,16 @@ import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../merchant/merchant_edit_watch_screen.dart';
 
+enum _SortOption {
+  newest('Newest'),
+  priceLowToHigh('Price: Low to High'),
+  priceHighToLow('Price: High to Low'),
+  nameAToZ('Name: A to Z');
+
+  final String label;
+  const _SortOption(this.label);
+}
+
 class AdminWatchManagementTab extends StatefulWidget {
   const AdminWatchManagementTab({super.key});
 
@@ -18,6 +28,7 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
 
   String _searchQuery = '';
   String _selectedFilter = 'All';
+  _SortOption _sortOption = _SortOption.newest;
 
   final List<String> _filters = ['All', 'Classic', 'Sport', 'Luxury', 'Casual'];
 
@@ -30,7 +41,40 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Watch Management')),
+      appBar: AppBar(
+        title: const Text('Watch Management'),
+        actions: [
+          PopupMenuButton<_SortOption>(
+            icon: const Icon(Icons.sort),
+            color: AppTheme.surface,
+            initialValue: _sortOption,
+            onSelected: (option) => setState(() => _sortOption = option),
+            itemBuilder: (context) => _SortOption.values.map((option) {
+              final isSelected = option == _sortOption;
+              return PopupMenuItem(
+                value: option,
+                child: Row(
+                  children: [
+                    if (isSelected)
+                      const Icon(Icons.check, color: AppTheme.gold, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      option.label,
+                      style: TextStyle(
+                        color: isSelected
+                            ? AppTheme.gold
+                            : AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -124,6 +168,8 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
                   }).toList();
                 }
 
+                docs = _applySort(docs);
+
                 if (docs.isEmpty) {
                   return Center(
                     child: Text(
@@ -153,6 +199,47 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
         ],
       ),
     );
+  }
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _applySort(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final sorted = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+
+    switch (_sortOption) {
+      case _SortOption.priceLowToHigh:
+        sorted.sort((a, b) {
+          final priceA = (a.data()['price'] as num?) ?? 0;
+          final priceB = (b.data()['price'] as num?) ?? 0;
+          return priceA.compareTo(priceB);
+        });
+        break;
+      case _SortOption.priceHighToLow:
+        sorted.sort((a, b) {
+          final priceA = (a.data()['price'] as num?) ?? 0;
+          final priceB = (b.data()['price'] as num?) ?? 0;
+          return priceB.compareTo(priceA);
+        });
+        break;
+      case _SortOption.nameAToZ:
+        sorted.sort((a, b) {
+          final nameA = (a.data()['name'] as String? ?? '').toLowerCase();
+          final nameB = (b.data()['name'] as String? ?? '').toLowerCase();
+          return nameA.compareTo(nameB);
+        });
+        break;
+      case _SortOption.newest:
+        sorted.sort((a, b) {
+          final createdA = a.data()['createdAt'] as Timestamp?;
+          final createdB = b.data()['createdAt'] as Timestamp?;
+          if (createdA == null && createdB == null) return 0;
+          if (createdA == null) return 1;
+          if (createdB == null) return -1;
+          return createdB.compareTo(createdA);
+        });
+        break;
+    }
+
+    return sorted;
   }
 }
 

@@ -5,17 +5,74 @@ import '../../theme/app_theme.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_edit_watch_screen.dart';
 
-class MerchantCatalogTab extends StatelessWidget {
+enum _SortOption {
+  newest('Newest'),
+  priceLowToHigh('Price: Low to High'),
+  priceHighToLow('Price: High to Low'),
+  nameAToZ('Name: A to Z');
+
+  final String label;
+  const _SortOption(this.label);
+}
+
+class MerchantCatalogTab extends StatefulWidget {
   const MerchantCatalogTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final watchService = WatchService();
+  State<MerchantCatalogTab> createState() => _MerchantCatalogTabState();
+}
 
+class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
+  final _watchService = WatchService();
+  final _searchController = TextEditingController();
+
+  String _searchQuery = '';
+  String _selectedFilter = 'All';
+  _SortOption _sortOption = _SortOption.newest;
+
+  final List<String> _filters = ['All', 'Classic', 'Sport', 'Luxury', 'Casual'];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Catalog'),
         actions: [
+          PopupMenuButton<_SortOption>(
+            icon: const Icon(Icons.sort),
+            color: AppTheme.surface,
+            initialValue: _sortOption,
+            onSelected: (option) => setState(() => _sortOption = option),
+            itemBuilder: (context) => _SortOption.values.map((option) {
+              final isSelected = option == _sortOption;
+              return PopupMenuItem(
+                value: option,
+                child: Row(
+                  children: [
+                    if (isSelected)
+                      const Icon(Icons.check, color: AppTheme.gold, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      option.label,
+                      style: TextStyle(
+                        color: isSelected
+                            ? AppTheme.gold
+                            : AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
@@ -28,61 +85,185 @@ class MerchantCatalogTab extends StatelessWidget {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: watchService.myWatches(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error loading catalog: ${snapshot.error}',
-                style: const TextStyle(color: Colors.redAccent),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search by name, brand, or style...',
+                prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        color: AppTheme.textSecondary,
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
               ),
-            );
-          }
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final docs = snapshot.data?.docs ?? [];
-
-          if (docs.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.watch_outlined,
-                        size: 48, color: AppTheme.textSecondary),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No watches yet. Tap + to add your first one.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
+              onChanged: (value) {
+                setState(() => _searchQuery = value.toLowerCase());
+              },
+            ),
+          ),
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _filters.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final filter = _filters[index];
+                final isSelected = _selectedFilter == filter;
+                return ChoiceChip(
+                  label: Text(filter),
+                  selected: isSelected,
+                  onSelected: (_) => setState(() => _selectedFilter = filter),
+                  backgroundColor: AppTheme.surface,
+                  selectedColor: AppTheme.gold.withValues(alpha: 0.2),
+                  labelStyle: TextStyle(
+                    color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
+                    fontSize: 13,
+                  ),
+                  side: BorderSide(
+                    color: isSelected ? AppTheme.gold : Colors.transparent,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _watchService.myWatches(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error loading catalog: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.redAccent),
                     ),
-                  ],
-                ),
-              ),
-            );
-          }
+                  );
+                }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final doc = docs[index];
-              final data = doc.data();
-              return _WatchListTile(
-                watchId: doc.id,
-                data: data,
-                watchService: watchService,
-              );
-            },
-          );
-        },
+                var docs = snapshot.data?.docs ?? [];
+
+                if (_selectedFilter != 'All') {
+                  docs = docs
+                      .where((d) => d.data()['styleCategory'] == _selectedFilter)
+                      .toList();
+                }
+                if (_searchQuery.isNotEmpty) {
+                  docs = docs.where((d) {
+                    final data = d.data();
+                    final name = (data['name'] as String? ?? '').toLowerCase();
+                    final brand = (data['brand'] as String? ?? '').toLowerCase();
+                    final style =
+                        (data['styleCategory'] as String? ?? '').toLowerCase();
+                    return name.contains(_searchQuery) ||
+                        brand.contains(_searchQuery) ||
+                        style.contains(_searchQuery);
+                  }).toList();
+                }
+
+                docs = _applySort(docs);
+
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.watch_outlined,
+                              size: 48, color: AppTheme.textSecondary),
+                          const SizedBox(height: 12),
+                          Text(
+                            _searchQuery.isEmpty && _selectedFilter == 'All'
+                                ? 'No watches yet. Tap + to add your first one.'
+                                : 'No watches match your search or filter.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  itemCount: docs.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final doc = docs[index];
+                    final data = doc.data();
+                    return _WatchListTile(
+                      watchId: doc.id,
+                      data: data,
+                      watchService: _watchService,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _applySort(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final sorted = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+
+    switch (_sortOption) {
+      case _SortOption.priceLowToHigh:
+        sorted.sort((a, b) {
+          final priceA = (a.data()['price'] as num?) ?? 0;
+          final priceB = (b.data()['price'] as num?) ?? 0;
+          return priceA.compareTo(priceB);
+        });
+        break;
+      case _SortOption.priceHighToLow:
+        sorted.sort((a, b) {
+          final priceA = (a.data()['price'] as num?) ?? 0;
+          final priceB = (b.data()['price'] as num?) ?? 0;
+          return priceB.compareTo(priceA);
+        });
+        break;
+      case _SortOption.nameAToZ:
+        sorted.sort((a, b) {
+          final nameA = (a.data()['name'] as String? ?? '').toLowerCase();
+          final nameB = (b.data()['name'] as String? ?? '').toLowerCase();
+          return nameA.compareTo(nameB);
+        });
+        break;
+      case _SortOption.newest:
+        sorted.sort((a, b) {
+          final createdA = a.data()['createdAt'] as Timestamp?;
+          final createdB = b.data()['createdAt'] as Timestamp?;
+          if (createdA == null && createdB == null) return 0;
+          if (createdA == null) return 1;
+          if (createdB == null) return -1;
+          return createdB.compareTo(createdA);
+        });
+        break;
+    }
+
+    return sorted;
   }
 }
 
