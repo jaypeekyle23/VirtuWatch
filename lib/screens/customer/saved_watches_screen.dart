@@ -4,44 +4,63 @@ import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import 'watch_detail_screen.dart';
 
-class SavedWatchesScreen extends StatelessWidget {
+class SavedWatchesScreen extends StatefulWidget {
   const SavedWatchesScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final userService = UserService();
+  State<SavedWatchesScreen> createState() => _SavedWatchesScreenState();
+}
 
+class _SavedWatchesScreenState extends State<SavedWatchesScreen> {
+  final _userService = UserService();
+
+  Future<void> _handleRefresh() async {
+    // Rebuilding creates a fresh Future.wait(...) call below, which
+    // re-fetches the latest watch data (price, listing status, etc.)
+    // for everything currently saved.
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Saved Watches')),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: userService.currentUserStream(),
+        stream: _userService.currentUserStream(),
         builder: (context, userSnapshot) {
           if (userSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final savedIds = (userSnapshot.data?.data()?['savedWatches']
-                  as List?)
-              ?.cast<String>() ??
+                      as List?)
+                  ?.cast<String>() ??
               [];
 
           if (savedIds.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.favorite_border,
-                        size: 48, color: AppTheme.textSecondary),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No saved watches yet.\nTap the heart on a watch to save it here.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
+            return RefreshIndicator(
+              color: AppTheme.gold,
+              onRefresh: _handleRefresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 80, horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.favorite_border,
+                            size: 48, color: AppTheme.textSecondary),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No saved watches yet.\nTap the heart on a watch to save it here.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           }
@@ -60,11 +79,21 @@ class SavedWatchesScreen extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    'Error loading saved watches: ${snapshot.error}',
-                    style: const TextStyle(color: Colors.redAccent),
-                    textAlign: TextAlign.center,
+                return RefreshIndicator(
+                  color: AppTheme.gold,
+                  onRefresh: _handleRefresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 80),
+                        child: Text(
+                          'Error loading saved watches: ${snapshot.error}',
+                          style: const TextStyle(color: Colors.redAccent),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }
@@ -74,31 +103,47 @@ class SavedWatchesScreen extends StatelessWidget {
                   .toList();
 
               if (docs.isEmpty) {
-                return Center(
-                  child: Text(
-                    'Your saved watches are no longer available.',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                return RefreshIndicator(
+                  color: AppTheme.gold,
+                  onRefresh: _handleRefresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 80),
+                        child: Text(
+                          'Your saved watches are no longer available.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: GridView.builder(
-                  padding: const EdgeInsets.only(bottom: 16, top: 12),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.58,
+              return RefreshIndicator(
+                color: AppTheme.gold,
+                onRefresh: _handleRefresh,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: GridView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: 16, top: 12),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.58,
+                    ),
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data()!;
+                      return _SavedWatchCard(watchId: doc.id, data: data);
+                    },
                   ),
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final doc = docs[index];
-                    final data = doc.data()!;
-                    return _SavedWatchCard(watchId: doc.id, data: data);
-                  },
                 ),
               );
             },

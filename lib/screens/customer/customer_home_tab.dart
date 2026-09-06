@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
@@ -23,11 +24,20 @@ class CustomerHomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final watchService = WatchService();
-    final initials = username.isNotEmpty
-        ? username.trim().split(' ').map((e) => e[0]).take(2).join()
-        : '?';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    return Scaffold(
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: uid == null
+          ? null
+          : FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      builder: (context, userSnapshot) {
+        final liveUsername =
+            userSnapshot.data?.data()?['username'] as String? ?? username;
+        final initials = liveUsername.isNotEmpty
+            ? liveUsername.trim().split(' ').map((e) => e[0]).take(2).join()
+            : '?';
+
+        return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -63,7 +73,7 @@ class CustomerHomeTab extends StatelessWidget {
               const SizedBox(height: 20),
 
               Text(
-                '$_greeting, $username!',
+                '$_greeting, $liveUsername!',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontSize: 22,
                     ),
@@ -306,6 +316,8 @@ class CustomerHomeTab extends StatelessWidget {
           ),
         ),
       ),
+    );
+      },
     );
   }
 

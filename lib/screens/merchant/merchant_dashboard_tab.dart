@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
@@ -31,11 +32,25 @@ class MerchantDashboardTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Welcome, $username!',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontSize: 22,
-                      ),
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseAuth.instance.currentUser == null
+                      ? null
+                      : FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(FirebaseAuth.instance.currentUser!.uid)
+                          .snapshots(),
+                  builder: (context, userSnapshot) {
+                    final liveUsername =
+                        userSnapshot.data?.data()?['username'] as String? ??
+                            username;
+                    return Text(
+                      'Welcome, $liveUsername!',
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineMedium
+                          ?.copyWith(fontSize: 22),
+                    );
+                  },
                 ),
                 const SizedBox(height: 4),
                 Text(

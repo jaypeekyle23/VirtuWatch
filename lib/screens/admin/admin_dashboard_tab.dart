@@ -207,7 +207,7 @@ class AdminDashboardTab extends StatelessWidget {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const MerchantAddWatchScreen(isAdminMode: true),
+                          builder: (_) => const MerchantAddWatchScreen(),
                         ),
                       );
                     },
