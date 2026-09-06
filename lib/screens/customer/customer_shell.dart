@@ -3,6 +3,8 @@ import '../../theme/app_theme.dart';
 import 'customer_home_tab.dart';
 import 'customer_catalog_tab.dart';
 import 'customer_profile_tab.dart';
+import 'ar_try_on_screen.dart';
+import 'recommended_for_you_screen.dart';
 
 class CustomerShell extends StatefulWidget {
   final String username;
@@ -20,6 +22,8 @@ class _CustomerShellState extends State<CustomerShell> {
     final tabs = [
       CustomerHomeTab(username: widget.username),
       const CustomerCatalogTab(),
+      const ArTryOnScreen(),
+      const RecommendedForYouScreen(),
       const CustomerProfileTab(),
     ];
 
@@ -28,30 +32,113 @@ class _CustomerShellState extends State<CustomerShell> {
         index: _currentIndex,
         children: tabs,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
-        },
-        backgroundColor: AppTheme.surface,
-        indicatorColor: AppTheme.gold.withValues(alpha: 0.2),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home, color: AppTheme.gold),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.watch_outlined),
-            selectedIcon: Icon(Icons.watch, color: AppTheme.gold),
-            label: 'Catalog',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person, color: AppTheme.gold),
-            label: 'Profile',
-          ),
-        ],
+      bottomNavigationBar: SizedBox(
+        height: 72,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.topCenter,
+          children: [
+            Container(
+              decoration: const BoxDecoration(
+                color: AppTheme.surface,
+                border: Border(
+                  top: BorderSide(color: Color(0x1AFFFFFF)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _navItem(
+                      icon: Icons.home_outlined,
+                      selectedIcon: Icons.home,
+                      label: 'Home',
+                      index: 0,
+                    ),
+                  ),
+                  Expanded(
+                    child: _navItem(
+                      icon: Icons.watch_outlined,
+                      selectedIcon: Icons.watch,
+                      label: 'Catalog',
+                      index: 1,
+                    ),
+                  ),
+                  const Expanded(child: SizedBox()),
+                  Expanded(
+                    child: _navItem(
+                      icon: Icons.auto_awesome_outlined,
+                      selectedIcon: Icons.auto_awesome,
+                      label: 'For You',
+                      index: 3,
+                    ),
+                  ),
+                  Expanded(
+                    child: _navItem(
+                      icon: Icons.person_outline,
+                      selectedIcon: Icons.person,
+                      label: 'Profile',
+                      index: 4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: -16,
+              child: GestureDetector(
+                onTap: () => setState(() => _currentIndex = 2),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppTheme.gold,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.background, width: 3),
+                  ),
+                  child: Icon(
+                    Icons.view_in_ar,
+                    color: const Color(0xFF0E1A2B),
+                    size: _currentIndex == 2 ? 28 : 24,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem({
+    required IconData icon,
+    required IconData selectedIcon,
+    required String label,
+    required int index,
+  }) {
+    final isSelected = _currentIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _currentIndex = index),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? selectedIcon : icon,
+              color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
+              size: 22,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

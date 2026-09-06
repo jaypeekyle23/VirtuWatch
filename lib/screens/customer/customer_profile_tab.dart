@@ -5,8 +5,8 @@ import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
 import 'saved_watches_screen.dart';
+import 'wrist_measurement_screen.dart';
 import '../change_password_screen.dart';
-import '../about_screen.dart';
 
 class CustomerProfileTab extends StatelessWidget {
   const CustomerProfileTab({super.key});
@@ -39,6 +39,7 @@ class CustomerProfileTab extends StatelessWidget {
                     (data['budgetMin'] as num?)?.toDouble() ?? 5000;
                 final budgetMax =
                     (data['budgetMax'] as num?)?.toDouble() ?? 50000;
+                final wristWidthMm = (data['wristWidthMm'] as num?)?.toDouble();
                 final initials = username.isNotEmpty
                     ? username.trim().split(' ').map((e) => e[0]).take(2).join()
                     : '?';
@@ -134,6 +135,90 @@ class CustomerProfileTab extends StatelessWidget {
                         const SizedBox(height: 24),
                       ],
 
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'MY WRIST MEASUREMENT',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  wristWidthMm != null
+                                      ? '${wristWidthMm}mm'
+                                      : '— mm',
+                                  style: const TextStyle(
+                                    color: AppTheme.gold,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (wristWidthMm == null) ...[
+                                  const SizedBox(width: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    margin: const EdgeInsets.only(bottom: 5),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.textSecondary
+                                          .withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'NOT MEASURED YET',
+                                      style: TextStyle(
+                                        color: AppTheme.textSecondary,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.gold,
+                                  side: const BorderSide(color: AppTheme.gold),
+                                ),
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const WristMeasurementScreen(),
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  wristWidthMm != null
+                                      ? 'Retake Measurement'
+                                      : 'Take Measurement',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
                       _menuTile(context, 'Saved Watches',
                           Icons.favorite_border, () {
                         Navigator.of(context).push(
@@ -152,10 +237,9 @@ class CustomerProfileTab extends StatelessWidget {
                       }),
                       _menuTile(context, 'About VirtuWatch', Icons.info_outline,
                           () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AboutScreen(),
-                          ),
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('About VirtuWatch coming soon')),
                         );
                       }),
                       const SizedBox(height: 20),

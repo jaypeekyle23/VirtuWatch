@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import 'ar_try_on_screen.dart';
 
 class WatchDetailScreen extends StatelessWidget {
   final String watchId;
@@ -184,28 +185,26 @@ class WatchDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  Container(
+                  SizedBox(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.view_in_ar_outlined,
-                            color: AppTheme.textSecondary),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'AR Try-On coming soon',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 13,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.gold,
+                        side: const BorderSide(color: AppTheme.gold),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ArTryOnScreen(
+                              initialWatchId: watchId,
+                              initialWatchData: data,
                             ),
                           ),
-                        ),
-                      ],
+                        );
+                      },
+                      icon: const Icon(Icons.view_in_ar_outlined),
+                      label: const Text('Try On in AR'),
                     ),
                   ),
                 ],

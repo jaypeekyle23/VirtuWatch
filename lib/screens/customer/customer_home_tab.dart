@@ -4,6 +4,10 @@ import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import 'customer_catalog_tab.dart';
 import 'watch_detail_screen.dart';
+import 'ar_try_on_screen.dart';
+import 'recommended_for_you_screen.dart';
+import 'wrist_measurement_screen.dart';
+import 'outfit_scan_screen.dart';
 
 class CustomerHomeTab extends StatelessWidget {
   final String username;
@@ -98,9 +102,9 @@ class CustomerHomeTab extends StatelessWidget {
                           const SizedBox(height: 12),
                           ElevatedButton(
                             onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('AR Try-On coming soon'),
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ArTryOnScreen(),
                                 ),
                               );
                             },
@@ -136,9 +140,10 @@ class CustomerHomeTab extends StatelessWidget {
                       icon: Icons.straighten_outlined,
                       label: 'Measure Wrist',
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Wrist measurement coming soon')),
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const WristMeasurementScreen(),
+                          ),
                         );
                       },
                     ),
@@ -150,8 +155,10 @@ class CustomerHomeTab extends StatelessWidget {
                       icon: Icons.checkroom_outlined,
                       label: 'Outfit Scan',
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Outfit scan coming soon')),
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const OutfitScanScreen(),
+                          ),
                         );
                       },
                     ),
@@ -175,7 +182,7 @@ class CustomerHomeTab extends StatelessWidget {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const CustomerCatalogTab(),
+                          builder: (_) => const RecommendedForYouScreen(),
                         ),
                       );
                     },
