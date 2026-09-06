@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 
 class MerchantAddWatchScreen extends StatefulWidget {
-  const MerchantAddWatchScreen({super.key});
+  final bool isAdminMode;
+
+  const MerchantAddWatchScreen({super.key, this.isAdminMode = false});
 
   @override
   State<MerchantAddWatchScreen> createState() =>
@@ -30,6 +33,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   bool _listedInCatalog = true;
   bool _isLoading = false;
   String? _errorMessage;
+  String? _selectedMerchantId;
 
   final List<String> _styleOptions = [
     'Sport',
@@ -59,31 +63,41 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (widget.isAdminMode && _selectedMerchantId == null) {
+      setState(() {
+        _errorMessage = 'Please select which merchant this watch belongs to.';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      await _watchService.addWatch({
-        'name': _nameController.text.trim(),
-        'brand': _brandController.text.trim(),
-        'price': double.parse(_priceController.text.trim()),
-        'styleCategory': _styleCategory,
-        'caseDiameterMm': double.tryParse(_caseDiameterController.text.trim()),
-        'caseThicknessMm':
-            double.tryParse(_caseThicknessController.text.trim()),
-        'lugToLugMm': double.parse(_lugToLugController.text.trim()),
-        'bandWidthMm': double.tryParse(_bandWidthController.text.trim()),
-        'bandMaterial': _bandMaterialController.text.trim(),
-        'caseMaterial': _caseMaterialController.text.trim(),
-        'movementType': _movementTypeController.text.trim(),
-        'waterResistance': _waterResistanceController.text.trim(),
-        'listedInCatalog': _listedInCatalog,
-        'has3DModel': false,
-        'modelUrl': '',
-        'imageUrl': '',
-      });
+      await _watchService.addWatch(
+        {
+          'name': _nameController.text.trim(),
+          'brand': _brandController.text.trim(),
+          'price': double.parse(_priceController.text.trim()),
+          'styleCategory': _styleCategory,
+          'caseDiameterMm': double.tryParse(_caseDiameterController.text.trim()),
+          'caseThicknessMm':
+              double.tryParse(_caseThicknessController.text.trim()),
+          'lugToLugMm': double.parse(_lugToLugController.text.trim()),
+          'bandWidthMm': double.tryParse(_bandWidthController.text.trim()),
+          'bandMaterial': _bandMaterialController.text.trim(),
+          'caseMaterial': _caseMaterialController.text.trim(),
+          'movementType': _movementTypeController.text.trim(),
+          'waterResistance': _waterResistanceController.text.trim(),
+          'listedInCatalog': _listedInCatalog,
+          'has3DModel': false,
+          'modelUrl': '',
+          'imageUrl': '',
+        },
+        merchantIdOverride: widget.isAdminMode ? _selectedMerchantId : null,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -129,6 +143,62 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (widget.isAdminMode) ...[
+                _fieldLabel('MERCHANT *'),
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .where('role', isEqualTo: 'merchant')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final merchants = snapshot.data?.docs ?? [];
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    if (merchants.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'No merchant accounts exist yet. Create one first.',
+                          style: TextStyle(color: AppTheme.textSecondary),
+                        ),
+                      );
+                    }
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedMerchantId,
+                      dropdownColor: AppTheme.surface,
+                      isExpanded: true,
+                      decoration:
+                          const InputDecoration(hintText: 'Select a merchant'),
+                      items: merchants.map((doc) {
+                        final data = doc.data();
+                        final name = data['username'] as String? ?? 'Merchant';
+                        final email = data['email'] as String? ?? '';
+                        return DropdownMenuItem(
+                          value: doc.id,
+                          child: Text(
+                            '$name ($email)',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() => _selectedMerchantId = value);
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+
               _fieldLabel('WATCH NAME *'),
               TextFormField(
                 controller: _nameController,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../merchant/merchant_edit_watch_screen.dart';
+import '../merchant/merchant_add_watch_screen.dart';
 
 enum _SortOption {
   newest('Newest'),
@@ -44,6 +45,17 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
       appBar: AppBar(
         title: const Text('Watch Management'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Add Watch',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const MerchantAddWatchScreen(isAdminMode: true),
+                ),
+              );
+            },
+          ),
           PopupMenuButton<_SortOption>(
             icon: const Icon(Icons.sort),
             color: AppTheme.surface,

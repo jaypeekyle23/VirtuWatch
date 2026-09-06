@@ -7,9 +7,11 @@ class WatchService {
   CollectionReference<Map<String, dynamic>> get _watches =>
       _firestore.collection('watches');
 
-  /// Creates a new watch listing owned by the currently logged-in merchant.
-  Future<void> addWatch(Map<String, dynamic> data) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+  /// Creates a new watch listing. Normally owned by the currently logged-in
+  /// merchant; an admin can pass [merchantIdOverride] to assign the new
+  /// listing to a specific merchant account instead of themselves.
+  Future<void> addWatch(Map<String, dynamic> data, {String? merchantIdOverride}) async {
+    final uid = merchantIdOverride ?? FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw 'You must be logged in to add a watch.';
 
     await _watches.add({

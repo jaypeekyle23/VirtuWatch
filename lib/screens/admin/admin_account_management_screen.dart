@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import 'admin_create_account_screen.dart';
 
 class AdminAccountManagementScreen extends StatefulWidget {
   const AdminAccountManagementScreen({super.key});
@@ -37,7 +38,22 @@ class _AdminAccountManagementScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Account Management')),
+      appBar: AppBar(
+        title: const Text('Account Management'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add_outlined),
+            tooltip: 'Add Account',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AdminCreateAccountScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
