@@ -330,6 +330,19 @@ class AuthService {
     });
   }
 
+  /// Updates only the currently logged-in user's display name. Used by
+  /// Merchant and Admin accounts, which don't have the customer-specific
+  /// style/brand/budget fields that [updateOwnProfile] handles.
+  Future<void> updateUsername(String newUsername) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw 'You must be logged in.';
+    if (newUsername.trim().isEmpty) throw 'Name cannot be empty.';
+
+    await _firestore.collection('users').doc(uid).update({
+      'username': newUsername.trim(),
+    });
+  }
+
   String _mapAuthError(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use':

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../change_password_screen.dart';
-import '../about_screen.dart';
+import '../edit_account_name_screen.dart';
 
 class AdminProfileTab extends StatelessWidget {
   const AdminProfileTab({super.key});
@@ -82,6 +82,23 @@ class AdminProfileTab extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.gold,
+                          side: const BorderSide(color: AppTheme.gold),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EditAccountNameScreen(
+                                currentUsername: username,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Edit Profile'),
+                      ),
                       const SizedBox(height: 24),
 
                       Container(
@@ -110,14 +127,8 @@ class AdminProfileTab extends StatelessWidget {
                           ),
                         );
                       }),
-                      _menuTile(context, 'About VirtuWatch', Icons.info_outline,
-                          () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AboutScreen(),
-                          ),
-                        );
-                      }),
+                      _menuTile(
+                          context, 'About VirtuWatch', Icons.info_outline),
                       _menuTile(context, 'Version Info (v1.0.0)',
                           Icons.numbers_outlined),
                       const SizedBox(height: 20),

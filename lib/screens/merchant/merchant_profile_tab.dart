@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../change_password_screen.dart';
 import '../about_screen.dart';
 import '../delete_account_screen.dart';
+import '../edit_account_name_screen.dart';
 
 class MerchantProfileTab extends StatelessWidget {
   const MerchantProfileTab({super.key});
@@ -83,6 +84,23 @@ class MerchantProfileTab extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.gold,
+                          side: const BorderSide(color: AppTheme.gold),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EditAccountNameScreen(
+                                currentUsername: username,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Edit Profile'),
                       ),
                       const SizedBox(height: 24),
 
