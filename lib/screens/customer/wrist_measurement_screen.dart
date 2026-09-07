@@ -26,11 +26,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Wrist measurement coming soon')),
-              );
-            },
+            onPressed: () => _showHelpDialog(context),
           ),
         ],
       ),
@@ -252,6 +248,34 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showHelpDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('How Wrist Measurement Works',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'When this feature is complete, VirtuWatch will use your phone\'s '
+          'camera to estimate your wrist width automatically.\n\n'
+          'You\'ll place a reference object of known size (like an ID card or '
+          'coin) flat next to your wrist, and the app will calibrate a '
+          'pixels-to-millimeters ratio from it to measure your wrist '
+          'accurately — no tape measure needed.\n\n'
+          'This helps VirtuWatch recommend watches that will actually fit '
+          'your wrist comfortably.',
+          style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it', style: TextStyle(color: AppTheme.gold)),
+          ),
+        ],
       ),
     );
   }

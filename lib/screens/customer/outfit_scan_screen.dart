@@ -12,11 +12,7 @@ class OutfitScanScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Outfit scan coming soon')),
-              );
-            },
+            onPressed: () => _showHelpDialog(context),
           ),
         ],
       ),
@@ -229,6 +225,34 @@ class OutfitScanScreen extends StatelessWidget {
           color: color,
           borderRadius: BorderRadius.circular(4),
         ),
+      ),
+    );
+  }
+
+  void _showHelpDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('How Outfit Color Scan Works',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'When this feature is complete, VirtuWatch will use your phone\'s '
+          'camera to identify the dominant colors in your outfit using a '
+          'clustering technique (K-means color extraction).\n\n'
+          'Point your camera at your outfit in good lighting, and the app '
+          'will detect the main tones you\'re wearing — then use those '
+          'colors to recommend watches with cases, dials, or bands that '
+          'complement your look.\n\n'
+          'Good, even lighting helps the scan work more accurately.',
+          style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it', style: TextStyle(color: AppTheme.gold)),
+          ),
+        ],
       ),
     );
   }

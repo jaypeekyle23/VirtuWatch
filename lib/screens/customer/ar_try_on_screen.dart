@@ -39,11 +39,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.ios_share_outlined),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('AR Try-On coming soon')),
-              );
-            },
+            onPressed: () => _showShareInfoDialog(context),
           ),
         ],
       ),
@@ -148,13 +144,13 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
 
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const SizedBox(
-                        height: 76,
+                        height: 130,
                         child: Center(child: CircularProgressIndicator()),
                       );
                     }
                     if (docs.isEmpty) {
                       return const SizedBox(
-                        height: 76,
+                        height: 130,
                         child: Center(
                           child: Text(
                             'No watches available yet.',
@@ -165,7 +161,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                     }
 
                     return SizedBox(
-                      height: 76,
+                      height: 130,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: docs.length,
@@ -183,43 +179,65 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                               _selectedWatchId = doc.id;
                               _selectedWatchData = data;
                             }),
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              width: 90,
-                              padding: const EdgeInsets.all(6),
+                              width: 110,
                               decoration: BoxDecoration(
                                 color: AppTheme.background,
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: isSelected
                                       ? AppTheme.gold
                                       : Colors.transparent,
-                                  width: 1.5,
+                                  width: 2,
                                 ),
                               ),
                               child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  const Icon(Icons.watch,
-                                      color: AppTheme.gold, size: 24),
-                                  const SizedBox(height: 4),
-                                  if (brand.isNotEmpty)
-                                    Text(
-                                      brand,
-                                      style: const TextStyle(
-                                        color: AppTheme.gold,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: Container(
+                                      margin: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.surface,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(Icons.watch,
+                                            color: AppTheme.gold, size: 32),
                                       ),
                                     ),
-                                  Text(
-                                    name,
-                                    style: const TextStyle(
-                                      color: AppTheme.textPrimary,
-                                      fontSize: 9,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        8, 0, 8, 8),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        if (brand.isNotEmpty)
+                                          Text(
+                                            brand,
+                                            style: const TextStyle(
+                                              color: AppTheme.gold,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        Text(
+                                          name,
+                                          style: const TextStyle(
+                                            color: AppTheme.textPrimary,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
@@ -233,6 +251,10 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                 const SizedBox(height: 12),
 
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    minimumSize: const Size(double.infinity, 0),
+                  ),
                   onPressed: (_selectedWatchId == null || _selectedWatchData == null)
                       ? null
                       : () {
@@ -264,6 +286,29 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: Colors.white, size: 18),
+    );
+  }
+
+  void _showShareInfoDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Share Your Try-On',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'Once AR try-on is live, this button will let you save or share '
+          'a photo of the watch overlaid on your wrist — so you can send it '
+          'to a friend, post it, or compare a few favorites before deciding.',
+          style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it', style: TextStyle(color: AppTheme.gold)),
+          ),
+        ],
+      ),
     );
   }
 }
