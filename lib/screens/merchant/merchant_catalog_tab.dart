@@ -287,91 +287,137 @@ class _WatchListTile extends StatelessWidget {
     final has3D = data['has3DModel'] as bool? ?? false;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppTheme.background,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.watch, color: AppTheme.gold),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  brand.isNotEmpty ? '$brand $name' : name,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                child: const Icon(Icons.watch, color: AppTheme.gold, size: 36),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _statusChip(listed ? 'ACTIVE' : 'DRAFT',
-                        listed ? Colors.greenAccent : AppTheme.textSecondary),
-                    _statusChip(has3D ? 'AR' : 'NO 3D',
-                        has3D ? AppTheme.gold : AppTheme.textSecondary),
-                    if (price != null)
-                      Text(
-                        'PHP $price',
-                        style: const TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 12,
-                        ),
+                    Text(
+                      brand.isNotEmpty ? '$brand $name' : name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _statusChip(listed ? 'ACTIVE' : 'DRAFT',
+                            listed ? Colors.greenAccent : AppTheme.textSecondary),
+                        _statusChip(has3D ? 'AR' : 'NO 3D',
+                            has3D ? AppTheme.gold : AppTheme.textSecondary),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          Column(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20),
-                color: AppTheme.textSecondary,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => MerchantEditWatchScreen(
-                        watchId: watchId,
-                        data: data,
-                      ),
-                    ),
-                  );
-                },
               ),
-              const SizedBox(height: 8),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                color: Colors.redAccent,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => _confirmDelete(context),
+              const SizedBox(width: 8),
+              Transform.scale(
+                scale: 0.8,
+                child: Switch(
+                  value: listed,
+                  activeThumbColor: AppTheme.gold,
+                  onChanged: (value) => _handleToggleListed(context, value),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Divider(color: AppTheme.background, height: 1),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (price != null)
+                Text(
+                  'PHP $price',
+                  style: const TextStyle(
+                    color: AppTheme.gold,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                )
+              else
+                const SizedBox(),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    color: AppTheme.textSecondary,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MerchantEditWatchScreen(
+                            watchId: watchId,
+                            data: data,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    color: Colors.redAccent,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _confirmDelete(context),
+                  ),
+                ],
               ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _handleToggleListed(BuildContext context, bool value) async {
+    try {
+      await watchService.updateWatch(watchId, {'listedInCatalog': value});
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value
+                  ? '"${data['name']}" is now listed in the catalog.'
+                  : '"${data['name']}" was unlisted from the catalog.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update listing: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
