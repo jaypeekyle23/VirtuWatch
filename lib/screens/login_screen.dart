@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'register_screen.dart';
 import 'verify_email_screen.dart';
+import 'forgot_password_screen.dart';
 import 'customer/customer_shell.dart';
 import 'merchant/merchant_shell.dart';
 import 'admin/admin_shell.dart';
@@ -119,26 +120,16 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _handleForgotPassword() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() {
-        _errorMessage = 'Enter your email above first, then tap "Forgot Password?"';
-      });
-      return;
-    }
-    try {
-      await _authService.resetPassword(email);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Password reset email sent to $email')),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-      });
-    }
+  void _handleForgotPassword() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ForgotPasswordScreen(
+          initialEmail: _emailController.text.trim().isNotEmpty
+              ? _emailController.text.trim()
+              : null,
+        ),
+      ),
+    );
   }
 
   Future<void> _handleGoogleSignIn() async {
