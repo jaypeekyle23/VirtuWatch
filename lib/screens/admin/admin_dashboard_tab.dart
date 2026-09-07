@@ -5,16 +5,12 @@ import '../../theme/app_theme.dart';
 import 'admin_create_account_screen.dart';
 import 'admin_account_management_screen.dart';
 import 'admin_watch_management_tab.dart';
+import 'admin_profile_tab.dart';
 import '../merchant/merchant_add_watch_screen.dart';
 
 class AdminDashboardTab extends StatelessWidget {
   final String username;
   const AdminDashboardTab({super.key, required this.username});
-
-  String get _initials {
-    if (username.isEmpty) return '?';
-    return username.trim().split(' ').map((e) => e[0]).take(2).join().toUpperCase();
-  }
 
   String _relativeTime(Timestamp? timestamp) {
     if (timestamp == null) return '';
@@ -39,74 +35,113 @@ class AdminDashboardTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseAuth.instance.currentUser == null
+                    ? null
+                    : FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser!.uid)
+                        .snapshots(),
+                builder: (context, selfSnapshot) {
+                  final liveUsername =
+                      selfSnapshot.data?.data()?['username'] as String? ??
+                          username;
+                  final liveInitials = liveUsername.isEmpty
+                      ? '?'
+                      : liveUsername
+                          .trim()
+                          .split(' ')
+                          .map((e) => e[0])
+                          .take(2)
+                          .join()
+                          .toUpperCase();
+
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'VirtuWatch',
+                                style: TextStyle(
+                                  color: AppTheme.gold,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const Text(
+                                'ADMIN PANEL',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Text(
+                                  'ADMIN',
+                                  style: TextStyle(
+                                    color: Colors.redAccent,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const AdminProfileTab(),
+                                    ),
+                                  );
+                                },
+                                customBorder: const CircleBorder(),
+                                child: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor:
+                                      Colors.redAccent.withValues(alpha: 0.2),
+                                  child: Text(
+                                    liveInitials,
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
                       Text(
-                        'VirtuWatch',
-                        style: TextStyle(
-                          color: AppTheme.gold,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const Text(
-                        'ADMIN PANEL',
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
+                        'Welcome, $liveUsername!',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(fontSize: 22),
                       ),
                     ],
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'ADMIN',
-                          style: TextStyle(
-                            color: Colors.redAccent,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-                        child: Text(
-                          _initials,
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              Text(
-                'Welcome, $username!',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontSize: 22,
-                    ),
+                  );
+                },
               ),
               const SizedBox(height: 4),
               Text(

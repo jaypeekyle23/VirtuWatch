@@ -9,6 +9,7 @@ import 'ar_try_on_screen.dart';
 import 'recommended_for_you_screen.dart';
 import 'wrist_measurement_screen.dart';
 import 'outfit_scan_screen.dart';
+import 'customer_profile_tab.dart';
 
 class CustomerHomeTab extends StatelessWidget {
   final String username;
@@ -56,15 +57,25 @@ class CustomerHomeTab extends StatelessWidget {
                       letterSpacing: 0.5,
                     ),
                   ),
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppTheme.gold,
-                    child: Text(
-                      initials.toUpperCase(),
-                      style: const TextStyle(
-                        color: Color(0xFF0E1A2B),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                  InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const CustomerProfileTab(),
+                        ),
+                      );
+                    },
+                    customBorder: const CircleBorder(),
+                    child: CircleAvatar(
+                      radius: 18,
+                      backgroundColor: AppTheme.gold,
+                      child: Text(
+                        initials.toUpperCase(),
+                        style: const TextStyle(
+                          color: Color(0xFF0E1A2B),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ),

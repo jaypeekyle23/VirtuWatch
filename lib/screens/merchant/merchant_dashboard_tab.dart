@@ -7,6 +7,7 @@ import 'merchant_add_watch_screen.dart';
 import 'merchant_catalog_tab.dart';
 import 'merchant_analytics_tab.dart';
 import 'merchant_edit_watch_screen.dart';
+import 'merchant_profile_tab.dart';
 
 class MerchantDashboardTab extends StatelessWidget {
   final String username;
@@ -17,7 +18,61 @@ class MerchantDashboardTab extends StatelessWidget {
     final watchService = WatchService();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Merchant Dashboard')),
+      appBar: AppBar(
+        title: const Text('Merchant Dashboard'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseAuth.instance.currentUser == null
+                    ? null
+                    : FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser!.uid)
+                        .snapshots(),
+                builder: (context, userSnapshot) {
+                  final liveUsername =
+                      userSnapshot.data?.data()?['username'] as String? ??
+                          username;
+                  final initials = liveUsername.isEmpty
+                      ? '?'
+                      : liveUsername
+                          .trim()
+                          .split(' ')
+                          .map((e) => e[0])
+                          .take(2)
+                          .join()
+                          .toUpperCase();
+
+                  return InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const MerchantProfileTab(),
+                        ),
+                      );
+                    },
+                    customBorder: const CircleBorder(),
+                    child: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.greenAccent.withValues(alpha: 0.2),
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: watchService.myWatches(),
         builder: (context, snapshot) {

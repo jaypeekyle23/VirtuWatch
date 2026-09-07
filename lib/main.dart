@@ -19,6 +19,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'VirtuWatch',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
       home: const LoginScreen(),
     );
