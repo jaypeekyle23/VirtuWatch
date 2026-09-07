@@ -7,6 +7,7 @@ import 'admin_account_management_screen.dart';
 import 'admin_watch_management_tab.dart';
 import 'admin_profile_tab.dart';
 import '../merchant/merchant_add_watch_screen.dart';
+import '../../services/activity_log_service.dart';
 
 class AdminDashboardTab extends StatelessWidget {
   final String username;
@@ -297,114 +298,94 @@ class AdminDashboardTab extends StatelessWidget {
               const SizedBox(height: 12),
 
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: usersStream,
-                builder: (context, userSnap) {
-                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: watchesStream,
-                    builder: (context, watchSnap) {
-                      if (userSnap.connectionState == ConnectionState.waiting ||
-                          watchSnap.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+                stream: ActivityLogService().recentActivity(limit: 8),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Could not load activity: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                      ),
+                    );
+                  }
 
-                      final activities = <_ActivityEntry>[];
+                  final docs = snapshot.data?.docs ?? [];
 
-                      for (final doc in userSnap.data?.docs ?? []) {
-                        final data = doc.data();
-                        final createdAt = data['createdAt'] as Timestamp?;
-                        if (createdAt == null) continue;
-                        final isSelf =
-                            doc.id == FirebaseAuth.instance.currentUser?.uid;
-                        activities.add(_ActivityEntry(
-                          icon: Icons.person_add_alt_outlined,
-                          text: isSelf
-                              ? 'Your admin account was created'
-                              : 'New user registered: ${data['email'] ?? 'unknown'}',
-                          timestamp: createdAt,
-                        ));
-                      }
+                  if (docs.isEmpty) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'No recent activity yet.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    );
+                  }
 
-                      for (final doc in watchSnap.data?.docs ?? []) {
-                        final data = doc.data();
-                        final createdAt = data['createdAt'] as Timestamp?;
-                        if (createdAt == null) continue;
-                        final name = data['name'] as String? ?? 'Unnamed Watch';
-                        activities.add(_ActivityEntry(
-                          icon: Icons.watch_outlined,
-                          text: 'Watch added: $name',
-                          timestamp: createdAt,
-                        ));
-                      }
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: docs.asMap().entries.map((entry) {
+                        final isLast = entry.key == docs.length - 1;
+                        final data = entry.value.data();
+                        final type = data['type'] as String? ?? '';
+                        final message =
+                            data['message'] as String? ?? 'Unknown activity';
+                        final timestamp = data['timestamp'] as Timestamp?;
 
-                      activities.sort(
-                          (a, b) => b.timestamp.compareTo(a.timestamp));
-                      final recent = activities.take(6).toList();
-
-                      if (recent.isEmpty) {
                         return Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppTheme.surface,
-                            borderRadius: BorderRadius.circular(12),
+                            border: isLast
+                                ? null
+                                : const Border(
+                                    bottom: BorderSide(color: Color(0x1AFFFFFF)),
+                                  ),
                           ),
-                          child: Text(
-                            'No recent activity yet.',
-                            style: Theme.of(context).textTheme.bodyMedium,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(_iconForActivityType(type),
+                                  color: AppTheme.textSecondary, size: 16),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  message,
+                                  style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _relativeTime(timestamp),
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
                           ),
                         );
-                      }
-
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: AppTheme.surface,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: recent.asMap().entries.map((entry) {
-                            final isLast = entry.key == recent.length - 1;
-                            final activity = entry.value;
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                border: isLast
-                                    ? null
-                                    : const Border(
-                                        bottom: BorderSide(
-                                          color: Color(0x1AFFFFFF),
-                                        ),
-                                      ),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(activity.icon,
-                                      color: AppTheme.textSecondary, size: 16),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      activity.text,
-                                      style: const TextStyle(
-                                        color: AppTheme.textPrimary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _relativeTime(activity.timestamp),
-                                    style: const TextStyle(
-                                      color: AppTheme.textSecondary,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      );
-                    },
+                      }).toList(),
+                    ),
                   );
                 },
               ),
@@ -413,6 +394,30 @@ class AdminDashboardTab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _iconForActivityType(String type) {
+    switch (type) {
+      case 'user_registered':
+        return Icons.person_add_alt_outlined;
+      case 'account_created':
+        return Icons.person_add_outlined;
+      case 'account_disabled':
+        return Icons.block_outlined;
+      case 'account_enabled':
+        return Icons.check_circle_outline;
+      case 'account_deleted':
+      case 'account_self_deleted':
+        return Icons.person_remove_outlined;
+      case 'role_changed':
+        return Icons.swap_horiz;
+      case 'watch_added':
+        return Icons.watch_outlined;
+      case 'watch_deleted':
+        return Icons.delete_outline;
+      default:
+        return Icons.circle_notifications_outlined;
+    }
   }
 
   Widget _statCard({
@@ -490,16 +495,4 @@ class AdminDashboardTab extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ActivityEntry {
-  final IconData icon;
-  final String text;
-  final Timestamp timestamp;
-
-  _ActivityEntry({
-    required this.icon,
-    required this.text,
-    required this.timestamp,
-  });
 }

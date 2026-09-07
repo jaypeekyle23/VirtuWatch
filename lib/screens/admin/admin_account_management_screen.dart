@@ -314,15 +314,17 @@ class _AccountTile extends StatelessWidget {
   }
 
   Future<void> _handleAction(BuildContext context, String action) async {
+    final accountLabel = '${data['username']} (${data['email']})';
+
     if (action == 'disable') {
-      await userService.suspendAccount(uid);
+      await userService.suspendAccount(uid, accountLabel: accountLabel);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Account disabled.')),
         );
       }
     } else if (action == 'enable') {
-      await userService.reactivateAccount(uid);
+      await userService.reactivateAccount(uid, accountLabel: accountLabel);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Account re-enabled.')),
@@ -356,7 +358,7 @@ class _AccountTile extends StatelessWidget {
       );
 
       if (confirmed == true) {
-        await userService.deleteAccountProfile(uid);
+        await userService.deleteAccountProfile(uid, accountLabel: accountLabel);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Account profile deleted.')),
@@ -455,7 +457,12 @@ class _AccountTile extends StatelessWidget {
 
     if (finalConfirm == true) {
       try {
-        await userService.updateUserRole(uid, confirmedRole);
+        await userService.updateUserRole(
+          uid,
+          confirmedRole,
+          accountLabel: '${data['username']} (${data['email']})',
+          previousRole: currentRole,
+        );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

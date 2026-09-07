@@ -445,7 +445,10 @@ class _WatchListTile extends StatelessWidget {
     );
 
     if (confirmed == true) {
-      await watchService.deleteWatch(watchId);
+      await watchService.deleteWatch(
+        watchId,
+        watchLabel: data['name'] as String? ?? watchId,
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Watch deleted.')),

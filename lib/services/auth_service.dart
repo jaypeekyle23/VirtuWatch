@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'activity_log_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _activityLog = ActivityLogService();
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
@@ -45,6 +47,10 @@ class AuthService {
           'createdAt': FieldValue.serverTimestamp(),
         });
         await user.sendEmailVerification();
+        await _activityLog.log(
+          'user_registered',
+          'New customer registered: $email',
+        );
       }
       return user;
     } on FirebaseAuthException catch (e) {
@@ -156,6 +162,10 @@ class AuthService {
           'createdAt': FieldValue.serverTimestamp(),
         };
         await docRef.set(newProfile);
+        await _activityLog.log(
+          'user_registered',
+          'New customer registered via Google: ${user.email ?? 'unknown'}',
+        );
         return newProfile;
       }
 
@@ -247,6 +257,10 @@ class AuthService {
         await user.reauthenticateWithCredential(credential);
       }
 
+      await _activityLog.log(
+        'account_self_deleted',
+        'Account deleted by user: ${user.email ?? user.uid}',
+      );
       await _firestore.collection('users').doc(user.uid).delete();
       await user.delete();
     } on FirebaseAuthException catch (e) {
@@ -298,6 +312,10 @@ class AuthService {
       // Even admin-created accounts must verify their email before their
       // first login, confirming the address is real and accessible.
       await newUser.sendEmailVerification();
+      await _activityLog.log(
+        'account_created',
+        '${role[0].toUpperCase()}${role.substring(1)} account created: $username ($email)',
+      );
 
       await secondaryAuth.signOut();
     } on FirebaseAuthException catch (e) {

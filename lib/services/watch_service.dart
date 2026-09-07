@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'activity_log_service.dart';
 
 class WatchService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _activityLog = ActivityLogService();
 
   CollectionReference<Map<String, dynamic>> get _watches =>
       _firestore.collection('watches');
@@ -20,6 +22,13 @@ class WatchService {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    final name = data['name'] as String? ?? 'Unnamed watch';
+    final brand = data['brand'] as String? ?? '';
+    await _activityLog.log(
+      'watch_added',
+      'Watch added: ${brand.isNotEmpty ? '$brand $name' : name}',
+    );
   }
 
   /// Updates an existing watch listing.
@@ -30,9 +39,14 @@ class WatchService {
     });
   }
 
-  /// Deletes a watch listing.
-  Future<void> deleteWatch(String watchId) async {
+  /// Deletes a watch listing. [watchLabel] is an optional human-readable
+  /// name for the activity log message; falls back to the watch's ID.
+  Future<void> deleteWatch(String watchId, {String? watchLabel}) async {
     await _watches.doc(watchId).delete();
+    await _activityLog.log(
+      'watch_deleted',
+      'Watch deleted: ${watchLabel ?? watchId}',
+    );
   }
 
   /// Stream of watches belonging to the currently logged-in merchant.
