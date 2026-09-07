@@ -208,6 +208,52 @@ class AuthService {
     }
   }
 
+  /// Permanently deletes the currently logged-in user's own account: their
+  /// Firestore profile document and their Firebase Auth account. Requires
+  /// re-authentication first, since Firebase blocks account deletion after
+  /// a certain time since last login.
+  ///
+  /// For email/password accounts, pass [currentPassword]. For Google
+  /// accounts, leave [currentPassword] null; Google re-authentication is
+  /// triggered automatically via a fresh sign-in prompt.
+  Future<void> deleteOwnAccount({String? currentPassword}) async {
+    final user = _auth.currentUser;
+    if (user == null) throw 'You must be logged in.';
+
+    final isGoogleAccount =
+        user.providerData.any((p) => p.providerId == 'google.com');
+
+    try {
+      if (isGoogleAccount) {
+        final googleSignIn = GoogleSignIn();
+        final googleUser = await googleSignIn.signIn();
+        if (googleUser == null) {
+          throw 'Re-authentication was cancelled.';
+        }
+        final googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        await user.reauthenticateWithCredential(credential);
+      } else {
+        if (currentPassword == null || user.email == null) {
+          throw 'Please enter your current password.';
+        }
+        final credential = EmailAuthProvider.credential(
+          email: user.email!,
+          password: currentPassword,
+        );
+        await user.reauthenticateWithCredential(credential);
+      }
+
+      await _firestore.collection('users').doc(user.uid).delete();
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
   /// Used by an Admin to create a Merchant or Admin account without
   /// disrupting their own logged-in session. Uses a secondary Firebase
   /// app instance so the admin stays signed in on the main app.

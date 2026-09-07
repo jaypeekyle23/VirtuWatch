@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../change_password_screen.dart';
 import '../about_screen.dart';
+import '../delete_account_screen.dart';
 
 class MerchantProfileTab extends StatelessWidget {
   const MerchantProfileTab({super.key});
@@ -111,11 +112,19 @@ class MerchantProfileTab extends StatelessWidget {
                           ),
                         );
                       }),
-                      _menuTile(context, 'About VirtuWatch', Icons.info_outline,
-                          () {
+                      _menuTile(context, 'About VirtuWatch',
+                          Icons.info_outline, () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const AboutScreen(),
+                          ),
+                        );
+                      }),
+                      _menuTile(
+                          context, 'Delete Account', Icons.delete_outline, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const DeleteAccountScreen(),
                           ),
                         );
                       }),
