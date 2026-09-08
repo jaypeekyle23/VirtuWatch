@@ -36,6 +36,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _stepCircle('1', 'Place\nReference', active: true),
                 _stepConnector(),
@@ -281,39 +282,49 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
   }
 
   Widget _stepCircle(String number, String label, {required bool active}) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 14,
-          backgroundColor: active ? AppTheme.gold : AppTheme.surface,
-          child: Text(
-            number,
-            style: TextStyle(
-              color: active ? const Color(0xFF0E1A2B) : AppTheme.textSecondary,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
+    return SizedBox(
+      width: 72,
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: active ? AppTheme.gold : AppTheme.surface,
+            child: Text(
+              number,
+              style: TextStyle(
+                color: active ? const Color(0xFF0E1A2B) : AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: active ? AppTheme.gold : AppTheme.textSecondary,
-            fontSize: 9,
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 26,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: active ? AppTheme.gold : AppTheme.textSecondary,
+                fontSize: 9,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _stepConnector() {
-    return Container(
-      width: 30,
-      height: 1,
-      margin: const EdgeInsets.only(bottom: 20),
-      color: AppTheme.textSecondary.withValues(alpha: 0.3),
+    return Padding(
+      padding: const EdgeInsets.only(top: 13),
+      child: Container(
+        width: 24,
+        height: 1,
+        color: AppTheme.textSecondary.withValues(alpha: 0.3),
+      ),
     );
   }
 }

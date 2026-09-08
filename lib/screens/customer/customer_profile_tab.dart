@@ -9,6 +9,8 @@ import 'wrist_measurement_screen.dart';
 import '../change_password_screen.dart';
 import '../about_screen.dart';
 import '../delete_account_screen.dart';
+import '../terms_of_service_screen.dart';
+import '../privacy_policy_screen.dart';
 
 class CustomerProfileTab extends StatelessWidget {
   const CustomerProfileTab({super.key});
@@ -42,6 +44,8 @@ class CustomerProfileTab extends StatelessWidget {
                 final budgetMax =
                     (data['budgetMax'] as num?)?.toDouble() ?? 50000;
                 final wristWidthMm = (data['wristWidthMm'] as num?)?.toDouble();
+                final savedWatchIds =
+                    (data['savedWatches'] as List?)?.cast<String>() ?? [];
                 final initials = username.isNotEmpty
                     ? username.trim().split(' ').map((e) => e[0]).take(2).join()
                     : '?';
@@ -221,14 +225,9 @@ class CustomerProfileTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 20),
 
-                      _menuTile(context, 'Saved Watches',
-                          Icons.favorite_border, () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SavedWatchesScreen(),
-                          ),
-                        );
-                      }),
+                      _SavedWatchesPreviewCard(savedWatchIds: savedWatchIds),
+                      const SizedBox(height: 10),
+
                       _menuTile(context, 'Change Password', Icons.lock_outline,
                           () {
                         Navigator.of(context).push(
@@ -242,6 +241,22 @@ class CustomerProfileTab extends StatelessWidget {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const AboutScreen(),
+                          ),
+                        );
+                      }),
+                      _menuTile(context, 'Terms of Service',
+                          Icons.description_outlined, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const TermsOfServiceScreen(),
+                          ),
+                        );
+                      }),
+                      _menuTile(context, 'Privacy Policy',
+                          Icons.privacy_tip_outlined, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const PrivacyPolicyScreen(),
                           ),
                         );
                       }),
@@ -338,5 +353,102 @@ class CustomerProfileTab extends StatelessWidget {
         Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
       }
     }
+  }
+}
+
+class _SavedWatchesPreviewCard extends StatelessWidget {
+  final List<String> savedWatchIds;
+
+  const _SavedWatchesPreviewCard({required this.savedWatchIds});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const SavedWatchesScreen(),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Saved Watches (${savedWatchIds.length})',
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const Text(
+                  'View All',
+                  style: TextStyle(color: AppTheme.gold, fontSize: 12),
+                ),
+              ],
+            ),
+            if (savedWatchIds.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  for (var i = 0; i < savedWatchIds.length && i < 4; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.background,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.watch,
+                          color: AppTheme.gold, size: 20),
+                    ),
+                  ],
+                  if (savedWatchIds.length > 4) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.background,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '+${savedWatchIds.length - 4}',
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              const Text(
+                'No saved watches yet. Tap the heart on a watch to save it here.',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
