@@ -35,6 +35,8 @@ class MerchantDashboardTab extends StatelessWidget {
                   final liveUsername =
                       userSnapshot.data?.data()?['username'] as String? ??
                           username;
+                  final photoUrl =
+                      userSnapshot.data?.data()?['photoUrl'] as String? ?? '';
                   final initials = liveUsername.isEmpty
                       ? '?'
                       : liveUsername
@@ -57,14 +59,18 @@ class MerchantDashboardTab extends StatelessWidget {
                     child: CircleAvatar(
                       radius: 16,
                       backgroundColor: Colors.greenAccent.withValues(alpha: 0.2),
-                      child: Text(
-                        initials,
-                        style: const TextStyle(
-                          color: Colors.greenAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                      backgroundImage:
+                          photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                      child: photoUrl.isEmpty
+                          ? Text(
+                              initials,
+                              style: const TextStyle(
+                                color: Colors.greenAccent,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            )
+                          : null,
                     ),
                   );
                 },

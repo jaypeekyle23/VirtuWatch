@@ -36,6 +36,7 @@ class AdminProfileTab extends StatelessWidget {
                 final initials = username.isNotEmpty
                     ? username.trim().split(' ').map((e) => e[0]).take(2).join()
                     : '?';
+                final photoUrl = data['photoUrl'] as String? ?? '';
 
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
@@ -44,14 +45,19 @@ class AdminProfileTab extends StatelessWidget {
                       CircleAvatar(
                         radius: 36,
                         backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-                        child: Text(
-                          initials.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 22,
-                          ),
-                        ),
+                        backgroundImage: photoUrl.isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl.isEmpty
+                            ? Text(
+                                initials.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                ),
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -93,6 +99,7 @@ class AdminProfileTab extends StatelessWidget {
                             MaterialPageRoute(
                               builder: (_) => EditAccountNameScreen(
                                 currentUsername: username,
+                                currentPhotoUrl: photoUrl,
                               ),
                             ),
                           );

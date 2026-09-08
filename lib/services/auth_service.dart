@@ -335,6 +335,7 @@ class AuthService {
     List<String> preferredBrands = const [],
     double? budgetMin,
     double? budgetMax,
+    String? photoUrl,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw 'You must be logged in.';
@@ -345,6 +346,20 @@ class AuthService {
       'preferredBrands': preferredBrands,
       'budgetMin': ?budgetMin,
       'budgetMax': ?budgetMax,
+      'photoUrl': ?photoUrl,
+    });
+  }
+
+  /// Updates only the currently logged-in user's profile photo URL. Used
+  /// by Merchant and Admin accounts via [EditAccountNameScreen], and can
+  /// also be called standalone for Customer accounts outside the full
+  /// [updateOwnProfile] flow.
+  Future<void> updatePhotoUrl(String photoUrl) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw 'You must be logged in.';
+
+    await _firestore.collection('users').doc(uid).update({
+      'photoUrl': photoUrl,
     });
   }
 

@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/auth_service.dart';
+import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -9,6 +13,7 @@ class EditProfileScreen extends StatefulWidget {
   final List<String> currentPreferredBrands;
   final double currentBudgetMin;
   final double currentBudgetMax;
+  final String currentPhotoUrl;
 
   const EditProfileScreen({
     super.key,
@@ -18,6 +23,7 @@ class EditProfileScreen extends StatefulWidget {
     this.currentPreferredBrands = const [],
     this.currentBudgetMin = 5000,
     this.currentBudgetMax = 50000,
+    this.currentPhotoUrl = '',
   });
 
   @override
@@ -26,11 +32,15 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _authService = AuthService();
+  final _cloudinaryService = CloudinaryService();
   late final TextEditingController _nameController;
 
   late Set<String> _selectedStyles;
   late Set<String> _selectedBrands;
   late RangeValues _budgetRange;
+  late String _existingPhotoUrl;
+  File? _selectedImage;
+  bool _isUploadingImage = false;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -65,12 +75,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       widget.currentBudgetMin.clamp(0, 500000),
       widget.currentBudgetMax.clamp(0, 500000),
     );
+    _existingPhotoUrl = widget.currentPhotoUrl;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    final image = await _cloudinaryService.pickImage(
+      source: ImageSource.gallery,
+    );
+    if (image != null) {
+      setState(() => _selectedImage = image);
+    }
   }
 
   Future<void> _handleSave() async {
@@ -85,12 +105,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
 
     try {
+      String? photoUrl = _existingPhotoUrl.isNotEmpty ? _existingPhotoUrl : null;
+      if (_selectedImage != null) {
+        setState(() => _isUploadingImage = true);
+        try {
+          photoUrl = await _cloudinaryService.uploadImage(_selectedImage!);
+        } finally {
+          if (mounted) setState(() => _isUploadingImage = false);
+        }
+      }
+
       await _authService.updateOwnProfile(
         username: _nameController.text.trim(),
         stylePreferences: _selectedStyles.toList(),
         preferredBrands: _selectedBrands.toList(),
         budgetMin: _budgetRange.start,
         budgetMax: _budgetRange.end,
+        photoUrl: photoUrl,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -109,6 +140,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         });
       }
     }
+  }
+
+  ImageProvider? get _avatarImage {
+    if (_selectedImage != null) return FileImage(_selectedImage!);
+    if (_existingPhotoUrl.isNotEmpty) return NetworkImage(_existingPhotoUrl);
+    return null;
   }
 
   @override
@@ -135,18 +172,47 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
-              child: CircleAvatar(
-                radius: 36,
-                backgroundColor: AppTheme.gold,
-                child: Text(
-                  _nameController.text.isNotEmpty
-                      ? _nameController.text.trim()[0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(
-                    color: Color(0xFF0E1A2B),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24,
-                  ),
+              child: GestureDetector(
+                onTap: _isUploadingImage ? null : _pickImage,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundColor: AppTheme.gold,
+                      backgroundImage: _avatarImage,
+                      child: _isUploadingImage
+                          ? const CircularProgressIndicator(
+                              color: Color(0xFF0E1A2B),
+                            )
+                          : (_selectedImage == null &&
+                                  _existingPhotoUrl.isEmpty)
+                              ? Text(
+                                  _nameController.text.isNotEmpty
+                                      ? _nameController.text.trim()[0]
+                                          .toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    color: Color(0xFF0E1A2B),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 24,
+                                  ),
+                                )
+                              : null,
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.gold,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.camera_alt,
+                            size: 14, color: Color(0xFF0E1A2B)),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

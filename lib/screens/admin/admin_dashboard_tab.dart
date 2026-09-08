@@ -47,6 +47,8 @@ class AdminDashboardTab extends StatelessWidget {
                   final liveUsername =
                       selfSnapshot.data?.data()?['username'] as String? ??
                           username;
+                  final livePhotoUrl =
+                      selfSnapshot.data?.data()?['photoUrl'] as String? ?? '';
                   final liveInitials = liveUsername.isEmpty
                       ? '?'
                       : liveUsername
@@ -118,14 +120,19 @@ class AdminDashboardTab extends StatelessWidget {
                                   radius: 16,
                                   backgroundColor:
                                       Colors.redAccent.withValues(alpha: 0.2),
-                                  child: Text(
-                                    liveInitials,
-                                    style: const TextStyle(
-                                      color: Colors.redAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                                  backgroundImage: livePhotoUrl.isNotEmpty
+                                      ? NetworkImage(livePhotoUrl)
+                                      : null,
+                                  child: livePhotoUrl.isEmpty
+                                      ? Text(
+                                          liveInitials,
+                                          style: const TextStyle(
+                                            color: Colors.redAccent,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        )
+                                      : null,
                                 ),
                               ),
                             ],

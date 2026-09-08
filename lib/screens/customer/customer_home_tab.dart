@@ -34,6 +34,8 @@ class CustomerHomeTab extends StatelessWidget {
       builder: (context, userSnapshot) {
         final liveUsername =
             userSnapshot.data?.data()?['username'] as String? ?? username;
+        final photoUrl =
+            userSnapshot.data?.data()?['photoUrl'] as String? ?? '';
         final initials = liveUsername.isNotEmpty
             ? liveUsername.trim().split(' ').map((e) => e[0]).take(2).join()
             : '?';
@@ -69,14 +71,18 @@ class CustomerHomeTab extends StatelessWidget {
                     child: CircleAvatar(
                       radius: 18,
                       backgroundColor: AppTheme.gold,
-                      child: Text(
-                        initials.toUpperCase(),
-                        style: const TextStyle(
-                          color: Color(0xFF0E1A2B),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
+                      backgroundImage:
+                          photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                      child: photoUrl.isEmpty
+                          ? Text(
+                              initials.toUpperCase(),
+                              style: const TextStyle(
+                                color: Color(0xFF0E1A2B),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            )
+                          : null,
                     ),
                   ),
                 ],

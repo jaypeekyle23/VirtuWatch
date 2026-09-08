@@ -46,6 +46,7 @@ class CustomerProfileTab extends StatelessWidget {
                 final wristWidthMm = (data['wristWidthMm'] as num?)?.toDouble();
                 final savedWatchIds =
                     (data['savedWatches'] as List?)?.cast<String>() ?? [];
+                final photoUrl = data['photoUrl'] as String? ?? '';
                 final initials = username.isNotEmpty
                     ? username.trim().split(' ').map((e) => e[0]).take(2).join()
                     : '?';
@@ -57,14 +58,19 @@ class CustomerProfileTab extends StatelessWidget {
                       CircleAvatar(
                         radius: 36,
                         backgroundColor: AppTheme.gold,
-                        child: Text(
-                          initials.toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFF0E1A2B),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 22,
-                          ),
-                        ),
+                        backgroundImage: photoUrl.isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl.isEmpty
+                            ? Text(
+                                initials.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Color(0xFF0E1A2B),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                ),
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -94,6 +100,7 @@ class CustomerProfileTab extends StatelessWidget {
                                 currentPreferredBrands: preferredBrands,
                                 currentBudgetMin: budgetMin,
                                 currentBudgetMax: budgetMax,
+                                currentPhotoUrl: photoUrl,
                               ),
                             ),
                           );
