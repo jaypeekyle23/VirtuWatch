@@ -261,10 +261,10 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
         title: const Text('How Wrist Measurement Works',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: const Text(
-          'When this feature is complete, VirtuWatch will use your phone\'s '
-          'camera to estimate your wrist width automatically.\n\n'
+          'VirtuWatch uses your phone\'s camera to estimate your wrist '
+          'width automatically.\n\n'
           'You\'ll place a reference object of known size (like an ID card or '
-          'coin) flat next to your wrist, and the app will calibrate a '
+          'coin) flat next to your wrist, and the app calibrates a '
           'pixels-to-millimeters ratio from it to measure your wrist '
           'accurately — no tape measure needed.\n\n'
           'This helps VirtuWatch recommend watches that will actually fit '

@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../services/cloudinary_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -16,6 +20,7 @@ class MerchantAddWatchScreen extends StatefulWidget {
 class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   final _formKey = GlobalKey<FormState>();
   final _watchService = WatchService();
+  final _cloudinaryService = CloudinaryService();
 
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
@@ -34,6 +39,9 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   String? _selectedMerchantId;
+
+  File? _selectedImage;
+  bool _isUploadingImage = false;
 
   final List<String> _styleOptions = [
     'Sport',
@@ -60,6 +68,15 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final image = await _cloudinaryService.pickImage(
+      source: ImageSource.gallery,
+    );
+    if (image != null) {
+      setState(() => _selectedImage = image);
+    }
+  }
+
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -76,6 +93,16 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
     });
 
     try {
+      String imageUrl = '';
+      if (_selectedImage != null) {
+        setState(() => _isUploadingImage = true);
+        try {
+          imageUrl = await _cloudinaryService.uploadImage(_selectedImage!);
+        } finally {
+          if (mounted) setState(() => _isUploadingImage = false);
+        }
+      }
+
       await _watchService.addWatch(
         {
           'name': _nameController.text.trim(),
@@ -94,7 +121,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
           'listedInCatalog': _listedInCatalog,
           'has3DModel': false,
           'modelUrl': '',
-          'imageUrl': '',
+          'imageUrl': imageUrl,
         },
         merchantIdOverride: widget.isAdminMode ? _selectedMerchantId : null,
       );
@@ -198,6 +225,40 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
+
+              _fieldLabel('WATCH PHOTO'),
+              GestureDetector(
+                onTap: _isUploadingImage ? null : _pickImage,
+                child: Container(
+                  height: 160,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.gold.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: _isUploadingImage
+                      ? const Center(child: CircularProgressIndicator())
+                      : _selectedImage != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(_selectedImage!, fit: BoxFit.cover),
+                            )
+                          : const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo_outlined,
+                                    size: 32, color: AppTheme.textSecondary),
+                                SizedBox(height: 8),
+                                Text('Tap to add a photo',
+                                    style: TextStyle(color: AppTheme.textSecondary)),
+                              ],
+                            ),
+                ),
+              ),
+              const SizedBox(height: 16),
 
               _fieldLabel('WATCH NAME *'),
               TextFormField(

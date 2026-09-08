@@ -285,6 +285,7 @@ class _WatchListTile extends StatelessWidget {
     final price = data['price'];
     final listed = data['listedInCatalog'] as bool? ?? false;
     final has3D = data['has3DModel'] as bool? ?? false;
+    final imageUrl = data['imageUrl'] as String? ?? '';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -305,7 +306,27 @@ class _WatchListTile extends StatelessWidget {
                   color: AppTheme.background,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.watch, color: AppTheme.gold, size: 36),
+                clipBehavior: Clip.antiAlias,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                            Icons.watch,
+                            color: AppTheme.gold,
+                            size: 36),
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                      )
+                    : const Icon(Icons.watch, color: AppTheme.gold, size: 36),
               ),
               const SizedBox(width: 12),
               Expanded(

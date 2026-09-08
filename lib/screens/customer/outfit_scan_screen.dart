@@ -249,11 +249,11 @@ class OutfitScanScreen extends StatelessWidget {
         title: const Text('How Outfit Color Scan Works',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: const Text(
-          'When this feature is complete, VirtuWatch will use your phone\'s '
-          'camera to identify the dominant colors in your outfit using a '
-          'clustering technique (K-means color extraction).\n\n'
+          'VirtuWatch uses your phone\'s camera to identify the dominant '
+          'colors in your outfit using a clustering technique (K-means '
+          'color extraction).\n\n'
           'Point your camera at your outfit in good lighting, and the app '
-          'will detect the main tones you\'re wearing — then use those '
+          'detects the main tones you\'re wearing — then uses those '
           'colors to recommend watches with cases, dials, or bands that '
           'complement your look.\n\n'
           'Good, even lighting helps the scan work more accurately.',

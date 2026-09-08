@@ -405,16 +405,7 @@ class _SavedWatchesPreviewCard extends StatelessWidget {
                 children: [
                   for (var i = 0; i < savedWatchIds.length && i < 4; i++) ...[
                     if (i > 0) const SizedBox(width: 8),
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.background,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.watch,
-                          color: AppTheme.gold, size: 20),
-                    ),
+                    _SavedWatchThumbnail(watchId: savedWatchIds[i]),
                   ],
                   if (savedWatchIds.length > 4) ...[
                     const SizedBox(width: 8),
@@ -449,6 +440,50 @@ class _SavedWatchesPreviewCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A single circular thumbnail for the saved-watches preview strip. Looks
+/// up its own watch document by ID so it can show the real photo, falling
+/// back to the generic watch icon while loading, on error, or if the watch
+/// has no photo yet.
+class _SavedWatchThumbnail extends StatelessWidget {
+  final String watchId;
+
+  const _SavedWatchThumbnail({required this.watchId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('watches')
+          .doc(watchId)
+          .get(),
+      builder: (context, snapshot) {
+        final imageUrl =
+            snapshot.data?.data()?['imageUrl'] as String? ?? '';
+
+        return Container(
+          width: 44,
+          height: 44,
+          decoration: const BoxDecoration(
+            color: AppTheme.background,
+            shape: BoxShape.circle,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: imageUrl.isNotEmpty
+              ? Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.watch,
+                      color: AppTheme.gold,
+                      size: 20),
+                )
+              : const Icon(Icons.watch, color: AppTheme.gold, size: 20),
+        );
+      },
     );
   }
 }

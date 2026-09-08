@@ -28,6 +28,7 @@ class WatchDetailScreen extends StatelessWidget {
     final waterResistance = data['waterResistance'] as String? ?? '';
     final bandMaterial = data['bandMaterial'] as String? ?? '';
     final caseMaterial = data['caseMaterial'] as String? ?? '';
+    final imageUrl = data['imageUrl'] as String? ?? '';
     final userService = UserService();
 
     return Scaffold(
@@ -82,9 +83,26 @@ class WatchDetailScreen extends StatelessWidget {
               aspectRatio: 1.1,
               child: Container(
                 color: AppTheme.surface,
-                child: const Center(
-                  child: Icon(Icons.watch, size: 100, color: AppTheme.gold),
-                ),
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Center(
+                          child:
+                              Icon(Icons.watch, size: 100, color: AppTheme.gold),
+                        ),
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        },
+                      )
+                    : const Center(
+                        child:
+                            Icon(Icons.watch, size: 100, color: AppTheme.gold),
+                      ),
               ),
             ),
             Padding(

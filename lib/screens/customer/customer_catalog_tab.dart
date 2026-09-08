@@ -260,6 +260,7 @@ class _WatchCard extends StatelessWidget {
     final price = data['price'];
     final style = data['styleCategory'] as String? ?? '';
     final caseDiameter = data['caseDiameterMm'];
+    final imageUrl = data['imageUrl'] as String? ?? '';
 
     return InkWell(
       onTap: () {
@@ -281,15 +282,37 @@ class _WatchCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 1,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.background,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
                 ),
-                child: const Center(
-                  child: Icon(Icons.watch, size: 40, color: AppTheme.gold),
+                child: Container(
+                  color: AppTheme.background,
+                  child: imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(
+                            child: Icon(Icons.watch,
+                                size: 40, color: AppTheme.gold),
+                          ),
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            );
+                          },
+                        )
+                      : const Center(
+                          child:
+                              Icon(Icons.watch, size: 40, color: AppTheme.gold),
+                        ),
                 ),
               ),
             ),

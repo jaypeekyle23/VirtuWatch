@@ -173,6 +173,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                           final isSelected = doc.id == _selectedWatchId;
                           final brand = data['brand'] as String? ?? '';
                           final name = data['name'] as String? ?? 'Watch';
+                          final imageUrl = data['imageUrl'] as String? ?? '';
 
                           return InkWell(
                             onTap: () => setState(() {
@@ -202,10 +203,39 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                                         color: AppTheme.surface,
                                         borderRadius: BorderRadius.circular(8),
                                       ),
-                                      child: const Center(
-                                        child: Icon(Icons.watch,
-                                            color: AppTheme.gold, size: 32),
-                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: imageUrl.isNotEmpty
+                                          ? Image.network(
+                                              imageUrl,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error,
+                                                      stackTrace) =>
+                                                  const Center(
+                                                child: Icon(Icons.watch,
+                                                    color: AppTheme.gold,
+                                                    size: 32),
+                                              ),
+                                              loadingBuilder: (context, child,
+                                                  progress) {
+                                                if (progress == null) {
+                                                  return child;
+                                                }
+                                                return const Center(
+                                                  child: SizedBox(
+                                                    width: 18,
+                                                    height: 18,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2),
+                                                  ),
+                                                );
+                                              },
+                                            )
+                                          : const Center(
+                                              child: Icon(Icons.watch,
+                                                  color: AppTheme.gold,
+                                                  size: 32),
+                                            ),
                                     ),
                                   ),
                                   Padding(
@@ -297,9 +327,9 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         title: const Text('Share Your Try-On',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: const Text(
-          'Once AR try-on is live, this button will let you save or share '
-          'a photo of the watch overlaid on your wrist — so you can send it '
-          'to a friend, post it, or compare a few favorites before deciding.',
+          'This button lets you save or share a photo of the watch '
+          'overlaid on your wrist — so you can send it to a friend, post '
+          'it, or compare a few favorites before deciding.',
           style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
         ),
         actions: [

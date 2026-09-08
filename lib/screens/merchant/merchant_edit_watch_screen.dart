@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../services/cloudinary_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -20,6 +24,7 @@ class MerchantEditWatchScreen extends StatefulWidget {
 class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
   final _formKey = GlobalKey<FormState>();
   final _watchService = WatchService();
+  final _cloudinaryService = CloudinaryService();
 
   late final TextEditingController _nameController;
   late final TextEditingController _brandController;
@@ -37,6 +42,10 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
   late bool _listedInCatalog;
   bool _isLoading = false;
   String? _errorMessage;
+
+  late String _existingImageUrl;
+  File? _selectedImage;
+  bool _isUploadingImage = false;
 
   final List<String> _styleOptions = [
     'Sport',
@@ -74,6 +83,7 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         TextEditingController(text: _asString(d['waterResistance']));
     _styleCategory = (d['styleCategory'] as String?) ?? 'Sport';
     _listedInCatalog = (d['listedInCatalog'] as bool?) ?? true;
+    _existingImageUrl = (d['imageUrl'] as String?) ?? '';
   }
 
   @override
@@ -92,6 +102,15 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final image = await _cloudinaryService.pickImage(
+      source: ImageSource.gallery,
+    );
+    if (image != null) {
+      setState(() => _selectedImage = image);
+    }
+  }
+
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -101,6 +120,18 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     });
 
     try {
+      // Only touch imageUrl if the merchant picked a new photo — otherwise
+      // leave the existing one exactly as-is in Firestore.
+      String imageUrl = _existingImageUrl;
+      if (_selectedImage != null) {
+        setState(() => _isUploadingImage = true);
+        try {
+          imageUrl = await _cloudinaryService.uploadImage(_selectedImage!);
+        } finally {
+          if (mounted) setState(() => _isUploadingImage = false);
+        }
+      }
+
       await _watchService.updateWatch(widget.watchId, {
         'name': _nameController.text.trim(),
         'brand': _brandController.text.trim(),
@@ -116,6 +147,7 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         'movementType': _movementTypeController.text.trim(),
         'waterResistance': _waterResistanceController.text.trim(),
         'listedInCatalog': _listedInCatalog,
+        'imageUrl': imageUrl,
       });
 
       if (mounted) {
@@ -162,6 +194,78 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _fieldLabel('WATCH PHOTO'),
+              GestureDetector(
+                onTap: _isUploadingImage ? null : _pickImage,
+                child: Container(
+                  height: 160,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.gold.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _isUploadingImage
+                      ? const Center(child: CircularProgressIndicator())
+                      : _selectedImage != null
+                          ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                          : _existingImageUrl.isNotEmpty
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.network(
+                                      _existingImageUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              const Center(
+                                        child: Icon(Icons.watch,
+                                            size: 40,
+                                            color: AppTheme.textSecondary),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      right: 8,
+                                      bottom: 8,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                              alpha: 0.6),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        child: const Text(
+                                          'Tap to change',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.add_a_photo_outlined,
+                                        size: 32,
+                                        color: AppTheme.textSecondary),
+                                    SizedBox(height: 8),
+                                    Text('Tap to add a photo',
+                                        style: TextStyle(
+                                            color: AppTheme.textSecondary)),
+                                  ],
+                                ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
               _fieldLabel('WATCH NAME *'),
               TextFormField(
                 controller: _nameController,

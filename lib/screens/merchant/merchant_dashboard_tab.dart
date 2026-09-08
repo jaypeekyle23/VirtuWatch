@@ -347,6 +347,7 @@ class MerchantDashboardTab extends StatelessWidget {
     final listed = data['listedInCatalog'] as bool? ?? false;
     final caseDiameter = data['caseDiameterMm'];
     final bandWidth = data['bandWidthMm'];
+    final imageUrl = data['imageUrl'] as String? ?? '';
 
     return InkWell(
       onTap: () {
@@ -372,7 +373,26 @@ class MerchantDashboardTab extends StatelessWidget {
                 color: AppTheme.background,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.watch, color: AppTheme.gold, size: 22),
+              clipBehavior: Clip.antiAlias,
+              child: imageUrl.isNotEmpty
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.watch,
+                              color: AppTheme.gold, size: 22),
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                          child: SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      },
+                    )
+                  : const Icon(Icons.watch, color: AppTheme.gold, size: 22),
             ),
             const SizedBox(width: 12),
             Expanded(
