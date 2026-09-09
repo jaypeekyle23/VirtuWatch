@@ -194,6 +194,79 @@ class CustomerHomeTab extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
+              Builder(
+                builder: (context) {
+                  final recentIds = (userSnapshot.data
+                              ?.data()?['recentlyViewedWatches'] as List?)
+                          ?.cast<String>() ??
+                      [];
+                  if (recentIds.isEmpty) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Recently Viewed',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        // whereIn tops out at 30 values, well above the 10
+                        // entries recordRecentlyViewed ever stores.
+                        future: FirebaseFirestore.instance
+                            .collection('watches')
+                            .where(FieldPath.documentId, whereIn: recentIds)
+                            .get(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return const SizedBox(
+                              height: 180,
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+                          // Firestore's whereIn doesn't preserve the order
+                          // of the IDs given, so re-sort by recentIds
+                          // (most-recently-viewed first) here on the client.
+                          final byId = {
+                            for (final doc in snapshot.data!.docs)
+                              doc.id: doc,
+                          };
+                          final ordered = recentIds
+                              .where((id) => byId.containsKey(id))
+                              .map((id) => byId[id]!)
+                              .toList();
+                          if (ordered.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return SizedBox(
+                            height: 180,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: ordered.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(width: 12),
+                              itemBuilder: (context, index) {
+                                final doc = ordered[index];
+                                return _HomeWatchCard(
+                                  watchId: doc.id,
+                                  data: doc.data(),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                },
+              ),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

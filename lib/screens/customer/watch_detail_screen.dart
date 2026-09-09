@@ -5,7 +5,7 @@ import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import 'ar_try_on_screen.dart';
 
-class WatchDetailScreen extends StatelessWidget {
+class WatchDetailScreen extends StatefulWidget {
   final String watchId;
   final Map<String, dynamic> data;
 
@@ -15,11 +15,27 @@ class WatchDetailScreen extends StatelessWidget {
     required this.data,
   });
 
+  @override
+  State<WatchDetailScreen> createState() => _WatchDetailScreenState();
+}
+
+class _WatchDetailScreenState extends State<WatchDetailScreen> {
+  final _userService = UserService();
+
   // VirtuWatch doesn't process purchases in-app — Urbane Time handles
   // inquiries and sales themselves, so every watch routes here regardless
   // of which merchant listed it.
   static final Uri _urbaneTimeFacebookUrl =
       Uri.parse('https://www.facebook.com/urbanetime');
+
+  @override
+  void initState() {
+    super.initState();
+    // Fire-and-forget: recording a view is a nice-to-have for the
+    // "Recently Viewed" section and should never block or interrupt
+    // someone looking at a watch's details, so failures are swallowed.
+    _userService.recordRecentlyViewed(widget.watchId).catchError((_) {});
+  }
 
   Future<void> _inquireViaFacebook(BuildContext context) async {
     try {
@@ -47,6 +63,8 @@ class WatchDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final watchId = widget.watchId;
+    final data = widget.data;
     final name = data['name'] as String? ?? 'Unnamed Watch';
     final brand = data['brand'] as String? ?? '';
     final price = data['price'];
@@ -60,14 +78,13 @@ class WatchDetailScreen extends StatelessWidget {
     final bandMaterial = data['bandMaterial'] as String? ?? '';
     final caseMaterial = data['caseMaterial'] as String? ?? '';
     final imageUrl = data['imageUrl'] as String? ?? '';
-    final userService = UserService();
 
     return Scaffold(
       appBar: AppBar(
         title: Text(name, overflow: TextOverflow.ellipsis),
         actions: [
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: userService.currentUserStream(),
+            stream: _userService.currentUserStream(),
             builder: (context, snapshot) {
               final saved = (snapshot.data?.data()?['savedWatches'] as List?)
                       ?.cast<String>() ??
@@ -81,7 +98,7 @@ class WatchDetailScreen extends StatelessWidget {
                 ),
                 onPressed: () async {
                   try {
-                    await userService.toggleSavedWatch(watchId);
+                    await _userService.toggleSavedWatch(watchId);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

@@ -182,9 +182,9 @@ class MerchantDashboardTab extends StatelessWidget {
                       icon: Icons.view_in_ar_outlined,
                       label: 'Upload 3D Model',
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('3D model upload coming soon'),
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const MerchantCatalogTab(),
                           ),
                         );
                       },

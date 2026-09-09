@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import 'edit_profile_screen.dart';
 import 'outfit_scan_screen.dart';
 
 class RecommendedForYouScreen extends StatefulWidget {
@@ -65,6 +68,50 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     },
   ];
 
+  bool _isLoadingPreferences = false;
+
+  Future<void> _openUpdatePreferences() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _isLoadingPreferences = true);
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final data = doc.data() ?? {};
+
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => EditProfileScreen(
+            currentUsername: data['username'] as String? ?? 'User',
+            currentEmail: data['email'] as String? ?? '',
+            currentStylePreferences:
+                (data['stylePreferences'] as List?)?.cast<String>() ?? [],
+            currentPreferredBrands:
+                (data['preferredBrands'] as List?)?.cast<String>() ?? [],
+            currentBudgetMin: (data['budgetMin'] as num?)?.toDouble() ?? 5000,
+            currentBudgetMax:
+                (data['budgetMax'] as num?)?.toDouble() ?? 50000,
+            currentPhotoUrl: data['photoUrl'] as String? ?? '',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load your preferences. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingPreferences = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,18 +159,24 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Update Preferences coming soon')),
-                      );
-                    },
+                    onPressed:
+                        _isLoadingPreferences ? null : _openUpdatePreferences,
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(0, 0),
                     ),
-                    child: const Text('Update Preferences →',
-                        style: TextStyle(color: AppTheme.gold, fontSize: 12)),
+                    child: _isLoadingPreferences
+                        ? const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.gold,
+                            ),
+                          )
+                        : const Text('Update Preferences →',
+                            style:
+                                TextStyle(color: AppTheme.gold, fontSize: 12)),
                   ),
                 ],
               ),

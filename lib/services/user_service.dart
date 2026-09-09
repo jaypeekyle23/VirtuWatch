@@ -85,6 +85,27 @@ class UserService {
     }
   }
 
+  /// Records that the current user viewed a watch, for the "Recently
+  /// Viewed" section on their home tab. Moves the watch to the front if
+  /// it's already in the list (most recent first) and caps the list at
+  /// [maxEntries] so it doesn't grow unbounded over time.
+  Future<void> recordRecentlyViewed(String watchId, {int maxEntries = 10}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final docRef = _users.doc(uid);
+    final doc = await docRef.get();
+    final current =
+        (doc.data()?['recentlyViewedWatches'] as List?)?.cast<String>() ?? [];
+
+    final updated = [
+      watchId,
+      ...current.where((id) => id != watchId),
+    ].take(maxEntries).toList();
+
+    await docRef.update({'recentlyViewedWatches': updated});
+  }
+
   /// Stream of the current user's own profile doc, used to reactively
   /// check which watches are saved (e.g. to toggle a heart icon).
   Stream<DocumentSnapshot<Map<String, dynamic>>> currentUserStream() {
