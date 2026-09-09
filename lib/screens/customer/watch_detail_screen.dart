@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import 'ar_try_on_screen.dart';
@@ -13,6 +14,36 @@ class WatchDetailScreen extends StatelessWidget {
     required this.watchId,
     required this.data,
   });
+
+  // VirtuWatch doesn't process purchases in-app — Urbane Time handles
+  // inquiries and sales themselves, so every watch routes here regardless
+  // of which merchant listed it.
+  static final Uri _urbaneTimeFacebookUrl =
+      Uri.parse('https://www.facebook.com/urbanetime');
+
+  Future<void> _inquireViaFacebook(BuildContext context) async {
+    try {
+      final launched = await launchUrl(
+        _urbaneTimeFacebookUrl,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open Facebook. Please try again.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open Facebook. Please try again.'),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -202,6 +233,21 @@ class WatchDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.gold,
+                        foregroundColor: const Color(0xFF0E1A2B),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () => _inquireViaFacebook(context),
+                      icon: const Icon(Icons.facebook),
+                      label: const Text('Inquire via Urbane Time'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
                   SizedBox(
                     width: double.infinity,

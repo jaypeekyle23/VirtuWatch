@@ -41,5 +41,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Required so url_launcher can find a browser (or the Facebook
+             app) to open https links, e.g. the "Inquire via Urbane Time"
+             button on the watch detail screen. Without this, Android 11+
+             may fail to resolve any app for the intent. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>
