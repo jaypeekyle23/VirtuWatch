@@ -376,6 +376,20 @@ class AuthService {
     });
   }
 
+  /// Persists the results of an Outfit Color Scan on the user's own
+  /// profile, so the future recommendations engine can match watches
+  /// against these colors. [colors] is a list of maps shaped like
+  /// {'hex': '#RRGGBB', 'percentage': 42.0}.
+  Future<void> saveOutfitColors(List<Map<String, dynamic>> colors) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw 'You must be logged in.';
+
+    await _firestore.collection('users').doc(uid).update({
+      'outfitColors': colors,
+      'lastOutfitScanAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   String _mapAuthError(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use':
