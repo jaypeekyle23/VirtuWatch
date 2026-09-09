@@ -43,6 +43,10 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   File? _selectedImage;
   bool _isUploadingImage = false;
 
+  File? _selectedModelFile;
+  bool _isUploadingModel = false;
+  String? _modelErrorMessage;
+
   final List<String> _styleOptions = [
     'Sport',
     'Classic',
@@ -77,6 +81,20 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
     }
   }
 
+  Future<void> _pickModelFile() async {
+    try {
+      final file = await _cloudinaryService.pickModelFile();
+      if (file != null) {
+        setState(() {
+          _selectedModelFile = file;
+          _modelErrorMessage = null;
+        });
+      }
+    } catch (e) {
+      setState(() => _modelErrorMessage = e.toString());
+    }
+  }
+
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -103,6 +121,16 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
         }
       }
 
+      String modelUrl = '';
+      if (_selectedModelFile != null) {
+        setState(() => _isUploadingModel = true);
+        try {
+          modelUrl = await _cloudinaryService.uploadModel(_selectedModelFile!);
+        } finally {
+          if (mounted) setState(() => _isUploadingModel = false);
+        }
+      }
+
       await _watchService.addWatch(
         {
           'name': _nameController.text.trim(),
@@ -119,8 +147,8 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
           'movementType': _movementTypeController.text.trim(),
           'waterResistance': _waterResistanceController.text.trim(),
           'listedInCatalog': _listedInCatalog,
-          'has3DModel': false,
-          'modelUrl': '',
+          'has3DModel': modelUrl.isNotEmpty,
+          'modelUrl': modelUrl,
           'imageUrl': imageUrl,
         },
         merchantIdOverride: widget.isAdminMode ? _selectedMerchantId : null,
@@ -477,28 +505,96 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
               ),
               const SizedBox(height: 16),
 
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: const [
-                    Icon(Icons.threed_rotation, color: AppTheme.textSecondary),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '3D model upload coming soon (requires Cloud Storage)',
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 13,
+              GestureDetector(
+                onTap: _isUploadingModel ? null : _pickModelFile,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _selectedModelFile != null
+                          ? AppTheme.gold.withValues(alpha: 0.4)
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      if (_isUploadingModel)
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        Icon(
+                          _selectedModelFile != null
+                              ? Icons.check_circle
+                              : Icons.threed_rotation,
+                          color: _selectedModelFile != null
+                              ? AppTheme.gold
+                              : AppTheme.textSecondary,
+                        ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isUploadingModel
+                                  ? 'Uploading model...'
+                                  : _selectedModelFile != null
+                                      ? _selectedModelFile!.path
+                                          .split(Platform.pathSeparator)
+                                          .last
+                                      : '3D Model (optional)',
+                              style: TextStyle(
+                                color: _selectedModelFile != null
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.textSecondary,
+                                fontSize: 13,
+                                fontWeight: _selectedModelFile != null
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (_selectedModelFile == null &&
+                                !_isUploadingModel)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2),
+                                child: Text(
+                                  'Tap to attach a .glb or .gltf file for AR try-on',
+                                  style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      if (_selectedModelFile != null && !_isUploadingModel)
+                        IconButton(
+                          icon: const Icon(Icons.close,
+                              color: AppTheme.textSecondary, size: 18),
+                          onPressed: () =>
+                              setState(() => _selectedModelFile = null),
+                        ),
+                    ],
+                  ),
                 ),
               ),
+              if (_modelErrorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _modelErrorMessage!,
+                    style: const TextStyle(
+                        color: Colors.redAccent, fontSize: 12),
+                  ),
+                ),
               const SizedBox(height: 24),
 
               if (_errorMessage != null)

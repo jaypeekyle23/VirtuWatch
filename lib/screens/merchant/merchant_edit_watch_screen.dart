@@ -47,6 +47,11 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
   File? _selectedImage;
   bool _isUploadingImage = false;
 
+  late String _existingModelUrl;
+  File? _selectedModelFile;
+  bool _isUploadingModel = false;
+  String? _modelErrorMessage;
+
   final List<String> _styleOptions = [
     'Sport',
     'Classic',
@@ -84,6 +89,7 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     _styleCategory = (d['styleCategory'] as String?) ?? 'Sport';
     _listedInCatalog = (d['listedInCatalog'] as bool?) ?? true;
     _existingImageUrl = (d['imageUrl'] as String?) ?? '';
+    _existingModelUrl = (d['modelUrl'] as String?) ?? '';
   }
 
   @override
@@ -111,6 +117,20 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     }
   }
 
+  Future<void> _pickModelFile() async {
+    try {
+      final file = await _cloudinaryService.pickModelFile();
+      if (file != null) {
+        setState(() {
+          _selectedModelFile = file;
+          _modelErrorMessage = null;
+        });
+      }
+    } catch (e) {
+      setState(() => _modelErrorMessage = e.toString());
+    }
+  }
+
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -132,6 +152,18 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         }
       }
 
+      // Same pattern for the 3D model — only re-upload if a new file was
+      // picked, otherwise keep whatever's already attached.
+      String modelUrl = _existingModelUrl;
+      if (_selectedModelFile != null) {
+        setState(() => _isUploadingModel = true);
+        try {
+          modelUrl = await _cloudinaryService.uploadModel(_selectedModelFile!);
+        } finally {
+          if (mounted) setState(() => _isUploadingModel = false);
+        }
+      }
+
       await _watchService.updateWatch(widget.watchId, {
         'name': _nameController.text.trim(),
         'brand': _brandController.text.trim(),
@@ -148,6 +180,8 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         'waterResistance': _waterResistanceController.text.trim(),
         'listedInCatalog': _listedInCatalog,
         'imageUrl': imageUrl,
+        'modelUrl': modelUrl,
+        'has3DModel': modelUrl.isNotEmpty,
       });
 
       if (mounted) {
@@ -264,6 +298,108 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
                                 ),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              _fieldLabel('3D MODEL'),
+              GestureDetector(
+                onTap: _isUploadingModel ? null : _pickModelFile,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (_selectedModelFile != null ||
+                              _existingModelUrl.isNotEmpty)
+                          ? AppTheme.gold.withValues(alpha: 0.4)
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      if (_isUploadingModel)
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        Icon(
+                          (_selectedModelFile != null ||
+                                  _existingModelUrl.isNotEmpty)
+                              ? Icons.check_circle
+                              : Icons.threed_rotation,
+                          color: (_selectedModelFile != null ||
+                                  _existingModelUrl.isNotEmpty)
+                              ? AppTheme.gold
+                              : AppTheme.textSecondary,
+                        ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isUploadingModel
+                                  ? 'Uploading model...'
+                                  : _selectedModelFile != null
+                                      ? _selectedModelFile!.path
+                                          .split(Platform.pathSeparator)
+                                          .last
+                                      : _existingModelUrl.isNotEmpty
+                                          ? '3D model attached'
+                                          : '3D Model (optional)',
+                              style: TextStyle(
+                                color: (_selectedModelFile != null ||
+                                        _existingModelUrl.isNotEmpty)
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.textSecondary,
+                                fontSize: 13,
+                                fontWeight: (_selectedModelFile != null ||
+                                        _existingModelUrl.isNotEmpty)
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (!_isUploadingModel)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  _existingModelUrl.isNotEmpty &&
+                                          _selectedModelFile == null
+                                      ? 'Tap to replace with a new .glb/.gltf'
+                                      : 'Tap to attach a .glb or .gltf file for AR try-on',
+                                  style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (_selectedModelFile != null && !_isUploadingModel)
+                        IconButton(
+                          icon: const Icon(Icons.close,
+                              color: AppTheme.textSecondary, size: 18),
+                          onPressed: () =>
+                              setState(() => _selectedModelFile = null),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_modelErrorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _modelErrorMessage!,
+                    style: const TextStyle(
+                        color: Colors.redAccent, fontSize: 12),
+                  ),
+                ),
               const SizedBox(height: 16),
 
               _fieldLabel('WATCH NAME *'),

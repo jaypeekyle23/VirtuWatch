@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -53,6 +54,63 @@ class CloudinaryService {
     } catch (e) {
       if (e is String) rethrow;
       throw 'Could not upload image. Check your connection and try again.';
+    }
+  }
+
+  /// Opens the device's file picker filtered to 3D model formats
+  /// (.glb / .gltf). Returns null if the user cancels without selecting
+  /// anything. Throws a readable error string if the selected file isn't
+  /// actually a .glb/.gltf — the OS picker's extension filter is only a
+  /// hint and isn't strictly enforced on every platform, so this check
+  /// is the real gatekeeper.
+  Future<File?> pickModelFile() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['glb', 'gltf'],
+    );
+    if (file == null || file.path == null) return null;
+
+    final extension = file.name.split('.').last.toLowerCase();
+    if (extension != 'glb' && extension != 'gltf') {
+      throw 'Please select a .glb or .gltf 3D model file (you picked a .$extension file).';
+    }
+
+    return File(file.path!);
+  }
+
+  /// Uploads a 3D model file (.glb / .gltf) to Cloudinary and returns the
+  /// hosted URL. Models are uploaded as a "raw" resource type since
+  /// Cloudinary's image/video pipelines don't apply here.
+  ///
+  /// Note: the free Cloudinary plan caps raw file uploads at 10MB — keep
+  /// exported .glb models reasonably compressed (e.g. via Blender's glTF
+  /// export with Draco compression) to stay under that comfortably.
+  Future<String> uploadModel(File modelFile) async {
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$_cloudName/raw/upload',
+    );
+
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = _uploadPreset
+      ..files.add(await http.MultipartFile.fromPath('file', modelFile.path));
+
+    try {
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode != 200) {
+        throw 'Model upload failed (${response.statusCode}). Please try again.';
+      }
+
+      final data = jsonDecode(responseBody) as Map<String, dynamic>;
+      final url = data['secure_url'] as String?;
+      if (url == null) {
+        throw 'Upload succeeded but no URL was returned.';
+      }
+      return url;
+    } catch (e) {
+      if (e is String) rethrow;
+      throw 'Could not upload 3D model. Check your connection and try again.';
     }
   }
 }
