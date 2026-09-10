@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
 import 'outfit_scan_screen.dart';
+import 'watch_detail_screen.dart';
 
 class RecommendedForYouScreen extends StatefulWidget {
   const RecommendedForYouScreen({super.key});
@@ -15,60 +17,66 @@ class RecommendedForYouScreen extends StatefulWidget {
 
 class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
   String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'Best Fit', 'Trending', 'Your Style'];
+  final List<String> _filters = ['All', 'Best Fit', 'Newest', 'Your Style'];
 
-  final List<Map<String, dynamic>> _mockRecommendations = const [
-    {
-      'brand': 'SEIKO',
-      'name': 'Seiko Prospex SPB143',
-      'match': 94,
-      'price': 'PHP 15,500',
-      'fitNote': 'Fits your 62.3mm wrist',
-      'tag': '42mm · Sport',
-    },
-    {
-      'brand': 'ORIENT',
-      'name': 'Orient Bambino V2',
-      'match': 88,
-      'price': 'PHP 8,200',
-      'fitNote': 'Matches outfit tones',
-      'tag': '40.5mm · Classic',
-    },
-    {
-      'brand': 'TISSOT',
-      'name': 'Tissot PRX Powermatic',
-      'match': 82,
-      'price': 'PHP 29,500',
-      'fitNote': 'Fits your 62.3mm wrist',
-      'tag': '39.5mm · Luxury',
-    },
-    {
-      'brand': 'CASIO',
-      'name': 'Casio G-Shock GA-2100',
-      'match': 77,
-      'price': 'PHP 6,800',
-      'fitNote': 'Matches outfit tones',
-      'tag': '45.4mm · Sport',
-    },
-    {
-      'brand': 'CITIZEN',
-      'name': 'Citizen Eco-Drive BM8550',
-      'match': 91,
-      'price': 'PHP 11,500',
-      'fitNote': 'Fits your 62.3mm wrist',
-      'tag': '40mm · Classic',
-    },
-    {
-      'brand': 'SEIKO',
-      'name': 'Seiko 5 Sports SRPD51',
-      'match': 85,
-      'price': 'PHP 9,500',
-      'fitNote': 'Matches outfit tones',
-      'tag': '42.5mm · Casual',
-    },
-  ];
+  final _recommendationService = RecommendationService();
+  RecommendationResult? _result;
+  bool _isLoadingRecommendations = true;
+  String? _loadError;
 
   bool _isLoadingPreferences = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecommendations();
+  }
+
+  Future<void> _loadRecommendations() async {
+    setState(() {
+      _isLoadingRecommendations = true;
+      _loadError = null;
+    });
+    try {
+      final result = await _recommendationService.getRecommendations();
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _isLoadingRecommendations = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = 'Could not load recommendations. Please try again.';
+        _isLoadingRecommendations = false;
+      });
+    }
+  }
+
+  List<WatchRecommendation> _filtered(List<WatchRecommendation> all) {
+    switch (_selectedFilter) {
+      case 'Best Fit':
+        final withFit = all.where((r) => r.fitScore != null).toList()
+          ..sort((a, b) => b.fitScore!.compareTo(a.fitScore!));
+        return withFit;
+      case 'Newest':
+        final sorted = [...all];
+        sorted.sort((a, b) {
+          final aTime = a.data['createdAt'];
+          final bTime = b.data['createdAt'];
+          if (aTime is Timestamp && bTime is Timestamp) {
+            return bTime.compareTo(aTime);
+          }
+          return 0;
+        });
+        return sorted;
+      case 'Your Style':
+        return all.where((r) => r.styleScore == 1.0).toList();
+      case 'All':
+      default:
+        return all;
+    }
+  }
 
   Future<void> _openUpdatePreferences() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -99,6 +107,8 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
           ),
         ),
       );
+      // Preferences may have changed — re-score the catalog against them.
+      _loadRecommendations();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,180 +124,241 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final wristWidthMm = _result?.wristWidthMm;
+    final stylePreferences = _result?.stylePreferences ?? [];
+    final filtered = _filtered(_result?.recommendations ?? []);
+
     return Scaffold(
       appBar: AppBar(title: const Text('For You')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'BASED ON',
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const Icon(Icons.info_outline,
-                          color: AppTheme.textSecondary, size: 16),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _basisChip('WRIST: 62.3MM', AppTheme.gold),
-                      _basisChip('CLASSIC', Colors.blueAccent),
-                      _basisChip('LUXURY', Colors.purpleAccent),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextButton(
-                    onPressed:
-                        _isLoadingPreferences ? null : _openUpdatePreferences,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                    ),
-                    child: _isLoadingPreferences
-                        ? const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.gold,
-                            ),
-                          )
-                        : const Text('Update Preferences →',
-                            style:
-                                TextStyle(color: AppTheme.gold, fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const OutfitScanScreen(),
-                  ),
-                );
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
+      body: RefreshIndicator(
+        onRefresh: _loadRecommendations,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppTheme.gold.withValues(alpha: 0.1),
+                  color: AppTheme.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.photo_camera_outlined, color: AppTheme.gold),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Scan Today\'s Outfit',
-                            style: TextStyle(
-                              color: AppTheme.gold,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'BASED ON',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
                           ),
-                          const Text(
-                            'Get color-matched recommendations via AI',
-                            style: TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 11),
-                          ),
-                        ],
-                      ),
+                        ),
+                        const Icon(Icons.info_outline,
+                            color: AppTheme.textSecondary, size: 16),
+                      ],
                     ),
-                    const Icon(Icons.chevron_right, color: AppTheme.gold),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _basisChip(
+                          wristWidthMm != null
+                              ? 'WRIST: ${wristWidthMm.toStringAsFixed(1)}MM'
+                              : 'WRIST: NOT SET',
+                          AppTheme.gold,
+                        ),
+                        if (stylePreferences.isEmpty)
+                          _basisChip('NO STYLE PREFS SET', Colors.blueAccent)
+                        else
+                          for (final style in stylePreferences)
+                            _basisChip(style.toUpperCase(), Colors.blueAccent),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed:
+                          _isLoadingPreferences ? null : _openUpdatePreferences,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                      ),
+                      child: _isLoadingPreferences
+                          ? const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppTheme.gold,
+                              ),
+                            )
+                          : const Text('Update Preferences →',
+                              style: TextStyle(
+                                  color: AppTheme.gold, fontSize: 12)),
+                    ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-            SizedBox(
-              height: 36,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _filters.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final filter = _filters[index];
-                  final isSelected = _selectedFilter == filter;
-                  return ChoiceChip(
-                    label: Text(filter),
-                    selected: isSelected,
-                    onSelected: (_) => setState(() => _selectedFilter = filter),
-                    backgroundColor: AppTheme.surface,
-                    selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                      fontSize: 13,
-                    ),
-                    side: BorderSide(
-                      color: isSelected ? AppTheme.gold : Colors.transparent,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+              InkWell(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const OutfitScanScreen(),
                     ),
                   );
                 },
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            ..._mockRecommendations.map((watch) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _recommendationTile(watch),
-                )),
-
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: const [
-                  Icon(Icons.info_outline, color: AppTheme.textSecondary, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'These are placeholder recommendations. Real AI-based '
-                      'matching (wrist size + outfit color) is coming soon.',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                    ),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.gold.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      const Icon(Icons.photo_camera_outlined,
+                          color: AppTheme.gold),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Scan Today\'s Outfit',
+                              style: TextStyle(
+                                color: AppTheme.gold,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const Text(
+                              'Get color-matched recommendations via AI',
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right, color: AppTheme.gold),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+
+              SizedBox(
+                height: 36,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _filters.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final filter = _filters[index];
+                    final isSelected = _selectedFilter == filter;
+                    return ChoiceChip(
+                      label: Text(filter),
+                      selected: isSelected,
+                      onSelected: (_) =>
+                          setState(() => _selectedFilter = filter),
+                      backgroundColor: AppTheme.surface,
+                      selectedColor: AppTheme.gold.withValues(alpha: 0.2),
+                      labelStyle: TextStyle(
+                        color:
+                            isSelected ? AppTheme.gold : AppTheme.textSecondary,
+                        fontSize: 13,
+                      ),
+                      side: BorderSide(
+                        color: isSelected ? AppTheme.gold : Colors.transparent,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              if (_isLoadingRecommendations)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_loadError != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Column(
+                    children: [
+                      Text(_loadError!,
+                          style: const TextStyle(color: Colors.redAccent),
+                          textAlign: TextAlign.center),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _loadRecommendations,
+                        child: const Text('Retry',
+                            style: TextStyle(color: AppTheme.gold)),
+                      ),
+                    ],
+                  ),
+                )
+              else if (filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text(
+                    _selectedFilter == 'Your Style'
+                        ? 'No watches match your style preferences yet.'
+                        : 'No watches in the catalog yet.',
+                    style: const TextStyle(color: AppTheme.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else
+                ...filtered.map((rec) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _recommendationTile(
+                        rec,
+                        budgetMin: _result?.budgetMin ?? 5000,
+                        budgetMax: _result?.budgetMax ?? 50000,
+                      ),
+                    )),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: AppTheme.textSecondary, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Recommendations are ranked by wrist fit and style '
+                        'match. Outfit color matching is coming soon.',
+                        style:
+                            TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -307,90 +378,167 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     );
   }
 
-  Widget _recommendationTile(Map<String, dynamic> watch) {
-    final match = watch['match'] as int;
+  Widget _recommendationTile(
+    WatchRecommendation rec, {
+    required double budgetMin,
+    required double budgetMax,
+  }) {
+    final match = rec.matchPercent;
     final matchColor = match >= 90
         ? Colors.greenAccent
         : match >= 80
             ? AppTheme.gold
             : Colors.orangeAccent;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppTheme.background,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.watch, color: AppTheme.gold),
+    final data = rec.data;
+    final brand = (data['brand'] as String? ?? '').toUpperCase();
+    final name = data['name'] as String? ?? 'Unnamed Watch';
+    final price = (data['price'] as num?)?.toDouble();
+    final priceLabel = price != null ? 'PHP $price' : '';
+    final caseDiameter = data['caseDiameterMm'];
+    final styleCategory = data['styleCategory'] as String? ?? '';
+    final imageUrl = data['imageUrl'] as String? ?? '';
+    final tag = [
+      if (caseDiameter != null) '${caseDiameter}mm',
+      if (styleCategory.isNotEmpty) styleCategory,
+    ].join(' · ');
+
+    String? budgetLabel;
+    Color budgetColor = AppTheme.textSecondary;
+    if (price != null) {
+      if (price > budgetMax) {
+        budgetLabel = 'PHP ${(price - budgetMax).toStringAsFixed(0)} over budget';
+        budgetColor = Colors.orangeAccent;
+      } else if (price < budgetMin) {
+        budgetLabel = 'Below your budget range';
+        budgetColor = AppTheme.textSecondary;
+      } else {
+        budgetLabel = 'Within budget';
+        budgetColor = Colors.greenAccent;
+      }
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                WatchDetailScreen(watchId: rec.watchId, data: data),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  watch['brand'] as String,
-                  style: TextStyle(
-                    color: AppTheme.gold,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  watch['name'] as String,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  '${watch['fitNote']} · ${watch['tag']}',
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 10,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  watch['price'] as String,
-                  style: const TextStyle(
-                    color: AppTheme.gold,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: matchColor.withValues(alpha: 0.15),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
               borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '$match%',
-              style: TextStyle(
-                color: matchColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+              child: Container(
+                width: 48,
+                height: 48,
+                color: AppTheme.background,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.watch, color: AppTheme.gold),
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                      )
+                    : const Icon(Icons.watch, color: AppTheme.gold),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (brand.isNotEmpty)
+                    Text(
+                      brand,
+                      style: TextStyle(
+                        color: AppTheme.gold,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    tag.isNotEmpty ? '${rec.fitNote} · $tag' : rec.fitNote,
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 10,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (priceLabel.isNotEmpty)
+                    Row(
+                      children: [
+                        Text(
+                          priceLabel,
+                          style: const TextStyle(
+                            color: AppTheme.gold,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (budgetLabel != null) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            '· $budgetLabel',
+                            style: TextStyle(
+                              color: budgetColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: matchColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$match%',
+                style: TextStyle(
+                  color: matchColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
