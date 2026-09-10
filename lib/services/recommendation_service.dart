@@ -1,5 +1,8 @@
+import 'dart:math' show sqrt;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../constants/watch_colors.dart';
 
 /// One watch scored against the current user's profile.
 class WatchRecommendation {
@@ -13,21 +16,31 @@ class WatchRecommendation {
   /// 0.0–1.0, or null if the user hasn't set any style preferences.
   final double? styleScore;
 
-  /// 0.0–1.0. Combines whichever of [fitScore]/[styleScore] are available,
-  /// re-weighted so missing signals don't drag the score down unfairly.
-  /// Color matching isn't in this combination yet — see
-  /// RecommendationService's class doc for why.
+  /// 0.0–1.0, or null if the user hasn't scanned an outfit yet, or the
+  /// watch has no colorHex on file, so color can't be evaluated.
+  final double? colorScore;
+
+  /// 0.0–1.0. Combines whichever of [fitScore]/[styleScore]/[colorScore]
+  /// are available, re-weighted so missing signals don't drag the score
+  /// down unfairly.
   final double combinedScore;
 
   final String fitNote;
+
+  /// Set only when the color match is notably good or notably poor —
+  /// left null for middling matches so the UI isn't cluttered with a
+  /// note for every watch.
+  final String? colorNote;
 
   const WatchRecommendation({
     required this.watchId,
     required this.data,
     required this.fitScore,
     required this.styleScore,
+    required this.colorScore,
     required this.combinedScore,
     required this.fitNote,
+    required this.colorNote,
   });
 
   int get matchPercent => (combinedScore * 100).round();
@@ -40,6 +53,7 @@ class RecommendationResult {
   final List<WatchRecommendation> recommendations;
   final double? wristWidthMm;
   final List<String> stylePreferences;
+  final List<Map<String, dynamic>> outfitColors;
 
   /// The user's saved budget range. Not part of the match score — it's a
   /// hard affordability check, not a fit/style preference — but the UI
@@ -51,6 +65,7 @@ class RecommendationResult {
     required this.recommendations,
     required this.wristWidthMm,
     required this.stylePreferences,
+    required this.outfitColors,
     required this.budgetMin,
     required this.budgetMax,
   });
@@ -58,29 +73,39 @@ class RecommendationResult {
 
 /// Ranks the watch catalog against a user's profile.
 ///
-/// Per the capstone documentation (FR-09), the combined score should
-/// blend fit, color, and style matching. Color matching isn't implemented
-/// yet — the watch catalog currently has no color field to compare a
-/// user's scanned outfit colors against (only style, material, and
-/// dimensions). Until a watch color field exists, this engine combines
-/// only fit and style, re-weighted between the two so the ranking still
-/// makes sense with the signals actually available. When a color field
-/// is added, color matching should slot in at roughly 0.3 of the total
-/// weight (fit 0.5, color 0.3, style 0.2), following the same
-/// weighted-average pattern used below.
+/// Per the capstone documentation (FR-09), the combined score blends
+/// fit, color, and style matching:
+///  - Fit compares the user's wrist width against each watch's
+///    lug-to-lug measurement.
+///  - Color compares the user's scanned outfit colors (from
+///    OutfitScanScreen) against each watch's primary color (from
+///    watchColorPalette, set by the merchant on the add/edit watch
+///    forms) using Euclidean RGB distance.
+///  - Style checks whether a watch's styleCategory is among the user's
+///    saved style preferences.
+/// Any signal the user or watch is missing data for is left out of that
+/// watch's score entirely (rather than counted as zero) and the
+/// remaining weights are re-normalized, so an incomplete profile doesn't
+/// unfairly tank every recommendation.
 class RecommendationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Base weights, out of 1.0, between the two signals currently
-  // available. Fit is weighted highest since it's the one hard physical
-  // constraint (an ill-fitting watch is a worse recommendation than an
-  // off-style one); style is a softer preference.
+  // Base weights, out of 1.0, when all three signals are available. Fit
+  // is weighted highest since it's the one hard physical constraint (an
+  // ill-fitting watch is a worse recommendation than an off-style or
+  // off-color one); color and style are softer preferences.
   static const double _fitWeight = 0.5;
+  static const double _colorWeight = 0.3;
   static const double _styleWeight = 0.2;
 
   // How many mm of lug-to-lug vs wrist-width difference is treated as
   // the edge of "still fits reasonably" before the fit score hits zero.
   static const double _fitToleranceMm = 15;
+
+  // Euclidean distance between pure black and pure white in RGB space —
+  // the maximum possible distance between two colors, used to normalize
+  // color distance into a 0.0–1.0 similarity score.
+  static const double _maxRgbDistance = 441.67; // sqrt(255^2 * 3)
 
   Future<RecommendationResult> getRecommendations() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -89,6 +114,7 @@ class RecommendationService {
         recommendations: [],
         wristWidthMm: null,
         stylePreferences: [],
+        outfitColors: [],
         budgetMin: 5000,
         budgetMax: 50000,
       );
@@ -99,6 +125,10 @@ class RecommendationService {
     final wristWidthMm = (userData['wristWidthMm'] as num?)?.toDouble();
     final stylePreferences =
         (userData['stylePreferences'] as List?)?.cast<String>() ?? [];
+    final outfitColors = (userData['outfitColors'] as List?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        [];
     final budgetMin = (userData['budgetMin'] as num?)?.toDouble() ?? 5000;
     final budgetMax = (userData['budgetMax'] as num?)?.toDouble() ?? 50000;
 
@@ -113,6 +143,7 @@ class RecommendationService {
         data: doc.data(),
         wristWidthMm: wristWidthMm,
         stylePreferences: stylePreferences,
+        outfitColors: outfitColors,
       );
     }).toList()
       ..sort((a, b) => b.combinedScore.compareTo(a.combinedScore));
@@ -121,6 +152,7 @@ class RecommendationService {
       recommendations: scored,
       wristWidthMm: wristWidthMm,
       stylePreferences: stylePreferences,
+      outfitColors: outfitColors,
       budgetMin: budgetMin,
       budgetMax: budgetMax,
     );
@@ -131,9 +163,11 @@ class RecommendationService {
     required Map<String, dynamic> data,
     required double? wristWidthMm,
     required List<String> stylePreferences,
+    required List<Map<String, dynamic>> outfitColors,
   }) {
     final lugToLugMm = (data['lugToLugMm'] as num?)?.toDouble();
     final styleCategory = data['styleCategory'] as String?;
+    final colorHex = data['colorHex'] as String?;
 
     double? fitScore;
     String fitNote;
@@ -161,15 +195,50 @@ class RecommendationService {
           : 0.0;
     }
 
+    double? colorScore;
+    String? colorNote;
+    if (outfitColors.isNotEmpty && colorHex != null) {
+      final (watchR, watchG, watchB) = hexToRgb(colorHex);
+      double weightedSimilarity = 0;
+      double weightTotal = 0;
+      for (final entry in outfitColors) {
+        final hex = entry['hex'] as String?;
+        final percentage = (entry['percentage'] as num?)?.toDouble();
+        if (hex == null || percentage == null || percentage <= 0) continue;
+
+        final (r, g, b) = hexToRgb(hex);
+        final dr = (watchR - r).toDouble();
+        final dg = (watchG - g).toDouble();
+        final db = (watchB - b).toDouble();
+        final distance = sqrt(dr * dr + dg * dg + db * db);
+        final similarity = (1 - distance / _maxRgbDistance).clamp(0.0, 1.0);
+
+        weightedSimilarity += similarity * percentage;
+        weightTotal += percentage;
+      }
+      if (weightTotal > 0) {
+        colorScore = weightedSimilarity / weightTotal;
+        if (colorScore >= 0.65) {
+          colorNote = 'Matches your outfit colors';
+        } else if (colorScore <= 0.3) {
+          colorNote = "Doesn't match your outfit colors";
+        }
+      }
+    }
+
     // Weighted average over whichever signals are actually available,
     // re-normalized so a missing signal doesn't just get treated as a
-    // zero (which would unfairly tank every score while wrist/style data
-    // is still incomplete for a user).
+    // zero (which would unfairly tank every score while a user's
+    // wrist/style/outfit data is still incomplete).
     double weightedSum = 0;
     double totalWeight = 0;
     if (fitScore != null) {
       weightedSum += fitScore * _fitWeight;
       totalWeight += _fitWeight;
+    }
+    if (colorScore != null) {
+      weightedSum += colorScore * _colorWeight;
+      totalWeight += _colorWeight;
     }
     if (styleScore != null) {
       weightedSum += styleScore * _styleWeight;
@@ -182,8 +251,10 @@ class RecommendationService {
       data: data,
       fitScore: fitScore,
       styleScore: styleScore,
+      colorScore: colorScore,
       combinedScore: combinedScore,
       fitNote: fitNote,
+      colorNote: colorNote,
     );
   }
 }

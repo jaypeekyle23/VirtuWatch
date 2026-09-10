@@ -3,9 +3,12 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../constants/watch_colors.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/color_extraction_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/watch_color_picker.dart';
 
 class MerchantAddWatchScreen extends StatefulWidget {
   final bool isAdminMode;
@@ -21,6 +24,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   final _formKey = GlobalKey<FormState>();
   final _watchService = WatchService();
   final _cloudinaryService = CloudinaryService();
+  final _colorExtractionService = ColorExtractionService();
 
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
@@ -35,6 +39,9 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   final _waterResistanceController = TextEditingController();
 
   String _styleCategory = 'Sport';
+  String _colorHex = watchColorPalette.first.hex;
+  bool _colorManuallySet = false;
+  bool _isSuggestingColor = false;
   bool _listedInCatalog = true;
   bool _isLoading = false;
   String? _errorMessage;
@@ -58,6 +65,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
 
   @override
   void dispose() {
+    _colorExtractionService.dispose();
     _nameController.dispose();
     _brandController.dispose();
     _priceController.dispose();
@@ -78,6 +86,38 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
     );
     if (image != null) {
       setState(() => _selectedImage = image);
+      await _suggestColorFromImage(image);
+    }
+  }
+
+  /// Suggests a primary color by running the same dominant-color
+  /// extraction used for outfit scans on the watch photo, then snapping
+  /// the top result to the nearest palette swatch. Only overwrites the
+  /// selection if the merchant hasn't manually picked a color themselves
+  /// — a photo-based guess should never clobber a deliberate choice.
+  Future<void> _suggestColorFromImage(File image) async {
+    if (_colorManuallySet) return;
+
+    setState(() => _isSuggestingColor = true);
+    try {
+      final colors =
+          await _colorExtractionService.extractDominantColors(image);
+      if (colors.isEmpty || !mounted) return;
+
+      final suggestion = nearestPaletteColor(colors.first.color);
+      setState(() => _colorHex = suggestion.hex);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Suggested color: ${suggestion.name} — tap a swatch below to change it'),
+          ),
+        );
+      }
+    } catch (_) {
+      // Non-fatal — the merchant can still pick a color manually below.
+    } finally {
+      if (mounted) setState(() => _isSuggestingColor = false);
     }
   }
 
@@ -137,6 +177,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
           'brand': _brandController.text.trim(),
           'price': double.parse(_priceController.text.trim()),
           'styleCategory': _styleCategory,
+          'colorHex': _colorHex,
           'caseDiameterMm': double.tryParse(_caseDiameterController.text.trim()),
           'caseThicknessMm':
               double.tryParse(_caseThicknessController.text.trim()),
@@ -329,6 +370,35 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                 onChanged: (value) {
                   setState(() => _styleCategory = value ?? _styleCategory);
                 },
+              ),
+              const SizedBox(height: 16),
+
+              _fieldLabel('PRIMARY COLOR'),
+              if (_isSuggestingColor)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Suggesting a color from the photo...',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              WatchColorPicker(
+                selectedHex: _colorHex,
+                onChanged: (hex) => setState(() {
+                  _colorHex = hex;
+                  _colorManuallySet = true;
+                }),
               ),
               const SizedBox(height: 24),
 

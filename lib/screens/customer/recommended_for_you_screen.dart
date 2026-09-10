@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../constants/watch_colors.dart';
 import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
@@ -126,6 +127,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
   Widget build(BuildContext context) {
     final wristWidthMm = _result?.wristWidthMm;
     final stylePreferences = _result?.stylePreferences ?? [];
+    final outfitColors = _result?.outfitColors ?? [];
     final filtered = _filtered(_result?.recommendations ?? []);
 
     return Scaffold(
@@ -180,6 +182,10 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                         else
                           for (final style in stylePreferences)
                             _basisChip(style.toUpperCase(), Colors.blueAccent),
+                        if (outfitColors.isEmpty)
+                          _basisChip('NO OUTFIT SCANNED', Colors.purpleAccent)
+                        else
+                          _outfitColorChip(outfitColors),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -209,12 +215,15 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
               const SizedBox(height: 12),
 
               InkWell(
-                onTap: () {
-                  Navigator.of(context).push(
+                onTap: () async {
+                  await Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const OutfitScanScreen(),
                     ),
                   );
+                  // A new scan may have changed the user's outfit colors —
+                  // re-score the catalog against them.
+                  _loadRecommendations();
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
@@ -348,8 +357,8 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Recommendations are ranked by wrist fit and style '
-                        'match. Outfit color matching is coming soon.',
+                        'Recommendations are ranked by wrist fit, outfit '
+                        'color, and style match.',
                         style:
                             TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                       ),
@@ -378,6 +387,43 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     );
   }
 
+  Widget _outfitColorChip(List<Map<String, dynamic>> colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.purpleAccent.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'OUTFIT:',
+            style: TextStyle(
+              color: Colors.purpleAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 6),
+          for (final entry in colors.take(4))
+            Padding(
+              padding: const EdgeInsets.only(right: 3),
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: hexToColor(entry['hex'] as String? ?? '#808080'),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24, width: 1),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _recommendationTile(
     WatchRecommendation rec, {
     required double budgetMin,
@@ -401,6 +447,11 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     final tag = [
       if (caseDiameter != null) '${caseDiameter}mm',
       if (styleCategory.isNotEmpty) styleCategory,
+    ].join(' · ');
+    final noteLine = [
+      rec.fitNote,
+      if (rec.colorNote != null) rec.colorNote!,
+      if (tag.isNotEmpty) tag,
     ].join(' · ');
 
     String? budgetLabel;
@@ -487,7 +538,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    tag.isNotEmpty ? '${rec.fitNote} · $tag' : rec.fitNote,
+                    noteLine,
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 10,
