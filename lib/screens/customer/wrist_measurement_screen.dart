@@ -1,4 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 
 class WristMeasurementScreen extends StatefulWidget {
@@ -17,6 +20,111 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
     '1-Peso Coin',
     '5-Peso Coin',
   ];
+
+  final _authService = AuthService();
+  double? _savedWristWidthMm;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedMeasurement();
+  }
+
+  Future<void> _loadSavedMeasurement() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final existing = (doc.data()?['wristWidthMm'] as num?)?.toDouble();
+      if (mounted) setState(() => _savedWristWidthMm = existing);
+    } catch (_) {
+      // Non-fatal — the "AWAITING SCAN" placeholder just stays visible.
+    }
+  }
+
+  Future<void> _showManualEntryDialog(BuildContext context) async {
+    final controller = TextEditingController(
+      text: _savedWristWidthMm?.toStringAsFixed(1) ?? '',
+    );
+    String? errorText;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Text('Enter Wrist Width',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Measure with a ruler across your wrist bone, or wrap a '
+                'tape measure around your wrist and divide the circumference '
+                'by 3.14 (π). Most adult wrists fall between 50–70mm.',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  suffixText: 'mm',
+                  errorText: errorText,
+                  filled: true,
+                  fillColor: AppTheme.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: (_) => setDialogState(() => errorText = null),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () async {
+                final value = double.tryParse(controller.text.trim());
+                if (value == null || value < 30 || value > 120) {
+                  setDialogState(
+                      () => errorText = 'Enter a value between 30–120mm');
+                  return;
+                }
+                try {
+                  await _authService.saveWristMeasurement(value);
+                  if (context.mounted) Navigator.of(context).pop(true);
+                } catch (e) {
+                  setDialogState(() => errorText = e.toString());
+                }
+              },
+              child: const Text('Save', style: TextStyle(color: AppTheme.gold)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      final value = double.tryParse(controller.text.trim());
+      if (context.mounted && value != null) {
+        setState(() => _savedWristWidthMm = value);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Wrist measurement saved')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +273,14 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => _showManualEntryDialog(context),
+              child: const Text(
+                'or enter manually instead',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
 
             Container(
               width: double.infinity,
@@ -190,7 +306,9 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        '— mm',
+                        _savedWristWidthMm != null
+                            ? '${_savedWristWidthMm!.toStringAsFixed(1)} mm'
+                            : '— mm',
                         style: TextStyle(
                           color: AppTheme.gold,
                           fontSize: 26,
@@ -206,9 +324,9 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
                           color: AppTheme.textSecondary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text(
-                          'AWAITING SCAN',
-                          style: TextStyle(
+                        child: Text(
+                          _savedWristWidthMm != null ? 'SAVED' : 'AWAITING SCAN',
+                          style: const TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,

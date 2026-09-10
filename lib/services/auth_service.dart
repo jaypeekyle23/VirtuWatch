@@ -390,6 +390,25 @@ class AuthService {
     });
   }
 
+  /// Saves the user's wrist width on their profile, so the future
+  /// recommendation engine can filter/rank watches by fit (comparing
+  /// against each watch's lugToLugMm). [method] distinguishes a manual
+  /// entry from a future camera-based measurement, in case that
+  /// distinction matters later (e.g. showing confidence to the user).
+  Future<void> saveWristMeasurement(
+    double wristWidthMm, {
+    String method = 'manual',
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw 'You must be logged in.';
+
+    await _firestore.collection('users').doc(uid).update({
+      'wristWidthMm': wristWidthMm,
+      'wristMeasurementMethod': method,
+      'lastWristMeasurementAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   String _mapAuthError(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use':
