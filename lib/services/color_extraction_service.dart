@@ -9,12 +9,18 @@ import 'package:palette_generator_plus/palette_generator_plus.dart';
 /// Extracts dominant colors from a photo, filtering out the background
 /// where possible.
 ///
-/// Shared by OutfitScanScreen (what colors is someone wearing) and the
-/// merchant add/edit watch forms (suggesting a watch's primary color
-/// from its product photo) — both need the same "isolate the subject,
-/// then cluster its colors" pipeline. Each caller owns its own instance
-/// and should call [dispose] when done with it, since the underlying ML
-/// Kit segmenter holds real model-loading resources.
+/// Used by OutfitScanScreen to determine what colors someone is
+/// wearing, feeding the "isolate the subject, then cluster its colors"
+/// result into the recommendation engine's color-matching step.
+///
+/// Watch product photos previously went through this same pipeline to
+/// suggest a primary color on the merchant add/edit forms, but that was
+/// removed: a watch's case/bezel/band is usually reflective metal
+/// (Silver/Gold/Rose Gold), and specular highlights make average-pixel
+/// color unreliable for exactly those tones — the suggestion would
+/// confidently pick the wrong one. Merchants now enter a watch's color
+/// directly (fixed swatches, or a color wheel + hex field for anything
+/// that doesn't match). This service is kept outfit-only.
 class ColorExtractionService {
   // Created once and reused — ML Kit segmenters carry real model-loading
   // overhead, so recreating one per call would slow every single scan.
@@ -22,10 +28,9 @@ class ColorExtractionService {
   // Subject Segmentation (rather than Selfie Segmentation) is used
   // deliberately: the selfie model is tuned for close-up, video-call-style
   // framing and performs noticeably worse on distant full-body shots —
-  // exactly the framing outfit photos (and most watch product photos)
-  // tend to use. Subject Segmentation is Google's general "prominent
-  // subject in a normal photo" model instead. Tradeoff: it's Android-only,
-  // with no iOS support at all.
+  // exactly the framing outfit photos tend to use. Subject Segmentation
+  // is Google's general "prominent subject in a normal photo" model
+  // instead. Tradeoff: it's Android-only, with no iOS support at all.
   final _segmenter = SubjectSegmenter(
     options: SubjectSegmenterOptions(
       enableForegroundConfidenceMask: true,
@@ -39,9 +44,9 @@ class ColorExtractionService {
 
   // Background pixels are flagged with this distinctive marker color
   // before palette analysis, then filtered back out of the results
-  // below. Real clothing/skin/watch materials essentially never produce
-  // pure magenta, which is what makes it safe to use as a "this pixel
-  // was masked out" signal.
+  // below. Real clothing/skin materials essentially never produce pure
+  // magenta, which is what makes it safe to use as a "this pixel was
+  // masked out" signal.
   static const _backgroundMarker = Color(0xFFFF00FF);
   static const _backgroundThreshold = 0.5; // ML Kit confidence cutoff
 
