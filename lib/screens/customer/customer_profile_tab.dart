@@ -8,6 +8,7 @@ import 'saved_watches_screen.dart';
 import 'wrist_measurement_screen.dart';
 import '../change_password_screen.dart';
 import '../about_screen.dart';
+import '../version_info_screen.dart';
 import '../delete_account_screen.dart';
 import '../terms_of_service_screen.dart';
 import '../privacy_policy_screen.dart';
@@ -248,6 +249,14 @@ class CustomerProfileTab extends StatelessWidget {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const AboutScreen(),
+                          ),
+                        );
+                      }),
+                      _menuTile(context, 'Version Info (v1.0.0)',
+                          Icons.numbers_outlined, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const VersionInfoScreen(),
                           ),
                         );
                       }),

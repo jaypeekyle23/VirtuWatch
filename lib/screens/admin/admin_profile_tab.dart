@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../change_password_screen.dart';
 import '../edit_account_name_screen.dart';
 import '../about_screen.dart';
+import '../version_info_screen.dart';
 
 class AdminProfileTab extends StatelessWidget {
   const AdminProfileTab({super.key});
@@ -144,7 +145,13 @@ class AdminProfileTab extends StatelessWidget {
                         );
                       }),
                       _menuTile(context, 'Version Info (v1.0.0)',
-                          Icons.numbers_outlined),
+                          Icons.numbers_outlined, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const VersionInfoScreen(),
+                          ),
+                        );
+                      }),
                       const SizedBox(height: 20),
 
                       SizedBox(

@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../change_password_screen.dart';
 import '../about_screen.dart';
+import '../version_info_screen.dart';
 import '../delete_account_screen.dart';
 import '../edit_account_name_screen.dart';
 
@@ -142,6 +143,14 @@ class MerchantProfileTab extends StatelessWidget {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const AboutScreen(),
+                          ),
+                        );
+                      }),
+                      _menuTile(context, 'Version Info (v1.0.0)',
+                          Icons.numbers_outlined, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const VersionInfoScreen(),
                           ),
                         );
                       }),
