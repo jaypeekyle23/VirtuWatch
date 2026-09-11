@@ -13,6 +13,52 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
+  /// Checks for an already-signed-in user — Firebase Auth persists
+  /// sessions across app restarts by default on mobile, so this is what
+  /// lets [AuthGate] skip straight to the right shell instead of forcing
+  /// a login on every launch — and re-validates it the same way
+  /// [loginWithEmail] does: unverified email/password accounts and
+  /// suspended accounts get signed out rather than let through on a
+  /// stale session. Returns null (with no side effect on the session)
+  /// if there's no signed-in user, or if validation itself fails to
+  /// complete — e.g. no network at startup — since forcing a logout over
+  /// a temporary connectivity issue would be worse than just falling
+  /// back to the login screen for this launch.
+  Future<Map<String, dynamic>?> fetchCurrentUserProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+
+    try {
+      final isGoogleAccount =
+          user.providerData.any((p) => p.providerId == 'google.com');
+
+      if (!isGoogleAccount) {
+        await user.reload();
+        final refreshedUser = _auth.currentUser;
+        if (refreshedUser == null || !refreshedUser.emailVerified) {
+          await _auth.signOut();
+          return null;
+        }
+      }
+
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (!doc.exists) {
+        await _auth.signOut();
+        return null;
+      }
+
+      final data = doc.data()!;
+      if (data['accountStatus'] == 'suspended') {
+        await _auth.signOut();
+        return null;
+      }
+
+      return data;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Whether the currently logged-in user can change a password at all
   /// (i.e. they signed up with email/password, not just Google).
   bool get canChangePassword {

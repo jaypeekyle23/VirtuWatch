@@ -1,0 +1,67 @@
+import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import '../theme/app_theme.dart';
+import 'login_screen.dart';
+import 'customer/customer_shell.dart';
+import 'merchant/merchant_shell.dart';
+import 'admin/admin_shell.dart';
+
+/// The app's actual startup screen (used as [MaterialApp.home] instead
+/// of [LoginScreen] directly). Firebase Auth persists a signed-in
+/// session across app restarts by default on mobile, but nothing was
+/// checking for that — the app always opened on the login form
+/// regardless, forcing a fresh login every launch even with a perfectly
+/// valid session sitting there. This checks for one via
+/// [AuthService.fetchCurrentUserProfile] and routes straight to the
+/// right role's shell when it finds one, falling back to [LoginScreen]
+/// otherwise (no session, or the session failed re-validation).
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  final _authService = AuthService();
+  late final Future<Map<String, dynamic>?> _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = _authService.fetchCurrentUserProfile();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _profileFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: AppTheme.background,
+            body: Center(
+              child: CircularProgressIndicator(color: AppTheme.gold),
+            ),
+          );
+        }
+
+        final profile = snapshot.data;
+        if (profile == null) {
+          return const LoginScreen();
+        }
+
+        final role = profile['role'] as String? ?? 'customer';
+        final username = profile['username'] as String? ?? 'User';
+        switch (role) {
+          case 'admin':
+            return AdminShell(username: username);
+          case 'merchant':
+            return MerchantShell(username: username);
+          default:
+            return CustomerShell(username: username);
+        }
+      },
+    );
+  }
+}
