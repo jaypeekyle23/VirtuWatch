@@ -7,6 +7,7 @@ import '../../constants/watch_colors.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/form_validators.dart';
 import '../../widgets/watch_color_picker.dart';
 import '../../widgets/watch_color_wheel_picker.dart';
 
@@ -316,11 +317,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                 controller: _priceController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(hintText: 'e.g. 15000'),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Required';
-                  if (double.tryParse(v.trim()) == null) return 'Enter a valid number';
-                  return null;
-                },
+                validator: requiredPositiveNumber,
               ),
               const SizedBox(height: 16),
 
@@ -402,6 +399,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
                           decoration: const InputDecoration(hintText: '42.0'),
+                          validator: optionalPositiveNumber,
                         ),
                       ],
                     ),
@@ -417,6 +415,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
                           decoration: const InputDecoration(hintText: '13.5'),
+                          validator: optionalPositiveNumber,
                         ),
                       ],
                     ),
@@ -437,13 +436,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
                           decoration: const InputDecoration(hintText: '46.5'),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Required';
-                            if (double.tryParse(v.trim()) == null) {
-                              return 'Invalid';
-                            }
-                            return null;
-                          },
+                          validator: requiredPositiveNumber,
                         ),
                       ],
                     ),
@@ -459,6 +452,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
                           decoration: const InputDecoration(hintText: '22'),
+                          validator: optionalPositiveNumber,
                         ),
                       ],
                     ),

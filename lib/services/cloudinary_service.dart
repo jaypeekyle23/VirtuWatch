@@ -8,7 +8,8 @@ import 'package:image_picker/image_picker.dart';
 /// returning the resulting hosted URL to store in Firestore (e.g. a watch's
 /// imageUrl or a user's profile photo URL).
 class CloudinaryService {
-  // TODO: replace with your actual Cloudinary values.
+  // Live Cloudinary account for this project (unsigned upload preset,
+  // scoped to image/model uploads only).
   static const String _cloudName = 'o9fetve3';
   static const String _uploadPreset = 'virtuwatch_uploads';
 

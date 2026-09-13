@@ -201,17 +201,12 @@ class AdminProfileTab extends StatelessWidget {
     );
   }
 
-  Widget _menuTile(BuildContext context, String title, IconData icon,
-      [VoidCallback? onTap]) {
+  Widget _menuTile(
+      BuildContext context, String title, IconData icon, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: InkWell(
-        onTap: onTap ??
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$title coming soon')),
-              );
-            },
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
