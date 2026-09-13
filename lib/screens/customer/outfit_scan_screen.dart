@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/auth_service.dart';
@@ -25,16 +26,94 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
   String? _errorMessage;
   int _step = 1;
 
+  // --- Embedded live camera preview state ---
+  // Unlike WristMeasurementScreen, this doesn't need a continuous frame
+  // stream or any live detection — just a live preview to aim with and a
+  // single still capture on demand, so there's no HandLandmarkerPlugin-
+  // style pipeline here, just CameraController.takePicture().
+  CameraController? _cameraController;
+  bool _cameraReady = false;
+  String? _cameraError;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) {
+          setState(() => _cameraError = 'No camera found on this device.');
+        }
+        return;
+      }
+      final backCamera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+
+      _cameraController = CameraController(
+        backCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+      );
+      await _cameraController!.initialize();
+
+      if (mounted) setState(() => _cameraReady = true);
+    } catch (e) {
+      // Covers camera-permission denial, no camera hardware, etc. Gallery
+      // selection stays available either way, so this is non-fatal for
+      // the feature as a whole.
+      if (mounted) {
+        setState(() => _cameraError =
+            'Camera unavailable. You can still choose a photo from your '
+            'gallery below.');
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _cameraController?.dispose();
     _colorExtractionService.dispose();
     super.dispose();
   }
 
-  Future<void> _scanOutfit(ImageSource source) async {
-    final image = await _cloudinaryService.pickImage(source: source);
-    if (image == null) return;
+  Future<void> _captureFromCamera() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+    try {
+      final photo = await _cameraController!.takePicture();
+      await _analyzeImage(File(photo.path));
+    } catch (e) {
+      if (mounted) {
+        setState(() =>
+            _errorMessage = 'Could not capture a photo. Please try again.');
+      }
+    }
+  }
 
+  Future<void> _pickFromGallery() async {
+    final image =
+        await _cloudinaryService.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    await _analyzeImage(image);
+  }
+
+  void _retake() {
+    setState(() {
+      _selectedImage = null;
+      _results = null;
+      _errorMessage = null;
+      _step = 1;
+    });
+  }
+
+  Future<void> _analyzeImage(File image) async {
     setState(() {
       _selectedImage = image;
       _isAnalyzing = true;
@@ -89,7 +168,10 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         title: const Text('Outfit Color Scan'),
         actions: [
           IconButton(
@@ -98,246 +180,313 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _stepCircle('1', 'Aim Camera', active: _step == 1),
-                _stepConnector(),
-                _stepCircle('2', 'Analyze', active: _step == 2),
-                _stepConnector(),
-                _stepCircle('3', 'Results', active: _step == 3),
-              ],
-            ),
-            const SizedBox(height: 20),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Full-screen camera preview (or the captured photo, once one
+          // exists) fills the entire body.
+          _buildCameraArea(),
 
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (_selectedImage != null)
-                      Positioned.fill(
-                        child: Image.file(
-                          _selectedImage!,
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    else
-                      const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.checkroom_outlined,
-                              size: 72, color: AppTheme.textSecondary),
-                          SizedBox(height: 12),
-                          Text(
-                            'No photo yet',
-                            style: TextStyle(color: AppTheme.textSecondary),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Snap a photo of your outfit to get started',
-                            style: TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    if (_isAnalyzing)
-                      Container(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: AppTheme.gold),
-                            SizedBox(height: 12),
-                            Text(
-                              'Analyzing colors...',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (!_isAnalyzing)
-                      Positioned(
-                        top: 16,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _results != null
-                                ? 'Scan complete'
-                                : 'Point camera at your outfit',
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 11),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
+          // Step indicator, floating just below the (transparent) app bar.
+          Positioned(
+            top: MediaQuery.of(context).padding.top + kToolbarHeight + 12,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              color: Colors.black.withValues(alpha: 0.35),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'LIVE COLOR EXTRACTION',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
+                  _stepCircle('1', 'Aim Camera', active: _step == 1),
+                  _stepConnector(),
+                  _stepCircle('2', 'Analyze', active: _step == 2),
+                  _stepConnector(),
+                  _stepCircle('3', 'Results', active: _step == 3),
+                ],
+              ),
+            ),
+          ),
+
+          // Bottom control panel, overlaid on the camera feed with a dark
+          // scrim behind it so it stays legible over live video.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: EdgeInsets.fromLTRB(
+                  16, 16, 16, MediaQuery.of(context).padding.bottom + 10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppTheme.background.withValues(alpha: 0),
+                    AppTheme.background.withValues(alpha: 0.97),
+                  ],
+                  stops: const [0.0, 0.22],
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   if (_results != null) ...[
-                    Row(
-                      children: [
-                        for (var i = 0; i < _results!.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 4),
-                          _colorBar(_results![i].color,
-                              _results![i].percentage / 100),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        for (final r in _results!)
-                          Text('${r.percentage.round()}%',
-                              style: const TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 10)),
-                      ],
-                    ),
-                  ] else
                     Container(
-                      height: 24,
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: AppTheme.background,
-                        borderRadius: BorderRadius.circular(4),
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      alignment: Alignment.center,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'LIVE COLOR EXTRACTION',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              for (var i = 0; i < _results!.length; i++) ...[
+                                if (i > 0) const SizedBox(width: 4),
+                                _colorBar(_results![i].color,
+                                    _results![i].percentage / 100),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              for (final r in _results!)
+                                Text('${r.percentage.round()}%',
+                                    style: const TextStyle(
+                                        color: AppTheme.textSecondary,
+                                        fontSize: 10)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                            color: Colors.redAccent, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+
+                  if (_step == 3)
+                    InkWell(
+                      onTap: _retake,
+                      borderRadius: BorderRadius.circular(32),
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.gold,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.refresh,
+                            color: Color(0xFF0E1A2B), size: 28),
+                      ),
+                    )
+                  else
+                    InkWell(
+                      onTap: (_isAnalyzing || !_cameraReady)
+                          ? null
+                          : _captureFromCamera,
+                      borderRadius: BorderRadius.circular(32),
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: _isAnalyzing
+                              ? AppTheme.gold.withValues(alpha: 0.4)
+                              : AppTheme.gold,
+                          shape: BoxShape.circle,
+                        ),
+                        child: _isAnalyzing
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF0E1A2B),
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.camera_alt_outlined,
+                                color: Color(0xFF0E1A2B), size: 28),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _isAnalyzing
+                        ? 'Analyzing your outfit...'
+                        : _step == 3
+                            ? 'Tap to scan again'
+                            : 'Tap to capture outfit colors',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppTheme.textPrimary),
+                  ),
+                  if (_step != 3)
+                    TextButton(
+                      onPressed: _isAnalyzing ? null : _pickFromGallery,
                       child: const Text(
-                        'Scan an outfit to see the color breakdown',
+                        'or choose from gallery',
                         style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 11),
+                            color: AppTheme.textSecondary, fontSize: 12),
                       ),
                     ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+          ),
+        ],
+      ),
+    );
+  }
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.lightbulb_outline,
-                        color: AppTheme.textSecondary, size: 14),
-                    SizedBox(width: 4),
-                    Text('Good lighting helps',
-                        style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 11)),
+  Widget _buildCameraArea() {
+    // Once there's a captured photo — mid-analysis or showing results —
+    // freeze on that instead of the live feed.
+    if (_selectedImage != null) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: Image.file(_selectedImage!, fit: BoxFit.cover),
+          ),
+          if (_isAnalyzing)
+            Container(
+              color: Colors.black.withValues(alpha: 0.55),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.gold),
+                    SizedBox(height: 12),
+                    Text(
+                      'Analyzing colors...',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ],
                 ),
-                Row(
-                  children: const [
-                    Icon(Icons.grid_view_outlined,
-                        color: AppTheme.textSecondary, size: 14),
-                    SizedBox(width: 4),
-                    Text('Clusters: K=4',
-                        style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 11)),
-                  ],
+              ),
+            ),
+        ],
+      );
+    }
+
+    if (_cameraError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.videocam_off_outlined,
+                  size: 48, color: AppTheme.textSecondary),
+              const SizedBox(height: 12),
+              Text(_cameraError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppTheme.textSecondary)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!_cameraReady || _cameraController == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.gold),
+      );
+    }
+
+    final previewSize = _cameraController!.value.previewSize!;
+    // The sensor is natively landscape; displayed portrait width maps to
+    // previewSize.height and vice versa (same as WristMeasurementScreen).
+    final targetAspect = previewSize.height / previewSize.width;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        double displayedWidth = constraints.maxWidth;
+        double displayedHeight = displayedWidth / targetAspect;
+        if (displayedHeight > constraints.maxHeight) {
+          displayedHeight = constraints.maxHeight;
+          displayedWidth = displayedHeight * targetAspect;
+        }
+
+        // The framing guide: a tall rounded rectangle sized for a
+        // shoulders-to-waist outfit shot, not a small object like the
+        // wrist screen's reference-object box — outfits need much more
+        // of the frame.
+        final guideWidth = displayedWidth * 0.62;
+        final guideHeight = displayedHeight * 0.66;
+
+        return Center(
+          child: SizedBox(
+            width: displayedWidth,
+            height: displayedHeight,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CameraPreview(_cameraController!),
+                Align(
+                  alignment: const Alignment(0, -0.05),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: guideWidth,
+                        height: guideHeight,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppTheme.gold, width: 2),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        constraints:
+                            BoxConstraints(maxWidth: displayedWidth * 0.8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Fit your outfit inside the frame, shoulders to waist',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-
-            InkWell(
-              onTap: _isAnalyzing
-                  ? null
-                  : () => _scanOutfit(ImageSource.camera),
-              borderRadius: BorderRadius.circular(40),
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: _isAnalyzing
-                      ? AppTheme.gold.withValues(alpha: 0.4)
-                      : AppTheme.gold,
-                  shape: BoxShape.circle,
-                ),
-                child: _isAnalyzing
-                    ? const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Color(0xFF0E1A2B),
-                          ),
-                        ),
-                      )
-                    : const Icon(Icons.camera_alt_outlined,
-                        color: Color(0xFF0E1A2B), size: 28),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _isAnalyzing
-                  ? 'Analyzing your outfit...'
-                  : _results != null
-                      ? 'Tap to scan again'
-                      : 'Tap to capture outfit colors',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            TextButton(
-              onPressed:
-                  _isAnalyzing ? null : () => _scanOutfit(ImageSource.gallery),
-              child: const Text(
-                'or choose from gallery',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -348,13 +497,12 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
         children: [
           CircleAvatar(
             radius: 14,
-            backgroundColor: active
-                ? AppTheme.gold
-                : AppTheme.surface,
+            backgroundColor: active ? AppTheme.gold : AppTheme.surface,
             child: Text(
               number,
               style: TextStyle(
-                color: active ? const Color(0xFF0E1A2B) : AppTheme.textSecondary,
+                color:
+                    active ? const Color(0xFF0E1A2B) : AppTheme.textSecondary,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
@@ -362,7 +510,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
           ),
           const SizedBox(height: 6),
           SizedBox(
-            height: 28,
+            height: 26,
             child: Text(
               label,
               textAlign: TextAlign.center,
@@ -370,7 +518,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: active ? AppTheme.gold : AppTheme.textSecondary,
-                fontSize: 10,
+                fontSize: 9,
               ),
             ),
           ),
@@ -415,8 +563,8 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
           'VirtuWatch analyzes a photo of your outfit to identify its '
           'dominant colors using a clustering technique (K-means-style '
           'color extraction).\n\n'
-          'Take or choose a photo of your outfit in good lighting, and '
-          'the app detects the main tones you\'re wearing — then uses '
+          'Fit your outfit inside the on-screen guide, in good lighting, '
+          'and the app detects the main tones you\'re wearing — then uses '
           'those colors to recommend watches with cases, dials, or bands '
           'that complement your look.\n\n'
           'Good, even lighting helps the scan work more accurately.',
@@ -425,7 +573,8 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it', style: TextStyle(color: AppTheme.gold)),
+            child:
+                const Text('Got it', style: TextStyle(color: AppTheme.gold)),
           ),
         ],
       ),
