@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../constants/watch_colors.dart';
 import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/recommendations_chat_sheet.dart';
 import 'edit_profile_screen.dart';
 import 'outfit_scan_screen.dart';
 import 'watch_detail_screen.dart';
@@ -132,6 +133,24 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('For You')),
+      floatingActionButton: _result == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => showRecommendationsChatSheet(
+                context,
+                result: _result!,
+              ),
+              backgroundColor: AppTheme.gold,
+              icon: const Icon(Icons.chat_bubble_outline,
+                  color: Color(0xFF0E1A2B)),
+              label: const Text(
+                'Ask VirtuWatch',
+                style: TextStyle(
+                  color: Color(0xFF0E1A2B),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
       body: RefreshIndicator(
         onRefresh: _loadRecommendations,
         child: SingleChildScrollView(
