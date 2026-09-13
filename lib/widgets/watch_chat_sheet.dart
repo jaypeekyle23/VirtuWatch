@@ -99,8 +99,8 @@ class _WatchChatSheetState extends State<WatchChatSheet> {
       final reply = await _chatService!.sendMessage(text);
       if (!mounted) return;
       setState(() {
-        _messages.add(ChatMessage(role: 'model', text: reply));
         _isSending = false;
+        _messages.add(ChatMessage(role: 'model', text: reply));
       });
       _scrollToBottom();
     } catch (e) {
@@ -176,25 +176,32 @@ class _WatchChatSheetState extends State<WatchChatSheet> {
                     ? const Center(
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : _messages.isEmpty
+                    : (_messages.isEmpty && !_isSending)
                         ? _emptyState(name)
                         : ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.all(16),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) =>
-                                _bubble(_messages[index]),
+                            itemCount:
+                                _messages.length + (_isSending ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == _messages.length) {
+                                // Trailing "typing" bubble while waiting
+                                // for a reply.
+                                return const _AnimatedBubbleEntrance(
+                                  key: ValueKey('typing_indicator'),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _TypingIndicator(),
+                                  ),
+                                );
+                              }
+                              return _AnimatedBubbleEntrance(
+                                key: ValueKey('msg_$index'),
+                                child: _bubble(_messages[index]),
+                              );
+                            },
                           ),
               ),
-              if (_isSending)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -276,6 +283,132 @@ class _WatchChatSheetState extends State<WatchChatSheet> {
             icon: const Icon(Icons.send, color: AppTheme.gold),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Plays a one-time fade + slide-up entrance for its [child] the first
+/// time it's built, then stays put. Because each bubble in the message
+/// list gets a stable [ValueKey] tied to its position, Flutter keeps this
+/// widget's State alive across rebuilds — so the animation runs once per
+/// message (when it's newly added) rather than replaying on every
+/// setState.
+class _AnimatedBubbleEntrance extends StatefulWidget {
+  final Widget child;
+
+  const _AnimatedBubbleEntrance({super.key, required this.child});
+
+  @override
+  State<_AnimatedBubbleEntrance> createState() =>
+      _AnimatedBubbleEntranceState();
+}
+
+class _AnimatedBubbleEntranceState extends State<_AnimatedBubbleEntrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.12),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(position: _slide, child: widget.child),
+    );
+  }
+}
+
+/// Three dots that pulse in sequence, shown in a bubble matching the
+/// assistant's own message style — signals "thinking" rather than a
+/// generic loading spinner.
+class _TypingIndicator extends StatefulWidget {
+  const _TypingIndicator();
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  double _dotScale(int index) {
+    // Stagger each dot's pulse by a third of the cycle.
+    final t = (_controller.value + (index * 0.2)) % 1.0;
+    // Simple triangular pulse: scale up then back down.
+    final pulse = (t < 0.5) ? (t / 0.5) : (1 - (t - 0.5) / 0.5);
+    return 0.5 + (pulse * 0.5);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(3, (i) {
+              return Padding(
+                padding: EdgeInsets.only(right: i < 2 ? 5 : 0),
+                child: Transform.scale(
+                  scale: _dotScale(i),
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: AppTheme.gold,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          );
+        },
       ),
     );
   }
