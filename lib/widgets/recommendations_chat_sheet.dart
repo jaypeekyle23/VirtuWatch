@@ -16,6 +16,7 @@ Future<void> showRecommendationsChatSheet(
     emptyStateHint: 'Ask about your recommended watches — "which fits my '
         'budget best?", "compare the top two", or "what should I get for '
         'a formal look?"',
+    threadKey: 'recommendations',
     createChatService: () async => ChatService.forRecommendations(result),
   );
 }

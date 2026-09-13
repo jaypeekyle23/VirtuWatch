@@ -61,6 +61,16 @@ class ChatService {
 
   List<ChatMessage> get history => List.unmodifiable(_history);
 
+  /// Replaces the in-memory conversation with previously saved messages,
+  /// so a reloaded chat continues with full context rather than the
+  /// model losing track of everything said before the sheet was closed.
+  /// Must be called before the first [sendMessage].
+  void seedHistory(List<ChatMessage> messages) {
+    _history
+      ..clear()
+      ..addAll(messages);
+  }
+
   static String _buildWatchPrompt(
     Map<String, dynamic> watchData,
     Map<String, dynamic>? userProfile,

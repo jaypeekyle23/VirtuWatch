@@ -1,17 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../services/chat_history_service.dart';
 import '../services/chat_service.dart';
 import '../theme/app_theme.dart';
 
 /// Opens [ChatSheet] as a scrollable bottom sheet. Both the single-watch
 /// chat (Watch Detail screen) and the recommendations-wide chat
 /// (Recommended For You screen) go through this — only [title],
-/// [emptyStateHint], and how [createChatService] builds its ChatService
-/// differ between them.
+/// [emptyStateHint], how [createChatService] builds its ChatService, and
+/// [threadKey] (for persisting history) differ between them.
 Future<void> showChatSheet(
   BuildContext context, {
   required String title,
   required String emptyStateHint,
   required Future<ChatService> Function() createChatService,
+  required String threadKey,
 }) {
   return showModalBottomSheet(
     context: context,
@@ -21,6 +25,7 @@ Future<void> showChatSheet(
       title: title,
       emptyStateHint: emptyStateHint,
       createChatService: createChatService,
+      threadKey: threadKey,
     ),
   );
 }
@@ -29,12 +34,14 @@ class ChatSheet extends StatefulWidget {
   final String title;
   final String emptyStateHint;
   final Future<ChatService> Function() createChatService;
+  final String threadKey;
 
   const ChatSheet({
     super.key,
     required this.title,
     required this.emptyStateHint,
     required this.createChatService,
+    required this.threadKey,
   });
 
   @override
@@ -42,6 +49,7 @@ class ChatSheet extends StatefulWidget {
 }
 
 class _ChatSheetState extends State<ChatSheet> {
+  final _historyService = ChatHistoryService();
   ChatService? _chatService;
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -58,17 +66,31 @@ class _ChatSheetState extends State<ChatSheet> {
 
   Future<void> _init() async {
     ChatService? service;
+    List<ChatMessage> savedMessages = [];
     try {
       service = await widget.createChatService();
+      savedMessages = await _historyService.load(widget.threadKey);
+      service.seedHistory(savedMessages);
     } catch (_) {
-      // Fall through with service == null; _send() below will no-op and
-      // the input bar stays disabled rather than crashing the sheet.
+      // Fall through with whatever we managed to get; _send() below
+      // no-ops if service is null rather than crashing the sheet.
     }
     if (!mounted) return;
     setState(() {
       _chatService = service;
+      _messages.addAll(savedMessages);
       _isInitializing = false;
     });
+    if (savedMessages.isNotEmpty) _scrollToBottom(animate: false);
+  }
+
+  Future<void> _clearHistory() async {
+    setState(() {
+      _messages.clear();
+      _error = null;
+    });
+    _chatService?.seedHistory(const []);
+    await _historyService.clear(widget.threadKey);
   }
 
   @override
@@ -98,6 +120,8 @@ class _ChatSheetState extends State<ChatSheet> {
         _messages.add(ChatMessage(role: 'model', text: reply));
       });
       _scrollToBottom();
+      // Fire-and-forget: don't block the UI on the persistence write.
+      unawaited(_historyService.save(widget.threadKey, _messages));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -107,14 +131,19 @@ class _ChatSheetState extends State<ChatSheet> {
     }
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+      final target = _scrollController.position.maxScrollExtent;
+      if (animate) {
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(target);
+      }
     });
   }
 
@@ -161,6 +190,15 @@ class _ChatSheetState extends State<ChatSheet> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (_messages.isNotEmpty)
+                      IconButton(
+                        onPressed: _clearHistory,
+                        icon: const Icon(Icons.delete_outline,
+                            color: AppTheme.textSecondary, size: 20),
+                        tooltip: 'Clear chat',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
                   ],
                 ),
               ),

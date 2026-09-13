@@ -18,6 +18,7 @@ Future<void> showWatchChatSheet(
     title: 'Ask about $name',
     emptyStateHint: 'Ask anything about $name — fit, materials, style, or '
         'how to wear it.',
+    threadKey: 'watch_$watchId',
     createChatService: () async {
       // Load the current user's profile so the assistant can answer
       // fit/style questions using data the user already saved, instead
