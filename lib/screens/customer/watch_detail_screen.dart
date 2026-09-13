@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/watch_chat_sheet.dart';
 import 'ar_try_on_screen.dart';
 
 class WatchDetailScreen extends StatefulWidget {
@@ -286,6 +287,25 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                       },
                       icon: const Icon(Icons.view_in_ar_outlined),
                       label: const Text('Try On in AR'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.gold,
+                        side: const BorderSide(color: AppTheme.gold),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () => showWatchChatSheet(
+                        context,
+                        watchId: watchId,
+                        watchData: data,
+                      ),
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Ask About This Watch'),
                     ),
                   ),
                 ],
