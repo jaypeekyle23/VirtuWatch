@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../utils/fit_scoring.dart';
 
 /// A single turn in the conversation, in the order it was said.
 class ChatMessage {
@@ -21,12 +22,12 @@ class ChatMessage {
 ///      and/or iOS bundle ID
 /// Do not ship this with an unrestricted key.
 class ChatService {
-  // Injected at build/run time via --dart-define-from-file=.env.json
-  // (see env.example.json for the expected format). Never hardcode the
-  // real key here — that's exactly what this mechanism avoids.
+  // Injected at build/run time via --dart-define-from-file=.env
+  // (see env.example for the expected format). Never hardcode the real
+  // key here — that's exactly what this mechanism avoids.
   static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
-  static const String _model = 'gemini-2.5-flash-lite';
+  static const String _model = 'gemini-3.5-flash-lite';
   static const String _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -54,7 +55,7 @@ class ChatService {
     final style = watchData['styleCategory'] as String? ?? 'Unknown';
     final caseDiameter = watchData['caseDiameterMm'];
     final caseThickness = watchData['caseThicknessMm'];
-    final lugToLug = watchData['lugToLugMm'];
+    final lugToLugMm = (watchData['lugToLugMm'] as num?)?.toDouble();
     final bandWidth = watchData['bandWidthMm'];
     final movementType = watchData['movementType'] as String? ?? 'Unknown';
     final waterResistance =
@@ -68,11 +69,24 @@ class ChatService {
     final budgetMin = (userProfile?['budgetMin'] as num?)?.toDouble();
     final budgetMax = (userProfile?['budgetMax'] as num?)?.toDouble();
 
+    // Use the SAME fit rule as RecommendationService, so the chatbot's
+    // verdict always agrees with what the "Recommended For You" screen
+    // already told the user. Never let the model compute this itself.
+    String fitVerdict;
+    if (wristWidthMm == null) {
+      fitVerdict = 'Wrist width not provided — if fit comes up, ask for it '
+          'instead of assuming';
+    } else if (lugToLugMm == null) {
+      fitVerdict = 'Fit cannot be evaluated (this watch has no lug-to-lug '
+          'measurement on file)';
+    } else {
+      fitVerdict =
+          scoreFit(wristWidthMm: wristWidthMm, lugToLugMm: lugToLugMm).note;
+    }
+
     final userContextLines = <String>[
-      if (wristWidthMm != null)
-        '- Wrist width: ${wristWidthMm.toStringAsFixed(1)}mm'
-      else
-        '- Wrist width: not provided — if fit comes up, ask for it instead of assuming',
+      '- Fit verdict (authoritative — state this as-is, don\'t recompute '
+          'or contradict it): $fitVerdict',
       if (stylePreferences.isNotEmpty)
         '- Style preferences: ${stylePreferences.join(', ')}',
       if (budgetMin != null && budgetMax != null)
@@ -89,7 +103,7 @@ Here is the ONLY factual data you know about this watch — never invent specs, 
 - Style category: $style
 - Case diameter: ${caseDiameter != null ? '${caseDiameter}mm' : 'Not listed'}
 - Case thickness: ${caseThickness != null ? '${caseThickness}mm' : 'Not listed'}
-- Lug-to-lug: ${lugToLug != null ? '${lugToLug}mm' : 'Not listed'}
+- Lug-to-lug: ${lugToLugMm != null ? '${lugToLugMm}mm' : 'Not listed'}
 - Band width: ${bandWidth != null ? '${bandWidth}mm' : 'Not listed'}
 - Movement: $movementType
 - Water resistance: $waterResistance
@@ -112,7 +126,7 @@ Rules:
   Future<String> sendMessage(String userText) async {
     if (_apiKey.isEmpty) {
       throw 'Chat is not configured. Run with '
-          '--dart-define-from-file=.env.json (see env.example.json).';
+          '--dart-define-from-file=.env (see env.example).';
     }
 
     _history.add(ChatMessage(role: 'user', text: userText));

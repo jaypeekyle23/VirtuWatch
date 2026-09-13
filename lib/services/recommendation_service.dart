@@ -3,6 +3,7 @@ import 'dart:math' show sqrt;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/watch_colors.dart';
+import '../utils/fit_scoring.dart';
 
 /// One watch scored against the current user's profile.
 class WatchRecommendation {
@@ -100,7 +101,8 @@ class RecommendationService {
 
   // How many mm of lug-to-lug vs wrist-width difference is treated as
   // the edge of "still fits reasonably" before the fit score hits zero.
-  static const double _fitToleranceMm = 15;
+  // (Moved to lib/utils/fit_scoring.dart as `fitToleranceMm` so ChatService
+  // can share the exact same rule — kept here only as a doc pointer.)
 
   // Euclidean distance between pure black and pure white in RGB space —
   // the maximum possible distance between two colors, used to normalize
@@ -176,15 +178,9 @@ class RecommendationService {
     } else if (lugToLugMm == null) {
       fitNote = 'Fit info unavailable for this watch';
     } else {
-      final diff = lugToLugMm - wristWidthMm;
-      fitScore = (1 - (diff.abs() / _fitToleranceMm)).clamp(0.0, 1.0);
-      if (diff.abs() <= 3) {
-        fitNote = 'Great fit for your ${wristWidthMm.toStringAsFixed(0)}mm wrist';
-      } else if (diff > 0) {
-        fitNote = 'Runs a bit large for your ${wristWidthMm.toStringAsFixed(0)}mm wrist';
-      } else {
-        fitNote = 'Runs a bit small for your ${wristWidthMm.toStringAsFixed(0)}mm wrist';
-      }
+      final fit = scoreFit(wristWidthMm: wristWidthMm, lugToLugMm: lugToLugMm);
+      fitScore = fit.score;
+      fitNote = fit.note;
     }
 
     double? styleScore;
