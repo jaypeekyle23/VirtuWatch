@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/chat_service.dart';
+import '../services/user_service.dart';
 import 'chat_sheet.dart';
 
 /// Opens the "Ask about this watch" chat, scoped to one watch's data
@@ -19,11 +20,17 @@ Future<void> showWatchChatSheet(
     emptyStateHint: 'Ask anything about $name — fit, materials, style, or '
         'how to wear it.',
     threadKey: 'watch_$watchId',
+    suggestedQuestions: const [
+      'Will this fit my wrist?',
+      'What outfit suits this watch?',
+      'How do I care for it?',
+    ],
     createChatService: () async {
       // Load the current user's profile so the assistant can answer
       // fit/style questions using data the user already saved, instead
       // of asking for it again.
       Map<String, dynamic>? userProfile;
+      List<Map<String, dynamic>>? savedWatches;
       try {
         final uid = FirebaseAuth.instance.currentUser?.uid;
         if (uid != null) {
@@ -33,11 +40,16 @@ Future<void> showWatchChatSheet(
               .get();
           userProfile = doc.data();
         }
+        savedWatches = await UserService().fetchSavedWatchesBrief();
       } catch (_) {
         // Fall back to chatting without profile context rather than
         // blocking the whole feature.
       }
-      return ChatService.forWatch(watchData: watchData, userProfile: userProfile);
+      return ChatService.forWatch(
+        watchData: watchData,
+        userProfile: userProfile,
+        savedWatches: savedWatches,
+      );
     },
   );
 }

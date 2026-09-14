@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../constants/app_knowledge.dart';
 import '../utils/fit_scoring.dart';
 import 'recommendation_service.dart';
 
@@ -43,9 +44,11 @@ class ChatService {
   factory ChatService.forWatch({
     required Map<String, dynamic> watchData,
     Map<String, dynamic>? userProfile,
+    List<Map<String, dynamic>>? savedWatches,
   }) {
     return ChatService._(
-      systemPromptBuilder: () => _buildWatchPrompt(watchData, userProfile),
+      systemPromptBuilder: () =>
+          _buildWatchPrompt(watchData, userProfile, savedWatches),
     );
   }
 
@@ -53,9 +56,13 @@ class ChatService {
   /// the "Recommended For You" screen. The assistant can discuss and
   /// compare any watch already ranked for this user, using the exact
   /// same scores/notes already shown on-screen.
-  factory ChatService.forRecommendations(RecommendationResult result) {
+  factory ChatService.forRecommendations(
+    RecommendationResult result, {
+    List<Map<String, dynamic>>? savedWatches,
+  }) {
     return ChatService._(
-      systemPromptBuilder: () => _buildRecommendationsPrompt(result),
+      systemPromptBuilder: () =>
+          _buildRecommendationsPrompt(result, savedWatches),
     );
   }
 
@@ -71,9 +78,26 @@ class ChatService {
       ..addAll(messages);
   }
 
+  /// Formats the customer's saved/wishlist watches (if any) as a compact
+  /// context line for the system prompt — lets the assistant reference
+  /// "you've also saved X" or compare against them without the customer
+  /// having to re-list what they're interested in.
+  static String? _savedWatchesLine(List<Map<String, dynamic>>? savedWatches) {
+    if (savedWatches == null || savedWatches.isEmpty) return null;
+    final items = savedWatches.map((w) {
+      final name = w['name'] as String? ?? 'Unnamed watch';
+      final brand = w['brand'] as String? ?? '';
+      final price = w['price'];
+      return '$name${brand.isNotEmpty ? ' by $brand' : ''}'
+          '${price != null ? ' (PHP $price)' : ''}';
+    }).join(', ');
+    return '- Saved/wishlist watches: $items';
+  }
+
   static String _buildWatchPrompt(
     Map<String, dynamic> watchData,
     Map<String, dynamic>? userProfile,
+    List<Map<String, dynamic>>? savedWatches,
   ) {
     final name = watchData['name'] as String? ?? 'this watch';
     final brand = watchData['brand'] as String? ?? 'Unknown';
@@ -117,12 +141,16 @@ class ChatService {
         '- Style preferences: ${stylePreferences.join(', ')}',
       if (budgetMin != null && budgetMax != null)
         '- Budget range: PHP $budgetMin–$budgetMax',
+      if (_savedWatchesLine(savedWatches) != null)
+        _savedWatchesLine(savedWatches)!,
     ];
 
     return '''
-You are a friendly, knowledgeable watch specialist inside the VirtuWatch app, helping a customer with questions about ONE specific watch. Stay focused on this watch and general watch-buying guidance (fit, style, care, occasions to wear it).
+You are a friendly, knowledgeable watch specialist inside the VirtuWatch app, helping a customer with questions about ONE specific watch, the VirtuWatch app itself, or general questions in this domain (wrist sizing, computer vision, AR, watch fit/buying guidance).
 
-Here is the ONLY factual data you know about this watch — never invent specs, price, stock, or details beyond what's listed here:
+$appKnowledgeBlock
+
+Here is the ONLY factual data you know about THIS watch — never invent specs, price, stock, or details beyond what's listed here:
 - Name: $name
 - Brand: $brand
 - Price: ${price != null ? 'PHP $price' : 'Not listed'}
@@ -144,11 +172,14 @@ Rules:
 - If asked HOW the fit verdict was determined: lug-to-lug within about 3mm of wrist width is a great fit; a larger lug-to-lug runs large, a smaller one runs small, up to roughly 15mm difference before it's considered a poor fit. Explain it this way if asked — don't invent a different method.
 - If asked something not covered by the data above (e.g. exact stock, warranty terms, discounts), say you don't have that info and suggest they use the "Inquire via Urbane Time" button to ask the seller directly.
 - Keep replies short and conversational — a few sentences, not an essay.
-- Do not discuss other watches, other brands' pricing, or unrelated topics; gently redirect back to this watch.
+- Do not discuss other specific watches' prices or specs (you only have this one watch's data) or unrelated topics outside this domain; gently redirect those back to this watch or to browsing the catalog. Questions about the app itself or the general domain (see above) are welcome, not off-topic.
 ''';
   }
 
-  static String _buildRecommendationsPrompt(RecommendationResult result) {
+  static String _buildRecommendationsPrompt(
+    RecommendationResult result,
+    List<Map<String, dynamic>>? savedWatches,
+  ) {
     final userContextLines = <String>[
       result.wristWidthMm != null
           ? '- Wrist width: ${result.wristWidthMm!.toStringAsFixed(1)}mm'
@@ -156,6 +187,8 @@ Rules:
       if (result.stylePreferences.isNotEmpty)
         '- Style preferences: ${result.stylePreferences.join(', ')}',
       '- Budget range: PHP ${result.budgetMin.toStringAsFixed(0)}–${result.budgetMax.toStringAsFixed(0)}',
+      if (_savedWatchesLine(savedWatches) != null)
+        _savedWatchesLine(savedWatches)!,
     ];
 
     // Cap the list sent to the model — this is the user's already-ranked
@@ -173,12 +206,16 @@ Rules:
       final caseDiameter = data['caseDiameterMm'];
       return '- "$name" by $brand — ${price != null ? 'PHP $price' : 'price not listed'}, '
           '$style style${caseDiameter != null ? ', ${caseDiameter}mm case' : ''}. '
-          'Match score: ${rec.matchPercent}%. Fit: ${rec.fitNote}.'
+          'Match score: ${rec.matchPercent}%'
+          '${rec.confidenceNote != null ? ' (${rec.confidenceNote})' : ''}. '
+          'Fit: ${rec.fitNote}.'
           '${rec.colorNote != null ? ' Color match: ${rec.colorNote}.' : ''}';
     }).join('\n');
 
     return '''
-You are a friendly, knowledgeable watch specialist inside the VirtuWatch app, helping a customer browse their personalized watch recommendations. You can discuss, compare, and recommend from the list below — never invent watches, specs, or prices beyond what's listed here.
+You are a friendly, knowledgeable watch specialist inside the VirtuWatch app, helping a customer browse their personalized watch recommendations. You can discuss, compare, and recommend from the list below — never invent watches, specs, or prices beyond what's listed here. You can also answer questions about the app itself or the general domain it's built on (see below).
+
+$appKnowledgeBlock
 
 What you know about the CUSTOMER:
 ${userContextLines.join('\n')}
@@ -195,8 +232,9 @@ HOW THE MATCH SCORE ACTUALLY WORKS (explain this accurately if asked "why is thi
 - The percentage shown is this weighted blend, not a simple average, and not something you should recompute — just explain the reasoning behind the number already given.
 
 Rules:
-- Only discuss watches from the list above. If asked about a watch not on this list, say you can only discuss their current recommendations and suggest they browse the full catalog or search for it directly.
+- Only discuss specific watches from the list above — never invent specs/prices for a watch not on this list. If asked about a specific watch not on this list, say you can only discuss their current recommendations and suggest they browse the full catalog or search for it directly. Questions about the app itself or the general domain (see above) are welcome, not off-topic.
 - When asked "which is best for X", pick from the list using the match scores, fit notes, and budget as your basis, and explain briefly why.
+- When you state a watch's match score, if it has a confidence caveat noted (e.g. "Based on style only"), mention that caveat too — don't present a high percentage as full confidence when it's actually based on one or two signals.
 - Keep replies short and conversational — a few sentences, not an essay. Use watch names so the customer can find them on screen.
 - If asked something not covered by the data above (stock, warranty, exact availability), say you don't have that info and suggest using each watch's "Inquire via Urbane Time" button.
 ''';
@@ -249,6 +287,10 @@ Rules:
       if (response!.statusCode != 200) {
         // ignore: avoid_print
         print('Gemini API error ${response.statusCode}: ${response.body}');
+        if (response.statusCode == 429) {
+          throw 'You\'re sending messages a bit fast — please wait a '
+              'moment and try again.';
+        }
         throw 'The assistant is unavailable right now (${response.statusCode}). Please try again.';
       }
 

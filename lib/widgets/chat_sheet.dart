@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/chat_history_service.dart';
 import '../services/chat_service.dart';
 import '../theme/app_theme.dart';
@@ -16,6 +17,7 @@ Future<void> showChatSheet(
   required String emptyStateHint,
   required Future<ChatService> Function() createChatService,
   required String threadKey,
+  List<String> suggestedQuestions = const [],
 }) {
   return showModalBottomSheet(
     context: context,
@@ -26,6 +28,7 @@ Future<void> showChatSheet(
       emptyStateHint: emptyStateHint,
       createChatService: createChatService,
       threadKey: threadKey,
+      suggestedQuestions: suggestedQuestions,
     ),
   );
 }
@@ -35,6 +38,7 @@ class ChatSheet extends StatefulWidget {
   final String emptyStateHint;
   final Future<ChatService> Function() createChatService;
   final String threadKey;
+  final List<String> suggestedQuestions;
 
   const ChatSheet({
     super.key,
@@ -42,6 +46,7 @@ class ChatSheet extends StatefulWidget {
     required this.emptyStateHint,
     required this.createChatService,
     required this.threadKey,
+    this.suggestedQuestions = const [],
   });
 
   @override
@@ -100,8 +105,8 @@ class _ChatSheetState extends State<ChatSheet> {
     super.dispose();
   }
 
-  Future<void> _send() async {
-    final text = _inputController.text.trim();
+  Future<void> _send({String? overrideText}) async {
+    final text = overrideText ?? _inputController.text.trim();
     if (text.isEmpty || _isSending || _chatService == null) return;
 
     setState(() {
@@ -256,10 +261,34 @@ class _ChatSheetState extends State<ChatSheet> {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Text(
-          widget.emptyStateHint,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.emptyStateHint,
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            if (widget.suggestedQuestions.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.suggestedQuestions.map((q) {
+                  return ActionChip(
+                    label: Text(q, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: AppTheme.surface,
+                    side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.3)),
+                    labelStyle: const TextStyle(color: AppTheme.textPrimary),
+                    onPressed:
+                        (_isSending || _isInitializing) ? null : () => _send(overrideText: q),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -279,15 +308,70 @@ class _ChatSheetState extends State<ChatSheet> {
           color: isUser ? AppTheme.gold : AppTheme.surface,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Text(
+        child: _formattedMessageText(
           message.text,
-          style: TextStyle(
-            color: isUser ? const Color(0xFF0E1A2B) : AppTheme.textPrimary,
-            fontSize: 13,
-          ),
+          color: isUser ? const Color(0xFF0E1A2B) : AppTheme.textPrimary,
         ),
       ),
     );
+  }
+
+  /// The model replies in lightweight markdown (**bold**, "* " bullet
+  /// lines) since that's how Gemini naturally formats structured
+  /// answers. Rendering it as plain text left the raw asterisks visible,
+  /// which looked broken rather than intentional — this turns it into
+  /// actual bold spans and bullet characters instead. Only bold + bullets
+  /// are handled (not italics, links, headers, etc.) since that covers
+  /// everything the chat prompts' reply style actually produces.
+  Widget _formattedMessageText(String text, {required Color color}) {
+    final baseStyle = GoogleFonts.inter(color: color, fontSize: 13, height: 1.4);
+    final lines = text.split('\n');
+
+    return RichText(
+      text: TextSpan(
+        style: baseStyle,
+        children: [
+          for (var i = 0; i < lines.length; i++) ...[
+            if (i > 0) const TextSpan(text: '\n'),
+            ..._parseInlineBold(_stripBulletMarker(lines[i]), baseStyle),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Turns a leading "* " or "- " (Markdown's plain bullet syntax) into
+  /// a proper bullet character, so lists don't show the literal marker.
+  String _stripBulletMarker(String line) {
+    final trimmed = line.trimLeft();
+    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+      final indent = line.substring(0, line.length - trimmed.length);
+      return '$indent• ${trimmed.substring(2)}';
+    }
+    return line;
+  }
+
+  /// Splits `**bold**` segments out of [line] into bold TextSpans,
+  /// leaving everything else in [baseStyle].
+  List<TextSpan> _parseInlineBold(String line, TextStyle baseStyle) {
+    final pattern = RegExp(r'\*\*(.+?)\*\*');
+    final spans = <TextSpan>[];
+    var lastEnd = 0;
+
+    for (final match in pattern.allMatches(line)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: line.substring(lastEnd, match.start)));
+      }
+      spans.add(TextSpan(
+        text: match.group(1),
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ));
+      lastEnd = match.end;
+    }
+    if (lastEnd < line.length) {
+      spans.add(TextSpan(text: line.substring(lastEnd)));
+    }
+    return spans;
   }
 
   Widget _inputBar() {

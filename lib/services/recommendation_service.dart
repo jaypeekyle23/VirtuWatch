@@ -45,6 +45,30 @@ class WatchRecommendation {
   });
 
   int get matchPercent => (combinedScore * 100).round();
+
+  /// How many of the three signals (fit, color, style) actually
+  /// contributed to [combinedScore]. A high percentage built from only
+  /// one signal is real, but it's a much weaker claim than the same
+  /// percentage built from all three — this exists so the UI and the
+  /// chatbot can say so honestly instead of showing a bare "100%" that
+  /// implies more confidence than the data actually supports.
+  int get signalCount =>
+      [fitScore, colorScore, styleScore].where((s) => s != null).length;
+
+  /// Human-readable caveat for the match score, or null when all three
+  /// signals are present (full confidence, no caveat needed).
+  String? get confidenceNote {
+    final activeSignals = [
+      if (fitScore != null) 'fit',
+      if (colorScore != null) 'color',
+      if (styleScore != null) 'style',
+    ];
+    if (activeSignals.isEmpty) {
+      return 'No match data yet — complete your profile for real scoring';
+    }
+    if (activeSignals.length == 3) return null;
+    return 'Based on ${activeSignals.join(' & ')} only';
+  }
 }
 
 /// Result of a recommendation request, bundling the ranked watches with

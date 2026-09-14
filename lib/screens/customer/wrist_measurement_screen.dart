@@ -85,7 +85,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
       _handPlugin = HandLandmarkerPlugin.create(
         numHands: 1,
         minHandDetectionConfidence: 0.6,
-        delegate: HandLandmarkerDelegate.gpu,
+        delegate: HandLandmarkerDelegate.cpu,
       );
 
       await _cameraController!.initialize();
@@ -232,15 +232,28 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _captureErrorTimer?.cancel();
-    _handSub?.cancel();
-    _cameraController?.stopImageStream();
-    _cameraController?.dispose();
-    _handPlugin?.dispose();
-    super.dispose();
+@override
+void dispose() {
+  _captureErrorTimer?.cancel();
+  _handSub?.cancel();
+
+  final controller = _cameraController;
+  final handPlugin = _handPlugin;
+  _cameraController = null;
+  _handPlugin = null;
+
+  if (controller != null && controller.value.isStreamingImages) {
+    controller.stopImageStream().whenComplete(() {
+      controller.dispose();
+      handPlugin?.dispose();
+    });
+  } else {
+    controller?.dispose();
+    handPlugin?.dispose();
   }
+
+  super.dispose();
+}
 
   /// Sets (or clears) the capture error banner. Non-null messages
   /// auto-dismiss after 5 seconds so the banner doesn't linger over the

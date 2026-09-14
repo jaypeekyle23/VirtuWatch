@@ -19,19 +19,35 @@ class _CustomerShellState extends State<CustomerShell> {
 
   @override
   Widget build(BuildContext context) {
-    final tabs = [
+    // Only the four tabs below are kept alive via IndexedStack — none of
+    // them own a camera, so preserving their state (scroll position etc.)
+    // in the background is fine.
+    //
+    // AR Try-On (index 2) is deliberately NOT in this list. It opens a
+    // real camera + MediaPipe hand-tracking pipeline in initState(), so
+    // it must only exist in the widget tree while it's the active tab —
+    // otherwise it starts the camera the moment Home loads and keeps it
+    // running the whole time you're using the app. It's built fresh
+    // below only when _currentIndex == 2, and fully removed (which runs
+    // its dispose(), stopping the camera) the moment you switch away.
+    final persistentTabs = [
       CustomerHomeTab(username: widget.username),
       const CustomerCatalogTab(),
-      const ArTryOnScreen(),
       const RecommendedForYouScreen(),
       const CustomerProfileTab(),
     ];
+    // Map the 5-tab _currentIndex onto the 4-tab persistentTabs list,
+    // skipping index 2 (AR Try-On).
+    final persistentIndex =
+        _currentIndex < 2 ? _currentIndex : _currentIndex - 1;
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: tabs,
-      ),
+      body: _currentIndex == 2
+          ? const ArTryOnScreen()
+          : IndexedStack(
+              index: persistentIndex,
+              children: persistentTabs,
+            ),
       bottomNavigationBar: SizedBox(
         height: 72,
         child: Stack(

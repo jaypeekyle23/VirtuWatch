@@ -578,12 +578,23 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                         ),
                         if (budgetLabel != null) ...[
                           const SizedBox(width: 6),
-                          Text(
-                            '· $budgetLabel',
-                            style: TextStyle(
-                              color: budgetColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
+                          // Flexible + ellipsis: "Below your budget" is
+                          // long enough that priceLabel + this combined
+                          // can exceed the row's available width (e.g.
+                          // on a brand-new account with no fit/style
+                          // data shortening everything else above this
+                          // row) — without this it throws a RenderFlex
+                          // overflow instead of just truncating.
+                          Flexible(
+                            child: Text(
+                              '· $budgetLabel',
+                              style: TextStyle(
+                                color: budgetColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -592,20 +603,43 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: matchColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '$match%',
-                style: TextStyle(
-                  color: matchColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: matchColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$match%',
+                    style: TextStyle(
+                      color: matchColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-              ),
+                if (rec.confidenceNote != null) ...[
+                  const SizedBox(height: 3),
+                  SizedBox(
+                    width: 90,
+                    child: Text(
+                      rec.confidenceNote!,
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 9,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ),

@@ -48,6 +48,14 @@ dependencies:
   google_mlkit_subject_segmentation: ^0.0.3
   camera: ^0.12.1
   hand_landmarker: ^3.0.0
+  # AR try-on: renders merchant-uploaded .glb/.gltf watch models, driven
+  # frame-by-frame by hand_landmarker output (see ArAnchorService).
+  # Pin exact versions after `flutter pub get` resolves them once —
+  # check pub.dev for the latest three_js / three_js_advanced_loaders
+  # releases, this package churns its API between versions.
+  three_js: ^0.2.7
+  three_js_advanced_loaders: ^0.2.5
+  path_provider: ^2.1.4
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -100,7 +100,22 @@ class CloudinaryService {
       final responseBody = await response.stream.bytesToString();
 
       if (response.statusCode != 200) {
-        throw 'Model upload failed (${response.statusCode}). Please try again.';
+        // Cloudinary's actual reason lives in the response body
+        // (data['error']['message']) — surfacing it instead of just the
+        // status code is the difference between "something broke" and
+        // "here's exactly what to fix in the preset/console".
+        String reason = 'HTTP ${response.statusCode}';
+        try {
+          final errorData = jsonDecode(responseBody) as Map<String, dynamic>;
+          final message = (errorData['error'] as Map?)?['message'] as String?;
+          if (message != null && message.isNotEmpty) reason = message;
+        } catch (_) {
+          // Body wasn't JSON (or didn't match the expected shape) —
+          // fall back to the raw status code above.
+        }
+        // ignore: avoid_print
+        print('Cloudinary model upload failed: $reason\nBody: $responseBody');
+        throw 'Model upload failed: $reason';
       }
 
       final data = jsonDecode(responseBody) as Map<String, dynamic>;

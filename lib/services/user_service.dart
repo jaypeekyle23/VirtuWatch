@@ -115,4 +115,32 @@ class UserService {
     }
     return _users.doc(uid).snapshots();
   }
+
+  /// Fetches brief data (name, brand, price, style) for the current
+  /// user's saved/wishlist watches — used to give the AI chat assistant
+  /// context on what the customer has already shown interest in,
+  /// without pulling in full specs for every saved watch.
+  Future<List<Map<String, dynamic>>> fetchSavedWatchesBrief() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return [];
+
+    final userDoc = await _users.doc(uid).get();
+    final savedIds =
+        (userDoc.data()?['savedWatches'] as List?)?.cast<String>() ?? [];
+    if (savedIds.isEmpty) return [];
+
+    final docs = await Future.wait(
+      savedIds.map((id) => _firestore.collection('watches').doc(id).get()),
+    );
+
+    return docs
+        .where((doc) => doc.exists)
+        .map((doc) => {
+              'name': doc.data()?['name'],
+              'brand': doc.data()?['brand'],
+              'price': doc.data()?['price'],
+              'styleCategory': doc.data()?['styleCategory'],
+            })
+        .toList();
+  }
 }
