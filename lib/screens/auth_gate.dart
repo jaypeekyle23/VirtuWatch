@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+import 'onboarding_screen.dart';
 import 'customer/customer_shell.dart';
 import 'merchant/merchant_shell.dart';
 import 'admin/admin_shell.dart';
@@ -15,6 +17,11 @@ import 'admin/admin_shell.dart';
 /// [AuthService.fetchCurrentUserProfile] and routes straight to the
 /// right role's shell when it finds one, falling back to [LoginScreen]
 /// otherwise (no session, or the session failed re-validation).
+///
+/// On a genuine first launch (before that check even runs) it shows
+/// [OnboardingScreen] instead — a one-time, on-device flag (see
+/// [onboardingSeenPrefsKey]) tracks whether that's already happened,
+/// independent of whether anyone is signed in.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
@@ -25,15 +32,40 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   final _authService = AuthService();
   late final Future<Map<String, dynamic>?> _profileFuture;
+  bool? _hasSeenOnboarding;
 
   @override
   void initState() {
     super.initState();
     _profileFuture = _authService.fetchCurrentUserProfile();
+    _loadOnboardingFlag();
+  }
+
+  Future<void> _loadOnboardingFlag() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _hasSeenOnboarding = prefs.getBool(onboardingSeenPrefsKey) ?? false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_hasSeenOnboarding == null) {
+      return const Scaffold(
+        backgroundColor: AppTheme.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.gold),
+        ),
+      );
+    }
+
+    if (!_hasSeenOnboarding!) {
+      return OnboardingScreen(
+        onDone: () => setState(() => _hasSeenOnboarding = true),
+      );
+    }
+
     return FutureBuilder<Map<String, dynamic>?>(
       future: _profileFuture,
       builder: (context, snapshot) {

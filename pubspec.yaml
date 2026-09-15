@@ -56,6 +56,10 @@ dependencies:
   three_js: ^0.2.7
   three_js_advanced_loaders: ^0.2.5
   path_provider: ^2.1.4
+  # Persists a "seen onboarding" flag across app restarts (see
+  # OnboardingScreen / AuthGate) — plain key-value, not Firestore, since
+  # this is a per-device UI preference, not user account data.
+  shared_preferences: ^2.3.3
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -80,6 +84,7 @@ flutter:
 
   assets:
     - assets/icons/google_logo.svg
+    - assets/images/onboarding/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
