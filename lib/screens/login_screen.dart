@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'register_screen.dart';
@@ -178,44 +179,41 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 16),
-                Center(
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.gold, width: 1.5),
-                    ),
-                    child: const Icon(
-                      Icons.watch_outlined,
-                      color: AppTheme.gold,
-                      size: 28,
-                    ),
-                  ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 32),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 64,
                 ),
-                const SizedBox(height: 12),
-                Center(
-                  child: Text(
-                    'VirtuWatch',
-                    style: TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 14,
-                      letterSpacing: 2,
+                child: IntrinsicHeight(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                const SizedBox(height: 24),
+                RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.bodoniModa(
+                      fontSize: 36,
+                      height: 1.0,
                       fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: AppTheme.gold,
                     ),
+                    children: const [
+                      TextSpan(text: 'VirtuWatch'),
+                      TextSpan(text: '.', style: TextStyle(color: AppTheme.textPrimary)),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 28),
                 Text(
-                  'Welcome Back',
+                  'Welcome Back.',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 6),
@@ -384,8 +382,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ],
-            ),
-          ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

@@ -111,7 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 6),
                 Center(
                   child: Text(
-                    'Start your virtual try-on experience',
+                    'Start your virtual try-on experience!',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),

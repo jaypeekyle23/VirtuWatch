@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import 'customer_catalog_tab.dart';
@@ -50,13 +51,22 @@ class CustomerHomeTab extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'VirtuWatch',
-                    style: TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+                  RichText(
+                    text: TextSpan(
+                      style: GoogleFonts.bodoniModa(
+                        fontSize: 22,
+                        height: 1.0,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                        color: AppTheme.gold,
+                      ),
+                      children: const [
+                        TextSpan(text: 'VirtuWatch'),
+                        TextSpan(
+                          text: '.',
+                          style: TextStyle(color: AppTheme.textPrimary),
+                        ),
+                      ],
                     ),
                   ),
                   InkWell(
@@ -144,15 +154,28 @@ class CustomerHomeTab extends StatelessWidget {
                         ],
                       ),
                     ),
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.gold, width: 1.5),
+                    Material(
+                      color: AppTheme.gold,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ArTryOnScreen(),
+                            ),
+                          );
+                        },
+                        child: const SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: Icon(
+                            Icons.watch_outlined,
+                            color: Color(0xFF0E1A2B),
+                            size: 26,
+                          ),
+                        ),
                       ),
-                      child: const Icon(Icons.watch_outlined,
-                          color: AppTheme.gold, size: 26),
                     ),
                   ],
                 ),
