@@ -85,6 +85,7 @@ flutter:
   assets:
     - assets/icons/google_logo.svg
     - assets/images/onboarding/
+    - assets/images/branding/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

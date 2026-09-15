@@ -20,92 +20,106 @@ class VersionInfoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Version Info')),
+      appBar: AppBar(
+        title: const Text('Version Info'),
+      ),
       body: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.gold, width: 1.5),
-                ),
-                child: const Icon(
-                  Icons.watch_outlined,
-                  color: AppTheme.gold,
-                  size: 32,
+            // Logo
+            Transform.translate(
+              offset: const Offset(0, -120),
+              child: Center(
+                child: Image.asset(
+                  'assets/images/branding/logo.png',
+                  height: 350,
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                'VirtuWatch',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Center(
-              child: Text(
-                'Version $_versionName ($_buildNumber)',
-                style:
-                    const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-              ),
-            ),
-            const SizedBox(height: 28),
 
-            _sectionCard(
-              title: 'Build Details',
+            // Everything below the logo
+            Transform.translate(
+              offset: const Offset(0, -220),
               child: Column(
-                children: const [
-                  _InfoRow(label: 'Version', value: _versionName),
-                  _InfoRow(label: 'Build Number', value: _buildNumber),
-                  _InfoRow(
-                    label: 'Release',
-                    value: 'Initial Capstone Release',
-                    isLast: true,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            _sectionCard(
-              title: "What's Included",
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _ReleaseNote(
-                    text:
-                        'Customer, Merchant, and Admin accounts with role-based access',
+                  Center(
+                    child: Text(
+                      'Version $_versionName ($_buildNumber)',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
-                  _ReleaseNote(
-                    text: 'Full watch catalog with search, filters, and sorting',
+                  const SizedBox(height: 28),
+
+                  _sectionCard(
+                    title: 'Build Details',
+                    child: Column(
+                      children: const [
+                        _InfoRow(
+                          label: 'Version',
+                          value: _versionName,
+                        ),
+                        _InfoRow(
+                          label: 'Build Number',
+                          value: _buildNumber,
+                        ),
+                        _InfoRow(
+                          label: 'Release',
+                          value: 'Initial Capstone Release',
+                          isLast: true,
+                        ),
+                      ],
+                    ),
                   ),
-                  _ReleaseNote(
-                    text:
-                        'Outfit color scanning and fit/color/style-based watch recommendations',
+                  const SizedBox(height: 16),
+
+                  _sectionCard(
+                    title: "What's Included",
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _ReleaseNote(
+                          text:
+                              'Customer, Merchant, and Admin accounts with role-based access',
+                        ),
+                        _ReleaseNote(
+                          text:
+                              'Full watch catalog with search, filters, and sorting',
+                        ),
+                        _ReleaseNote(
+                          text:
+                              'Outfit color scanning and fit/color/style-based watch recommendations',
+                        ),
+                        _ReleaseNote(
+                          text:
+                              'Merchant tools to list, edit, and manage watches',
+                        ),
+                        _ReleaseNote(
+                          text:
+                              'Admin dashboard for account, role, and catalog oversight',
+                        ),
+                      ],
+                    ),
                   ),
-                  _ReleaseNote(
-                    text: 'Merchant tools to list, edit, and manage watches',
-                  ),
-                  _ReleaseNote(
-                    text:
-                        'Admin dashboard for account, role, and catalog oversight',
+                  const SizedBox(height: 20),
+
+                  Center(
+                    child: Text(
+                      '© 2026 VirtuWatch. All rights reserved.',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            Center(
-              child: Text(
-                '© 2026 VirtuWatch. All rights reserved.',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               ),
             ),
           ],
@@ -114,7 +128,10 @@ class VersionInfoScreen extends StatelessWidget {
     );
   }
 
-  Widget _sectionCard({required String title, required Widget child}) {
+  Widget _sectionCard({
+    required String title,
+    required Widget child,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -156,13 +173,18 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+      padding: EdgeInsets.only(
+        bottom: isLast ? 0 : 10,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -185,7 +207,9 @@ class _InfoRow extends StatelessWidget {
 class _ReleaseNote extends StatelessWidget {
   final String text;
 
-  const _ReleaseNote({required this.text});
+  const _ReleaseNote({
+    required this.text,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +218,11 @@ class _ReleaseNote extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check_circle_outline, color: AppTheme.gold, size: 18),
+          const Icon(
+            Icons.check_circle_outline,
+            color: AppTheme.gold,
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
