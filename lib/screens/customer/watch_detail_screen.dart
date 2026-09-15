@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../services/recommendation_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/watch_chat_sheet.dart';
@@ -22,12 +23,16 @@ class WatchDetailScreen extends StatefulWidget {
 
 class _WatchDetailScreenState extends State<WatchDetailScreen> {
   final _userService = UserService();
+  final _recommendationService = RecommendationService();
 
   // VirtuWatch doesn't process purchases in-app — Urbane Time handles
   // inquiries and sales themselves, so every watch routes here regardless
   // of which merchant listed it.
   static final Uri _urbaneTimeFacebookUrl =
       Uri.parse('https://www.facebook.com/urbanetime');
+
+  WatchRecommendation? _match;
+  bool _loadingMatch = true;
 
   @override
   void initState() {
@@ -36,6 +41,23 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
     // "Recently Viewed" section and should never block or interrupt
     // someone looking at a watch's details, so failures are swallowed.
     _userService.recordRecentlyViewed(widget.watchId).catchError((_) {});
+    _loadMatch();
+  }
+
+  Future<void> _loadMatch() async {
+    try {
+      final rec = await _recommendationService.scoreWatch(
+        watchId: widget.watchId,
+        data: widget.data,
+      );
+      if (mounted) setState(() => _match = rec);
+    } catch (_) {
+      // Match card is a nice-to-have, not core to viewing the watch — if
+      // scoring fails (e.g. offline), just hide it rather than showing an
+      // error over the whole screen.
+    } finally {
+      if (mounted) setState(() => _loadingMatch = false);
+    }
   }
 
   Future<void> _inquireViaFacebook(BuildContext context) async {
@@ -194,24 +216,74 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  if (style.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        style.toUpperCase(),
-                        style: const TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (_match?.fitScore != null && _match!.fitScore! >= 0.8)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle,
+                                  color: Colors.greenAccent, size: 13),
+                              SizedBox(width: 4),
+                              Text(
+                                'RECOMMENDED FIT',
+                                style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (style.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surface,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            style.toUpperCase(),
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (_loadingMatch)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 16),
+                      child: SizedBox(
+                        height: 88,
+                        child: Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
                         ),
                       ),
-                    ),
-                  const SizedBox(height: 24),
+                    )
+                  else if (_match != null) ...[
+                    _matchCard(_match!),
+                    const SizedBox(height: 16),
+                  ],
 
                   Text(
                     'Specifications',
@@ -315,6 +387,155 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
         ),
       ),
     );
+  }
+
+  /// The "AI Style Match" card: shows [rec]'s combined match score plus
+  /// which signals (fit/style/color) actually contributed to it, so the
+  /// percentage never implies more confidence than the data supports.
+  Widget _matchCard(WatchRecommendation rec) {
+    final match = rec.matchPercent;
+    final matchColor = match >= 90
+        ? Colors.greenAccent
+        : match >= 80
+            ? AppTheme.gold
+            : Colors.orangeAccent;
+
+    final activeSignals = [
+      if (rec.fitScore != null) 'fit',
+      if (rec.styleScore != null) 'style',
+      if (rec.colorScore != null) 'color',
+    ];
+    final subtitle = activeSignals.isEmpty
+        ? 'Complete your profile for a personalized match score'
+        : 'Based on your ${_joinWithAnd(activeSignals)} ${activeSignals.length == 1 ? 'preference' : 'preferences'}';
+
+    final hasOutfitColor = rec.colorScore != null;
+    final colorMatches = hasOutfitColor && rec.colorScore! >= 0.65;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.gold.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.gold.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'AI STYLE MATCH',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$match%',
+                      style: TextStyle(
+                        color: matchColor,
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: CircularProgressIndicator(
+                        value: rec.combinedScore,
+                        strokeWidth: 5,
+                        backgroundColor: matchColor.withValues(alpha: 0.15),
+                        valueColor: AlwaysStoppedAnimation(matchColor),
+                      ),
+                    ),
+                    Text(
+                      '$match%',
+                      style: TextStyle(
+                        color: matchColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (rec.confidenceNote != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              rec.confidenceNote!,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(
+                hasOutfitColor
+                    ? (colorMatches
+                        ? Icons.check_box
+                        : Icons.indeterminate_check_box)
+                    : Icons.check_box_outline_blank,
+                size: 16,
+                color: hasOutfitColor
+                    ? (colorMatches ? Colors.greenAccent : Colors.orangeAccent)
+                    : AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                hasOutfitColor
+                    ? (rec.colorNote ?? 'Outfit color compared')
+                    : 'Outfit color match — scan an outfit to compare',
+                style: TextStyle(
+                  color: hasOutfitColor
+                      ? AppTheme.textPrimary
+                      : AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _joinWithAnd(List<String> items) {
+    if (items.length <= 1) return items.join();
+    return '${items.sublist(0, items.length - 1).join(', ')} & ${items.last}';
   }
 
   Widget _specRow(String label, String value, {bool isLast = false}) {

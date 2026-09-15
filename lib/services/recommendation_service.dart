@@ -133,6 +133,63 @@ class RecommendationService {
   // color distance into a 0.0–1.0 similarity score.
   static const double _maxRgbDistance = 441.67; // sqrt(255^2 * 3)
 
+  /// Loads the current user's profile fields relevant to scoring. Shared
+  /// by [getRecommendations] (scoring the whole catalog) and [scoreWatch]
+  /// (scoring a single watch, e.g. for the detail screen) so both stay
+  /// consistent with exactly the same profile data.
+  Future<
+      ({
+        double? wristWidthMm,
+        List<String> stylePreferences,
+        List<Map<String, dynamic>> outfitColors,
+        double budgetMin,
+        double budgetMax,
+      })> _loadProfile(String uid) async {
+    final userDoc = await _firestore.collection('users').doc(uid).get();
+    final userData = userDoc.data() ?? {};
+    return (
+      wristWidthMm: (userData['wristWidthMm'] as num?)?.toDouble(),
+      stylePreferences:
+          (userData['stylePreferences'] as List?)?.cast<String>() ?? [],
+      outfitColors: (userData['outfitColors'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          [],
+      budgetMin: (userData['budgetMin'] as num?)?.toDouble() ?? 5000,
+      budgetMax: (userData['budgetMax'] as num?)?.toDouble() ?? 50000,
+    );
+  }
+
+  /// Scores a single watch against the current user's profile — used by
+  /// [WatchDetailScreen] to show a match percentage without pulling the
+  /// entire catalog. Returns a zero-signal [WatchRecommendation] (no fit/
+  /// color/style data) when no user is signed in, same as
+  /// [getRecommendations] would for that watch.
+  Future<WatchRecommendation> scoreWatch({
+    required String watchId,
+    required Map<String, dynamic> data,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return _score(
+        watchId: watchId,
+        data: data,
+        wristWidthMm: null,
+        stylePreferences: const [],
+        outfitColors: const [],
+      );
+    }
+
+    final profile = await _loadProfile(uid);
+    return _score(
+      watchId: watchId,
+      data: data,
+      wristWidthMm: profile.wristWidthMm,
+      stylePreferences: profile.stylePreferences,
+      outfitColors: profile.outfitColors,
+    );
+  }
+
   Future<RecommendationResult> getRecommendations() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
@@ -146,17 +203,12 @@ class RecommendationService {
       );
     }
 
-    final userDoc = await _firestore.collection('users').doc(uid).get();
-    final userData = userDoc.data() ?? {};
-    final wristWidthMm = (userData['wristWidthMm'] as num?)?.toDouble();
-    final stylePreferences =
-        (userData['stylePreferences'] as List?)?.cast<String>() ?? [];
-    final outfitColors = (userData['outfitColors'] as List?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList() ??
-        [];
-    final budgetMin = (userData['budgetMin'] as num?)?.toDouble() ?? 5000;
-    final budgetMax = (userData['budgetMax'] as num?)?.toDouble() ?? 50000;
+    final profile = await _loadProfile(uid);
+    final wristWidthMm = profile.wristWidthMm;
+    final stylePreferences = profile.stylePreferences;
+    final outfitColors = profile.outfitColors;
+    final budgetMin = profile.budgetMin;
+    final budgetMax = profile.budgetMax;
 
     final watchesSnapshot = await _firestore
         .collection('watches')
