@@ -18,70 +18,10 @@ class MerchantDashboardTab extends StatelessWidget {
     final watchService = WatchService();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Merchant Dashboard'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Center(
-              child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseAuth.instance.currentUser == null
-                    ? null
-                    : FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(FirebaseAuth.instance.currentUser!.uid)
-                        .snapshots(),
-                builder: (context, userSnapshot) {
-                  final liveUsername =
-                      userSnapshot.data?.data()?['username'] as String? ??
-                          username;
-                  final photoUrl =
-                      userSnapshot.data?.data()?['photoUrl'] as String? ?? '';
-                  final initials = liveUsername.isEmpty
-                      ? '?'
-                      : liveUsername
-                          .trim()
-                          .split(' ')
-                          .map((e) => e[0])
-                          .take(2)
-                          .join()
-                          .toUpperCase();
-
-                  return InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MerchantProfileTab(),
-                        ),
-                      );
-                    },
-                    customBorder: const CircleBorder(),
-                    child: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.greenAccent.withValues(alpha: 0.2),
-                      backgroundImage:
-                          photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                      child: photoUrl.isEmpty
-                          ? Text(
-                              initials,
-                              style: const TextStyle(
-                                color: Colors.greenAccent,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            )
-                          : null,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: watchService.myWatches(),
-        builder: (context, snapshot) {
+      body: SafeArea(
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: watchService.myWatches(),
+          builder: (context, snapshot) {
           final docs = snapshot.data?.docs ?? [];
           final totalWatches = docs.length;
           final arReadyCount =
@@ -89,7 +29,7 @@ class MerchantDashboardTab extends StatelessWidget {
           final latestWatches = docs.take(3).toList();
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -104,12 +44,82 @@ class MerchantDashboardTab extends StatelessWidget {
                     final liveUsername =
                         userSnapshot.data?.data()?['username'] as String? ??
                             username;
-                    return Text(
-                      'Welcome, $liveUsername!',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineMedium
-                          ?.copyWith(fontSize: 22),
+                    final photoUrl =
+                        userSnapshot.data?.data()?['photoUrl'] as String? ??
+                            '';
+                    final initials = liveUsername.isEmpty
+                        ? '?'
+                        : liveUsername
+                            .trim()
+                            .split(' ')
+                            .map((e) => e[0])
+                            .take(2)
+                            .join()
+                            .toUpperCase();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 84,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Positioned(
+                                left: -48,
+                                top: -48,
+                                child: Image.asset(
+                                  'assets/images/branding/logo.png',
+                                  height: 180,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const MerchantProfileTab(),
+                                        ),
+                                      );
+                                    },
+                                    customBorder: const CircleBorder(),
+                                    child: CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: Colors.greenAccent
+                                          .withValues(alpha: 0.2),
+                                      backgroundImage: photoUrl.isNotEmpty
+                                          ? NetworkImage(photoUrl)
+                                          : null,
+                                      child: photoUrl.isEmpty
+                                          ? Text(
+                                              initials,
+                                              style: const TextStyle(
+                                                color: Colors.greenAccent,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Welcome, $liveUsername!',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(fontSize: 22),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -273,6 +283,7 @@ class MerchantDashboardTab extends StatelessWidget {
             ),
           );
         },
+        ),
       ),
     );
   }

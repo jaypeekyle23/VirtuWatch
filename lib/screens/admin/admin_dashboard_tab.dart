@@ -32,7 +32,7 @@ class AdminDashboardTab extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -62,84 +62,93 @@ class AdminDashboardTab extends StatelessWidget {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'VirtuWatch',
-                                style: TextStyle(
-                                  color: AppTheme.gold,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
+                      SizedBox(
+                        height: 84,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              left: -48,
+                              top: -48,
+                              child: Image.asset(
+                                'assets/images/branding/logo.png',
+                                height: 180,
+                                fit: BoxFit.contain,
                               ),
-                              const Text(
-                                'ADMIN PANEL',
-                                style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.redAccent.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Text(
-                                  'ADMIN',
-                                  style: TextStyle(
-                                    color: Colors.redAccent,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const AdminProfileTab(),
+                            ),
+                            Positioned.fill(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.redAccent
+                                            .withValues(alpha: 0.15),
+                                        borderRadius:
+                                            BorderRadius.circular(20),
+                                      ),
+                                      child: const Text(
+                                        'ADMIN',
+                                        style: TextStyle(
+                                          color: Colors.redAccent,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
-                                  );
-                                },
-                                customBorder: const CircleBorder(),
-                                child: CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor:
-                                      Colors.redAccent.withValues(alpha: 0.2),
-                                  backgroundImage: livePhotoUrl.isNotEmpty
-                                      ? NetworkImage(livePhotoUrl)
-                                      : null,
-                                  child: livePhotoUrl.isEmpty
-                                      ? Text(
-                                          liveInitials,
-                                          style: const TextStyle(
-                                            color: Colors.redAccent,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const AdminProfileTab(),
                                           ),
-                                        )
-                                      : null,
+                                        );
+                                      },
+                                      customBorder: const CircleBorder(),
+                                      child: CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: Colors.redAccent
+                                            .withValues(alpha: 0.2),
+                                        backgroundImage:
+                                            livePhotoUrl.isNotEmpty
+                                                ? NetworkImage(livePhotoUrl)
+                                                : null,
+                                        child: livePhotoUrl.isEmpty
+                                            ? Text(
+                                                liveInitials,
+                                                style: const TextStyle(
+                                                  color: Colors.redAccent,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              )
+                                            : null,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'ADMIN PANEL',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         'Welcome, $liveUsername!',
                         style: Theme.of(context)
