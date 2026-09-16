@@ -1,6 +1,6 @@
 # VirtuWatch
 
-AI-assisted virtual watch try-on and fit-recommendation app, built for Shoe Rock Philippines. Customers can try watches on in AR, get a wrist measurement without a camera, and receive AI-scored recommendations based on fit, color, and style — with a Gemini-backed chat assistant to help them decide.
+AI-assisted virtual watch try-on and fit-recommendation app, built for Urbane Time. Customers can try watches on in AR, get a wrist measurement without a camera, and receive AI-scored recommendations based on fit, color, and style — with a Gemini-backed chat assistant to help them decide.
 
 ## Features
 
