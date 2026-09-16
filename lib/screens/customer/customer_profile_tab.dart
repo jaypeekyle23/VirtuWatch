@@ -174,7 +174,7 @@ class CustomerProfileTab extends StatelessWidget {
                               children: [
                                 Text(
                                   wristWidthMm != null
-                                      ? '${wristWidthMm}mm'
+                                      ? '${wristWidthMm.toStringAsFixed(1)}mm'
                                       : '— mm',
                                   style: const TextStyle(
                                     color: AppTheme.gold,

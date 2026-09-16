@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import 'customer_catalog_tab.dart';
@@ -44,61 +43,60 @@ class CustomerHomeTab extends StatelessWidget {
         return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  RichText(
-                    text: TextSpan(
-                      style: GoogleFonts.bodoniModa(
-                        fontSize: 22,
-                        height: 1.0,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                        color: AppTheme.gold,
+              SizedBox(
+                height: 84,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: -48,
+                      top: -48,
+                      child: Image.asset(
+                        'assets/images/branding/logo.png',
+                        height: 180,
+                        fit: BoxFit.contain,
                       ),
-                      children: const [
-                        TextSpan(text: 'VirtuWatch'),
-                        TextSpan(
-                          text: '.',
-                          style: TextStyle(color: AppTheme.textPrimary),
-                        ),
-                      ],
                     ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const CustomerProfileTab(),
-                        ),
-                      );
-                    },
-                    customBorder: const CircleBorder(),
-                    child: CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppTheme.gold,
-                      backgroundImage:
-                          photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                      child: photoUrl.isEmpty
-                          ? Text(
-                              initials.toUpperCase(),
-                              style: const TextStyle(
-                                color: Color(0xFF0E1A2B),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const CustomerProfileTab(),
                               ),
-                            )
-                          : null,
+                            );
+                          },
+                          customBorder: const CircleBorder(),
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: AppTheme.gold,
+                            backgroundImage: photoUrl.isNotEmpty
+                                ? NetworkImage(photoUrl)
+                                : null,
+                            child: photoUrl.isEmpty
+                                ? Text(
+                                    initials.toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Color(0xFF0E1A2B),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
-
+              const SizedBox(height: 4),
               Text(
                 '$_greeting, $liveUsername!',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(

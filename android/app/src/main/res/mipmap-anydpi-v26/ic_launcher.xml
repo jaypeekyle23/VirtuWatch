@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon (Android 8.0 / API 26+): tells the launcher exactly how
+     to mask and composite the icon, instead of it auto-generating a white
+     circular backplate around our flat square PNG (which is what was
+     causing the white background + blur before this existed). -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/launch_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

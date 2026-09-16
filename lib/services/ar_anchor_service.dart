@@ -51,7 +51,7 @@ class ArAnchorService {
   ///
   /// [caseDiameterMm] is the selected watch's real case size (Firestore
   /// field `caseDiameterMm`); [wristWidthMm] is the user's saved
-  /// measurement (`wristWidthMm`, from WristDetectionService or manual
+  /// measurement (`wristWidthMm`, from screen calibration or manual
   /// entry). If either is missing, [fallbackScale] is used instead so the
   /// watch still renders at a reasonable size rather than not at all.
   ArAnchor? computeAnchor({

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches AppTheme.background in lib/theme/app_theme.dart, so the
+         native splash doesn't flash a different color than the app itself. -->
+    <color name="launch_background">#0E1A2B</color>
+</resources>
