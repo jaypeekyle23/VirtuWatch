@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/match_score_color.dart';
 import '../../widgets/watch_chat_sheet.dart';
 import 'ar_try_on_screen.dart';
 
@@ -394,11 +395,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
   /// percentage never implies more confidence than the data supports.
   Widget _matchCard(WatchRecommendation rec) {
     final match = rec.matchPercent;
-    final matchColor = match >= 90
-        ? Colors.greenAccent
-        : match >= 80
-            ? AppTheme.gold
-            : Colors.orangeAccent;
+    final matchColor = matchScoreColor(match);
 
     final activeSignals = [
       if (rec.fitScore != null) 'fit',

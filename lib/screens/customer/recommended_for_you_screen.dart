@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../constants/watch_colors.dart';
 import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/match_score_color.dart';
 import '../../widgets/recommendations_chat_sheet.dart';
 import 'edit_profile_screen.dart';
 import 'outfit_scan_screen.dart';
@@ -144,7 +145,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
               icon: const Icon(Icons.chat_bubble_outline,
                   color: Color(0xFF0E1A2B)),
               label: const Text(
-                'Ask VirtuWatch',
+                'Ask VirtuWatch AI',
                 style: TextStyle(
                   color: Color(0xFF0E1A2B),
                   fontWeight: FontWeight.bold,
@@ -181,8 +182,15 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                             letterSpacing: 0.5,
                           ),
                         ),
-                        const Icon(Icons.info_outline,
-                            color: AppTheme.textSecondary, size: 16),
+                        InkWell(
+                          onTap: () => _showBasedOnInfo(context),
+                          borderRadius: BorderRadius.circular(20),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.info_outline,
+                                color: AppTheme.textSecondary, size: 16),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -392,6 +400,62 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     );
   }
 
+  void _showBasedOnInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'How Your Matches Are Scored',
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _InfoRow(
+              icon: Icons.straighten_outlined,
+              title: 'Wrist Fit',
+              body:
+                  'Compares your measured wrist width against each watch\'s '
+                  'lug-to-lug size to estimate how it will sit on your wrist.',
+            ),
+            SizedBox(height: 12),
+            _InfoRow(
+              icon: Icons.checkroom_outlined,
+              title: 'Outfit Color',
+              body:
+                  'Matches the colors from your most recent outfit scan '
+                  'against each watch\'s color.',
+            ),
+            SizedBox(height: 12),
+            _InfoRow(
+              icon: Icons.style_outlined,
+              title: 'Style Preference',
+              body:
+                  'Matches your saved style preferences against each '
+                  'watch\'s style category.',
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Missing a signal (e.g. no wrist measurement yet) just means '
+              'that part is skipped — your match % is calculated from '
+              'whichever signals you do have.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it', style: TextStyle(color: AppTheme.gold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _basisChip(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -449,11 +513,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     required double budgetMax,
   }) {
     final match = rec.matchPercent;
-    final matchColor = match >= 90
-        ? Colors.greenAccent
-        : match >= 80
-            ? AppTheme.gold
-            : Colors.orangeAccent;
+    final matchColor = matchScoreColor(match);
 
     final data = rec.data;
     final brand = (data['brand'] as String? ?? '').toUpperCase();
@@ -644,6 +704,54 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A single icon + title + body row used inside the "How Your Matches
+/// Are Scored" info dialog.
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+
+  const _InfoRow({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: AppTheme.gold, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                body,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

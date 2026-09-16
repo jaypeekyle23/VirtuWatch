@@ -5,10 +5,11 @@ import '../../services/auth_service.dart';
 import '../../services/screen_calibration_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/edge_match_guide.dart';
+import '../../widgets/offset_stepper_control.dart';
 import 'screen_calibration_screen.dart';
 
 /// Plausible adult wrist width range in millimeters — mirrors the manual
-/// entry validation range, used here to bound the slider and the default
+/// entry validation range, used here to bound the step control and the default
 /// starting guess.
 const double _minPlausibleMm = 30;
 const double _maxPlausibleMm = 120;
@@ -35,8 +36,9 @@ double _clampD(double value, double min, double max) {
 ///
 /// This screen sidesteps the whole problem: the user rests their wrist
 /// above or below the phone, lines its near edge up with a fixed
-/// reference line, and drags a slider to move a second line down until
-/// it matches the wrist's far edge — a direct physical comparison, zero
+/// reference line, and moves a second line down (via step buttons or a
+/// drag slider — both are offered, see the toggle in [_buildMeasurementUi])
+/// until it matches the wrist's far edge — a direct physical comparison, zero
 /// camera, zero distance ambiguity. The only unknown is how many real
 /// millimeters correspond to one logical pixel on this specific device's
 /// screen, which [ScreenCalibrationScreen] measures once, empirically,
@@ -47,7 +49,7 @@ double _clampD(double value, double min, double max) {
 /// HONEST LIMITATION: this doesn't eliminate measurement error, it
 /// relocates it. Instead of camera/lighting/edge-detection error, accuracy
 /// now depends on how precisely someone can align their wrist against the
-/// reference line and drag a slider by eye. That's a more forgiving and
+/// reference line by eye. That's a more forgiving and
 /// consistent failure mode than the camera approach (no lighting or
 /// distance dependency), but it is not perfectly precise — worth stating
 /// plainly rather than overselling it.
@@ -66,6 +68,14 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
   double? _mmPerPixel;
   double _offsetPx = 0;
   bool _checkingCalibration = true;
+  // Buttons are the default since they're markedly more resistant to
+  // some phones' palm-rejection filtering kicking in while a wrist rests
+  // on the screen (see OffsetStepperControl's doc comment). Whether
+  // that filtering actually happens is device/firmware-specific, so the
+  // drag slider stays available as an opt-in for anyone whose device
+  // never had the problem in the first place — it's the same slider
+  // that caused the original issue, not a fixed version of it.
+  bool _useDragSlider = false;
 
   @override
   void initState() {
@@ -240,8 +250,9 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
           'VirtuWatch measures your wrist by direct comparison against '
           'your screen — no camera needed.\n\n'
           'Rest your wrist above or below your phone, line its near edge '
-          'up with the top line, then drag the slider until the bottom '
-          'line matches your wrist\'s far edge.\n\n'
+          'up with the top line, then adjust the second line (with the '
+          'step buttons or the drag slider — whichever works better on '
+          'your phone) until it matches your wrist\'s far edge.\n\n'
           'This works because your screen was calibrated once against a '
           'real card, so VirtuWatch knows exactly how many real '
           'millimeters each on-screen pixel represents on this specific '
@@ -321,120 +332,213 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
 
   Widget _buildMeasurementUi(BuildContext context) {
     final mmPerPixel = _mmPerPixel!;
+    // Hard floor: the guide must always be able to show at least 60mm
+    // of gap, regardless of how much room the rest of the screen's
+    // content (instructions, mode toggle, buttons, saved-value panel)
+    // needs. +28 is a buffer for EdgeMatchGuide's own internal top/
+    // bottom insets, so a full 60mm gap actually renders unclipped, not
+    // just fits by the numbers.
+    final minGuidePx = (60 / mmPerPixel) + 28;
+    final minOffsetPx = _minPlausibleMm / mmPerPixel;
+    final maxPlausibleOffsetPx = _maxPlausibleMm / mmPerPixel;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Column(
-        children: [
-          const Text(
-            'Rest your wrist above or below your phone, line its near '
-            'edge up with the top line, then drag the slider until the '
-            'bottom line matches your wrist\'s far edge.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '${_currentMm.toStringAsFixed(1)} mm',
-            style: const TextStyle(
-              color: AppTheme.gold,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final maxOffsetPx = constraints.maxHeight * 0.9;
-                final minOffsetPx = _minPlausibleMm / mmPerPixel;
-                final maxPlausibleOffsetPx = _maxPlausibleMm / mmPerPixel;
-                final effectiveMaxOffsetPx = maxPlausibleOffsetPx > maxOffsetPx
-                    ? maxOffsetPx
-                    : maxPlausibleOffsetPx;
-                final boundedMax = effectiveMaxOffsetPx <= minOffsetPx
-                    ? minOffsetPx + 1
-                    : effectiveMaxOffsetPx;
-                final offsetPx = _clampD(_offsetPx, minOffsetPx, boundedMax);
+    return LayoutBuilder(
+      builder: (context, outer) {
+        // Give the guide as much of the available height as it can,
+        // but never less than the 60mm floor — if the rest of the
+        // content doesn't fit alongside that floor, the page scrolls
+        // instead of the guide silently shrinking below usable size.
+        final roughlyAvailableForGuide = outer.maxHeight - 300;
+        final guideHeight = roughlyAvailableForGuide > minGuidePx
+            ? roughlyAvailableForGuide
+            : minGuidePx;
+        final maxOffsetPxRaw = guideHeight - 28;
+        final maxOffsetPx = maxOffsetPxRaw > maxPlausibleOffsetPx
+            ? maxPlausibleOffsetPx
+            : maxOffsetPxRaw;
+        final boundedMax =
+            maxOffsetPx <= minOffsetPx ? minOffsetPx + 1 : maxOffsetPx;
+        final offsetPx = _clampD(_offsetPx, minOffsetPx, boundedMax);
 
-                return Column(
-                  children: [
-                    Expanded(child: EdgeMatchGuide(offsetPx: offsetPx)),
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: outer.maxHeight),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Rest your wrist above or below your phone, line its '
+                    'near edge up with the top line, then adjust the '
+                    'second line until it matches your wrist\'s far edge.',
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '${_currentMm.toStringAsFixed(1)} mm',
+                    style: const TextStyle(
+                      color: AppTheme.gold,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Buttons'),
+                        selected: !_useDragSlider,
+                        onSelected: (_) =>
+                            setState(() => _useDragSlider = false),
+                        selectedColor: AppTheme.gold.withValues(alpha: 0.25),
+                        backgroundColor: AppTheme.surface,
+                        labelStyle: TextStyle(
+                          color: !_useDragSlider
+                              ? AppTheme.gold
+                              : AppTheme.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        side: BorderSide(
+                          color: !_useDragSlider
+                              ? AppTheme.gold
+                              : AppTheme.textSecondary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Slider (drag)'),
+                        selected: _useDragSlider,
+                        onSelected: (_) =>
+                            setState(() => _useDragSlider = true),
+                        selectedColor: AppTheme.gold.withValues(alpha: 0.25),
+                        backgroundColor: AppTheme.surface,
+                        labelStyle: TextStyle(
+                          color: _useDragSlider
+                              ? AppTheme.gold
+                              : AppTheme.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        side: BorderSide(
+                          color: _useDragSlider
+                              ? AppTheme.gold
+                              : AppTheme.textSecondary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_useDragSlider) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      'If your wrist resting on the screen blocks the '
+                      'slider from moving, switch back to Buttons.',
+                      textAlign: TextAlign.center,
+                      style:
+                          TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: guideHeight,
+                    child: EdgeMatchGuide(offsetPx: offsetPx),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_useDragSlider)
                     Slider(
                       value: offsetPx,
                       min: minOffsetPx,
                       max: boundedMax,
                       activeColor: AppTheme.gold,
                       onChanged: (value) => setState(() => _offsetPx = value),
+                    )
+                  else
+                    OffsetStepperControl(
+                      offsetPx: offsetPx,
+                      minPx: minOffsetPx,
+                      maxPx: boundedMax,
+                      // Fixed real-world step sizes rather than a
+                      // percentage of the plausible range — the range
+                      // varies by device/wrist, but a sensible nudge
+                      // size (fine enough to approach the screen's
+                      // real per-pixel resolution) doesn't.
+                      smallStepPx: 0.2 / mmPerPixel,
+                      largeStepPx: 2.0 / mmPerPixel,
+                      onChanged: (value) => setState(() => _offsetPx = value),
                     ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saveMeasurement,
-              child: const Text('Save Measurement'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () => _showManualEntryDialog(context),
-            style: TextButton.styleFrom(
-              minimumSize: Size.zero,
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              'or enter manually instead',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  _savedWristWidthMm != null
-                      ? '${_savedWristWidthMm!.toStringAsFixed(1)} mm'
-                      : '— mm',
-                  style: const TextStyle(
-                    color: AppTheme.gold,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppTheme.textSecondary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    _savedWristWidthMm != null ? 'SAVED' : 'AWAITING MEASUREMENT',
-                    style: const TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saveMeasurement,
+                      child: const Text('Save Measurement'),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => _showManualEntryDialog(context),
+                    style: TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'or enter manually instead',
+                      style:
+                          TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          _savedWristWidthMm != null
+                              ? '${_savedWristWidthMm!.toStringAsFixed(1)} mm'
+                              : '— mm',
+                          style: const TextStyle(
+                            color: AppTheme.gold,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.textSecondary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _savedWristWidthMm != null
+                                ? 'SAVED'
+                                : 'AWAITING MEASUREMENT',
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -13,7 +13,7 @@ Future<void> showRecommendationsChatSheet(
 }) {
   return showChatSheet(
     context,
-    title: 'Ask VirtuWatch',
+    title: 'Ask VirtuWatch AI',
     emptyStateHint: 'Ask about your recommended watches — "which fits my '
         'budget best?", "compare the top two", or "what should I get for '
         'a formal look?"',

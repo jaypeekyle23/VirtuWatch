@@ -9,9 +9,10 @@ import '../theme/app_theme.dart';
 /// Used identically by screen calibration (matching a card's short edge)
 /// and wrist measurement (matching a wrist's edge): the object rests
 /// above or below the phone, its near edge lined up with the fixed top
-/// line, and the bottom line is dragged (via a Slider the caller
-/// supplies) until it matches the object's far edge. Same interaction,
-/// same widget, so there's only one place this geometry can go wrong.
+/// line, and the bottom line is moved (via an [OffsetStepperControl]
+/// the caller supplies) until it matches the object's far edge. Same
+/// interaction, same widget, so there's only one place this geometry
+/// can go wrong.
 ///
 /// This widget is purely visual — it draws the two lines at the offset
 /// it's given. The caller is responsible for bounding [offsetPx] to

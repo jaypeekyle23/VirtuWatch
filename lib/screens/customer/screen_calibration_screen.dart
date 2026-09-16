@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/screen_calibration_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/edge_match_guide.dart';
+import '../../widgets/offset_stepper_control.dart';
 
 /// Known-size real-world objects the customer can calibrate against.
 /// Diameter for the card is the ISO/IEC 7810 ID-1 standard; the ₱20
@@ -20,7 +21,7 @@ import '../../widgets/edge_match_guide.dart';
 /// only coin offered here, not the smaller/more common denominations.
 ///
 /// Card is still the default: it's the largest option, so the same
-/// small amount of human eye/slider alignment error is a smaller
+/// small amount of human alignment error is a smaller
 /// percentage of the total length being matched.
 enum _ReferenceObject {
   card('Card', 53.98,
@@ -46,12 +47,12 @@ double _clampD(double value, double min, double max) {
 
 /// A one-time, per-device calibration step: the customer lays a real,
 /// known-size object flat above or below the phone, its near edge
-/// aligned with a fixed top reference line, and drags a slider to move
-/// a second line down until it matches the object's far edge. That
-/// single distance reveals exactly how many real millimeters correspond
-/// to one logical pixel on *this* device's screen — see
-/// [ScreenCalibrationService] for why this is necessary instead of
-/// trusting reported device specs.
+/// aligned with a fixed top reference line, and moves a second line
+/// down (via step buttons or a drag slider — both are offered, see
+/// below) until it matches the object's far edge. That single distance
+/// reveals exactly how many real millimeters correspond to one logical
+/// pixel on *this* device's screen — see [ScreenCalibrationService] for
+/// why this is necessary instead of trusting reported device specs.
 ///
 /// A card is the default reference (most precise, since it's the
 /// largest option), with the ₱20 coin offered as the sole alternative
@@ -72,6 +73,10 @@ class ScreenCalibrationScreen extends StatefulWidget {
 class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
   _ReferenceObject _selected = _ReferenceObject.card;
   double? _offsetPx;
+  // Buttons are the default for the same reason as on the wrist
+  // measurement screen — see OffsetStepperControl's doc comment. The
+  // drag slider is an opt-in for devices that never had the problem.
+  bool _useDragSlider = false;
 
   void _selectReference(_ReferenceObject ref) {
     if (ref == _selected) return;
@@ -99,92 +104,166 @@ class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
         title: const Text('Calibrate Your Screen'),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              const Text(
-                'One-time setup, so VirtuWatch knows exactly how big '
-                'things really are on this screen.',
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'WHAT ARE YOU USING?',
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: _ReferenceObject.values.map((ref) {
-                  final isSelected = ref == _selected;
-                  return ChoiceChip(
-                    label: Text(ref.label),
-                    selected: isSelected,
-                    onSelected: (_) => _selectReference(ref),
-                    selectedColor: AppTheme.gold.withValues(alpha: 0.25),
-                    backgroundColor: AppTheme.surface,
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    side: BorderSide(
-                      color: isSelected
-                          ? AppTheme.gold
-                          : AppTheme.textSecondary.withValues(alpha: 0.3),
-                    ),
-                  );
-                }).toList(),
-              ),
-              if (_selected != _ReferenceObject.card) ...[
-                const SizedBox(height: 6),
-                const Text(
-                  'A card gives the most accurate calibration. The '
-                  '\u20b120 coin works too, but a card is recommended if you '
-                  'have one.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                ),
-              ],
-              const SizedBox(height: 12),
-              Text(
-                '${_selected.instruction} Line its near edge up with the '
-                'top line, then drag the slider until the bottom line '
-                'matches the object\'s far edge.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final maxOffsetPx = constraints.maxHeight * 0.85;
-                    final minOffsetPx = maxOffsetPx * 0.15;
-                    final roughGuessPx = _selected.mm /
-                        ScreenCalibrationService.roughGuessMmPerPixel();
-                    final offsetPx = _clampD(
-                      _offsetPx ?? roughGuessPx,
-                      minOffsetPx,
-                      maxOffsetPx,
-                    );
+        child: LayoutBuilder(
+          builder: (context, outer) {
+            final roughMmPerPixel =
+                ScreenCalibrationService.roughGuessMmPerPixel();
+            // Hard floor: the guide must always be able to show at
+            // least 60mm of gap, regardless of how much room the rest
+            // of the screen's content needs. +28 is a buffer for
+            // EdgeMatchGuide's own internal top/bottom insets, so a
+            // full 60mm gap actually renders unclipped, not just fits
+            // by the numbers.
+            final minGuidePx = (60 / roughMmPerPixel) + 28;
+            final roughlyAvailableForGuide = outer.maxHeight - 380;
+            final guideHeight = roughlyAvailableForGuide > minGuidePx
+                ? roughlyAvailableForGuide
+                : minGuidePx;
+            final maxOffsetPx = guideHeight - 28;
+            final minOffsetPx = maxOffsetPx * 0.15;
+            final roughGuessPx = _selected.mm / roughMmPerPixel;
+            final offsetPx = _clampD(
+              _offsetPx ?? roughGuessPx,
+              minOffsetPx,
+              maxOffsetPx,
+            );
 
-                    return Column(
-                      children: [
-                        Expanded(
-                          child: EdgeMatchGuide(offsetPx: offsetPx),
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: outer.maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'One-time setup, so VirtuWatch knows exactly how big '
+                        'things really are on this screen.',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
                         ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'WHAT ARE YOU USING?',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _ReferenceObject.values.map((ref) {
+                          final isSelected = ref == _selected;
+                          return ChoiceChip(
+                            label: Text(ref.label),
+                            selected: isSelected,
+                            onSelected: (_) => _selectReference(ref),
+                            selectedColor: AppTheme.gold.withValues(alpha: 0.25),
+                            backgroundColor: AppTheme.surface,
+                            labelStyle: TextStyle(
+                              color: isSelected
+                                  ? AppTheme.gold
+                                  : AppTheme.textSecondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? AppTheme.gold
+                                  : AppTheme.textSecondary.withValues(alpha: 0.3),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      if (_selected != _ReferenceObject.card) ...[
+                        const SizedBox(height: 6),
+                        const Text(
+                          'A card gives the most accurate calibration. The '
+                          '\u20b120 coin works too, but a card is recommended '
+                          'if you have one.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 11),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        '${_selected.instruction} Line its near edge up with '
+                        'the top line, then adjust the second line until it '
+                        'matches the object\'s far edge.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 13),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Buttons'),
+                            selected: !_useDragSlider,
+                            onSelected: (_) =>
+                                setState(() => _useDragSlider = false),
+                            selectedColor: AppTheme.gold.withValues(alpha: 0.25),
+                            backgroundColor: AppTheme.surface,
+                            labelStyle: TextStyle(
+                              color: !_useDragSlider
+                                  ? AppTheme.gold
+                                  : AppTheme.textSecondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            side: BorderSide(
+                              color: !_useDragSlider
+                                  ? AppTheme.gold
+                                  : AppTheme.textSecondary.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Slider (drag)'),
+                            selected: _useDragSlider,
+                            onSelected: (_) =>
+                                setState(() => _useDragSlider = true),
+                            selectedColor: AppTheme.gold.withValues(alpha: 0.25),
+                            backgroundColor: AppTheme.surface,
+                            labelStyle: TextStyle(
+                              color: _useDragSlider
+                                  ? AppTheme.gold
+                                  : AppTheme.textSecondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            side: BorderSide(
+                              color: _useDragSlider
+                                  ? AppTheme.gold
+                                  : AppTheme.textSecondary.withValues(alpha: 0.3),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_useDragSlider) ...[
+                        const SizedBox(height: 4),
+                        const Text(
+                          'If the object resting on the screen blocks the '
+                          'slider from moving, switch back to Buttons.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 11),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: guideHeight,
+                        child: EdgeMatchGuide(offsetPx: offsetPx),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_useDragSlider)
                         Slider(
                           value: offsetPx,
                           min: minOffsetPx,
@@ -192,29 +271,44 @@ class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
                           activeColor: AppTheme.gold,
                           onChanged: (value) =>
                               setState(() => _offsetPx = value),
+                        )
+                      else
+                        OffsetStepperControl(
+                          offsetPx: offsetPx,
+                          minPx: minOffsetPx,
+                          maxPx: maxOffsetPx,
+                          // Fixed real-world step sizes (via the
+                          // rough guess, since the real ratio is what
+                          // this screen is solving for) rather than a
+                          // percentage of the available range.
+                          smallStepPx: 0.2 / roughMmPerPixel,
+                          largeStepPx: 2.0 / roughMmPerPixel,
+                          onChanged: (value) =>
+                              setState(() => _offsetPx = value),
                         ),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => _confirm(offsetPx),
-                            child: const Text('Confirm Calibration'),
-                          ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => _confirm(offsetPx),
+                          child: const Text('Confirm Calibration'),
                         ),
-                      ],
-                    );
-                  },
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'You only need to do this once for this device. '
+                        'You can redo it any time from the wrist '
+                        'measurement screen if it ever feels off.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 11),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'You only need to do this once for this device. You can '
-                'redo it any time from the wrist measurement screen if it '
-                'ever feels off.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
