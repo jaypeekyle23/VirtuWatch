@@ -390,9 +390,11 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
     );
   }
 
-  /// The "AI Style Match" card: shows [rec]'s combined match score plus
-  /// which signals (fit/style/color) actually contributed to it, so the
-  /// percentage never implies more confidence than the data supports.
+  /// The "AI Style Match" card: shows [rec]'s combined match score, a
+  /// plain-language verdict label (Great/Good/Fair/Weak/Poor match, same
+  /// bands the chat assistant uses), and which signals (fit/style/color)
+  /// actually contributed to it, so the percentage never implies more
+  /// confidence than the data supports.
   Widget _matchCard(WatchRecommendation rec) {
     final match = rec.matchPercent;
     final matchColor = matchScoreColor(match);
@@ -437,15 +439,39 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '$match%',
-                      style: TextStyle(
-                        color: matchColor,
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$match%',
+                          style: TextStyle(
+                            color: matchColor,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: matchColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            matchVerdictLabel(match),
+                            style: TextStyle(
+                              color: matchColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       subtitle,
                       style: const TextStyle(

@@ -118,10 +118,13 @@ class RecommendationService {
   // Base weights, out of 1.0, when all three signals are available. Fit
   // is weighted highest since it's the one hard physical constraint (an
   // ill-fitting watch is a worse recommendation than an off-style or
-  // off-color one); color and style are softer preferences.
-  static const double _fitWeight = 0.5;
-  static const double _colorWeight = 0.3;
-  static const double _styleWeight = 0.2;
+  // off-color one). Color is weighted lightest since it comes from a
+  // single outfit scan — one snapshot of what the user happened to wear
+  // once — so it's a noisier signal than style, which is an explicit,
+  // stated preference.
+  static const double _fitWeight = 0.55;
+  static const double _colorWeight = 0.15;
+  static const double _styleWeight = 0.30;
 
   // How many mm of lug-to-lug vs wrist-width difference is treated as
   // the edge of "still fits reasonably" before the fit score hits zero.

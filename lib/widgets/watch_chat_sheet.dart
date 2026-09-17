@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/chat_service.dart';
+import '../services/recommendation_service.dart';
 import '../services/user_service.dart';
 import 'chat_sheet.dart';
 
@@ -31,6 +32,7 @@ Future<void> showWatchChatSheet(
       // of asking for it again.
       Map<String, dynamic>? userProfile;
       List<Map<String, dynamic>>? savedWatches;
+      WatchRecommendation? recommendation;
       try {
         final uid = FirebaseAuth.instance.currentUser?.uid;
         if (uid != null) {
@@ -41,14 +43,22 @@ Future<void> showWatchChatSheet(
           userProfile = doc.data();
         }
         savedWatches = await UserService().fetchSavedWatchesBrief();
+        // Same fit/color/style/match-score breakdown as the on-screen
+        // match card, so the chatbot's answers about this watch's score
+        // never disagree with what the customer already sees.
+        recommendation = await RecommendationService().scoreWatch(
+          watchId: watchId,
+          data: watchData,
+        );
       } catch (_) {
-        // Fall back to chatting without profile context rather than
-        // blocking the whole feature.
+        // Fall back to chatting without profile/score context rather
+        // than blocking the whole feature.
       }
       return ChatService.forWatch(
         watchData: watchData,
         userProfile: userProfile,
         savedWatches: savedWatches,
+        recommendation: recommendation,
       );
     },
   );

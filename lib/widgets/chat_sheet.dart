@@ -316,13 +316,14 @@ class _ChatSheetState extends State<ChatSheet> {
     );
   }
 
-  /// The model replies in lightweight markdown (**bold**, "* " bullet
-  /// lines) since that's how Gemini naturally formats structured
+  /// The model replies in lightweight markdown (**bold**, *italic*, "* "
+  /// bullet lines) since that's how Gemini naturally formats structured
   /// answers. Rendering it as plain text left the raw asterisks visible,
   /// which looked broken rather than intentional — this turns it into
-  /// actual bold spans and bullet characters instead. Only bold + bullets
-  /// are handled (not italics, links, headers, etc.) since that covers
-  /// everything the chat prompts' reply style actually produces.
+  /// actual bold/italic spans and bullet characters instead. Only
+  /// bold/italic + bullets are handled (not links, headers, etc.) since
+  /// that covers everything the chat prompts' reply style actually
+  /// produces.
   Widget _formattedMessageText(String text, {required Color color}) {
     final baseStyle = GoogleFonts.inter(color: color, fontSize: 13, height: 1.4);
     final lines = text.split('\n');
@@ -333,7 +334,7 @@ class _ChatSheetState extends State<ChatSheet> {
         children: [
           for (var i = 0; i < lines.length; i++) ...[
             if (i > 0) const TextSpan(text: '\n'),
-            ..._parseInlineBold(_stripBulletMarker(lines[i]), baseStyle),
+            ..._parseInlineEmphasis(_stripBulletMarker(lines[i]), baseStyle),
           ],
         ],
       ),
@@ -351,10 +352,12 @@ class _ChatSheetState extends State<ChatSheet> {
     return line;
   }
 
-  /// Splits `**bold**` segments out of [line] into bold TextSpans,
-  /// leaving everything else in [baseStyle].
-  List<TextSpan> _parseInlineBold(String line, TextStyle baseStyle) {
-    final pattern = RegExp(r'\*\*(.+?)\*\*');
+  /// Splits `**bold**` and `*italic*` segments out of [line] into styled
+  /// TextSpans, leaving everything else in [baseStyle]. Bold is checked
+  /// first in the pattern so a `**` pair is never misread as two lone
+  /// `*` italics.
+  List<TextSpan> _parseInlineEmphasis(String line, TextStyle baseStyle) {
+    final pattern = RegExp(r'\*\*(.+?)\*\*|\*(.+?)\*');
     final spans = <TextSpan>[];
     var lastEnd = 0;
 
@@ -362,10 +365,18 @@ class _ChatSheetState extends State<ChatSheet> {
       if (match.start > lastEnd) {
         spans.add(TextSpan(text: line.substring(lastEnd, match.start)));
       }
-      spans.add(TextSpan(
-        text: match.group(1),
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ));
+      final bold = match.group(1);
+      if (bold != null) {
+        spans.add(TextSpan(
+          text: bold,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ));
+      } else {
+        spans.add(TextSpan(
+          text: match.group(2),
+          style: const TextStyle(fontStyle: FontStyle.italic),
+        ));
+      }
       lastEnd = match.end;
     }
     if (lastEnd < line.length) {

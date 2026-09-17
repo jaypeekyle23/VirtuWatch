@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../constants/app_knowledge.dart';
-import '../utils/fit_scoring.dart';
+import '../utils/match_score_color.dart';
 import 'recommendation_service.dart';
 
 /// A single turn in the conversation, in the order it was said.
@@ -41,14 +41,26 @@ class ChatService {
       : _buildSystemPrompt = systemPromptBuilder;
 
   /// Chat scoped to ONE watch — used from the Watch Detail screen.
+  ///
+  /// [recommendation] is this watch's own [WatchRecommendation] (the same
+  /// object backing the on-screen match card, from
+  /// [RecommendationService.scoreWatch]) — passing it in means the
+  /// chatbot's fit/color/style/match-score answers use the exact same
+  /// scoring the customer already sees, instead of only knowing about fit
+  /// (as this used to before color/style were wired in here too).
   factory ChatService.forWatch({
     required Map<String, dynamic> watchData,
     Map<String, dynamic>? userProfile,
     List<Map<String, dynamic>>? savedWatches,
+    WatchRecommendation? recommendation,
   }) {
     return ChatService._(
-      systemPromptBuilder: () =>
-          _buildWatchPrompt(watchData, userProfile, savedWatches),
+      systemPromptBuilder: () => _buildWatchPrompt(
+        watchData,
+        userProfile,
+        savedWatches,
+        recommendation,
+      ),
     );
   }
 
@@ -98,6 +110,7 @@ class ChatService {
     Map<String, dynamic> watchData,
     Map<String, dynamic>? userProfile,
     List<Map<String, dynamic>>? savedWatches,
+    WatchRecommendation? recommendation,
   ) {
     final name = watchData['name'] as String? ?? 'this watch';
     final brand = watchData['brand'] as String? ?? 'Unknown';
@@ -105,7 +118,7 @@ class ChatService {
     final style = watchData['styleCategory'] as String? ?? 'Unknown';
     final caseDiameter = watchData['caseDiameterMm'];
     final caseThickness = watchData['caseThicknessMm'];
-    final lugToLugMm = (watchData['lugToLugMm'] as num?)?.toDouble();
+    final lugToLugMm = watchData['lugToLugMm'];
     final bandWidth = watchData['bandWidthMm'];
     final movementType = watchData['movementType'] as String? ?? 'Unknown';
     final waterResistance =
@@ -113,30 +126,36 @@ class ChatService {
     final bandMaterial = watchData['bandMaterial'] as String? ?? 'Unknown';
     final caseMaterial = watchData['caseMaterial'] as String? ?? 'Unknown';
 
-    final wristWidthMm = (userProfile?['wristWidthMm'] as num?)?.toDouble();
     final stylePreferences =
         (userProfile?['stylePreferences'] as List?)?.cast<String>() ?? [];
     final budgetMin = (userProfile?['budgetMin'] as num?)?.toDouble();
     final budgetMax = (userProfile?['budgetMax'] as num?)?.toDouble();
 
-    // Use the SAME fit rule as RecommendationService, so the chatbot's
-    // verdict always agrees with what the "Recommended For You" screen
-    // already told the user. Never let the model compute this itself.
-    String fitVerdict;
-    if (wristWidthMm == null) {
-      fitVerdict = 'Wrist width not provided — if fit comes up, ask for it '
-          'instead of assuming';
-    } else if (lugToLugMm == null) {
-      fitVerdict = 'Fit cannot be evaluated (this watch has no lug-to-lug '
-          'measurement on file)';
+    // Use the SAME scoring RecommendationService already computed for this
+    // watch (the exact numbers behind the on-screen match card) — never
+    // let the model recompute or contradict fit, color, style, or the
+    // overall match score itself.
+    final matchLines = <String>[];
+    if (recommendation != null) {
+      final pct = recommendation.matchPercent;
+      matchLines.add(
+        '- Overall match score: $pct%'
+        '${recommendation.confidenceNote != null ? ' (${recommendation.confidenceNote})' : ''}'
+        ' — verdict: ${matchVerdictGuidance(pct)}',
+      );
+      matchLines.add('- Fit: ${recommendation.fitNote}');
+      if (recommendation.colorNote != null) {
+        matchLines.add('- Color match: ${recommendation.colorNote}');
+      }
     } else {
-      fitVerdict =
-          scoreFit(wristWidthMm: wristWidthMm, lugToLugMm: lugToLugMm).note;
+      matchLines.add(
+        '- Match score not available — if fit/color/style comes up, say '
+        'you don\'t have scoring data for this rather than guessing',
+      );
     }
 
     final userContextLines = <String>[
-      '- Fit verdict (authoritative — state this as-is, don\'t recompute '
-          'or contradict it): $fitVerdict',
+      ...matchLines,
       if (stylePreferences.isNotEmpty)
         '- Style preferences: ${stylePreferences.join(', ')}',
       if (budgetMin != null && budgetMax != null)
@@ -169,7 +188,8 @@ ${userContextLines.join('\n')}
 
 Rules:
 - If the customer's wrist width is known, use it directly to answer fit questions (e.g. compare it to the lug-to-lug measurement above) instead of asking them for it.
-- If asked HOW the fit verdict was determined: lug-to-lug within about 3mm of wrist width is a great fit; a larger lug-to-lug runs large, a smaller one runs small, up to roughly 15mm difference before it's considered a poor fit. Explain it this way if asked — don't invent a different method.
+- If asked HOW fit was determined: lug-to-lug within about 3mm of wrist width is a great fit; a larger lug-to-lug runs large, a smaller one runs small, up to roughly 15mm difference before it's considered a poor fit. Explain it this way if asked — don't invent a different method.
+- Be honest about the match score, following the verdict above exactly — do not soften, round up, or talk up a low score into a recommendation just to be agreeable. A middling or poor score means you should say so plainly and explain why (fit, color, or style), not reassure the customer it would still be good for them.
 - If asked something not covered by the data above (e.g. exact stock, warranty terms, discounts), say you don't have that info and suggest they use the "Inquire via Urbane Time" button to ask the seller directly.
 - Keep replies short and conversational — a few sentences, not an essay.
 - Do not discuss other specific watches' prices or specs (you only have this one watch's data) or unrelated topics outside this domain; gently redirect those back to this watch or to browsing the catalog. Questions about the app itself or the general domain (see above) are welcome, not off-topic.
@@ -206,7 +226,7 @@ Rules:
       final caseDiameter = data['caseDiameterMm'];
       return '- "$name" by $brand — ${price != null ? 'PHP $price' : 'price not listed'}, '
           '$style style${caseDiameter != null ? ', ${caseDiameter}mm case' : ''}. '
-          'Match score: ${rec.matchPercent}%'
+          'Match score: ${rec.matchPercent}% (${matchVerdictLabel(rec.matchPercent)})'
           '${rec.confidenceNote != null ? ' (${rec.confidenceNote})' : ''}. '
           'Fit: ${rec.fitNote}.'
           '${rec.colorNote != null ? ' Color match: ${rec.colorNote}.' : ''}';
@@ -224,7 +244,7 @@ The customer's current recommended watches, already ranked and scored by the app
 $watchLines
 
 HOW THE MATCH SCORE ACTUALLY WORKS (explain this accurately if asked "why is this a good match" or "how does scoring work" — don't make up a different explanation):
-- Three signals feed the match score: Fit (50% weight), Color (30% weight), Style (20% weight).
+- Three signals feed the match score: Fit (55% weight), Style (30% weight), Color (15% weight).
 - Fit compares the watch's lug-to-lug measurement against the customer's wrist width — within about 3mm is a great fit; farther off runs large or small (up to a 15mm difference before fit scores zero).
 - Color compares the watch's primary color against the colors detected in the customer's last outfit scan, using how visually close the colors are — closer colors score higher.
 - Style is a simple yes/no: does the watch's style category (e.g. minimalist, sporty, formal) match one of the customer's saved style preferences.
@@ -235,6 +255,7 @@ Rules:
 - Only discuss specific watches from the list above — never invent specs/prices for a watch not on this list. If asked about a specific watch not on this list, say you can only discuss their current recommendations and suggest they browse the full catalog or search for it directly. Questions about the app itself or the general domain (see above) are welcome, not off-topic.
 - When asked "which is best for X", pick from the list using the match scores, fit notes, and budget as your basis, and explain briefly why.
 - When you state a watch's match score, if it has a confidence caveat noted (e.g. "Based on style only"), mention that caveat too — don't present a high percentage as full confidence when it's actually based on one or two signals.
+- Be honest about match quality, using the label next to each score above: "Great match" and "Good match" can be recommended normally; "Fair match" should be presented as only a partial fit, naming the weak signal; "Weak match" and "Poor match" must NOT be recommended as good for the customer — say plainly it's a poor match and why, and steer them to a higher-scoring watch instead. Never round a low score up into a positive recommendation just to be agreeable.
 - Keep replies short and conversational — a few sentences, not an essay. Use watch names so the customer can find them on screen.
 - If asked something not covered by the data above (stock, warranty, exact availability), say you don't have that info and suggest using each watch's "Inquire via Urbane Time" button.
 ''';
