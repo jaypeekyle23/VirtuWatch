@@ -18,22 +18,30 @@ class FitResult {
 
 /// Scores how well a watch with [lugToLugMm] fits a [wristWidthMm] wrist.
 /// Mirrors the exact rule used across the app: lug-to-lug within 3mm of
-/// wrist width is a great fit; a larger lug-to-lug runs large; a smaller
-/// one runs small.
+/// wrist width is a great fit; the further past that (up to
+/// [fitToleranceMm] and beyond), the more the wording escalates from "a
+/// bit" to "quite" to "way too" — a 54mm mismatch and an 8mm mismatch are
+/// both a bad fit, but they shouldn't read as the same "runs a bit small"
+/// note.
 FitResult scoreFit({
   required double wristWidthMm,
   required double lugToLugMm,
 }) {
   final diff = lugToLugMm - wristWidthMm;
-  final score = (1 - (diff.abs() / fitToleranceMm)).clamp(0.0, 1.0);
+  final absDiff = diff.abs();
+  final score = (1 - (absDiff / fitToleranceMm)).clamp(0.0, 1.0);
+  final wrist = wristWidthMm.toStringAsFixed(0);
+  final direction = diff > 0 ? 'large' : 'small';
 
   final String note;
-  if (diff.abs() <= 3) {
-    note = 'Great fit for your ${wristWidthMm.toStringAsFixed(0)}mm wrist';
-  } else if (diff > 0) {
-    note = 'Runs a bit large for your ${wristWidthMm.toStringAsFixed(0)}mm wrist';
+  if (absDiff <= 3) {
+    note = 'Great fit for your ${wrist}mm wrist';
+  } else if (absDiff <= 8) {
+    note = 'Runs a bit $direction for your ${wrist}mm wrist';
+  } else if (absDiff <= fitToleranceMm) {
+    note = 'Runs quite $direction for your ${wrist}mm wrist';
   } else {
-    note = 'Runs a bit small for your ${wristWidthMm.toStringAsFixed(0)}mm wrist';
+    note = 'Way too $direction for your ${wrist}mm wrist';
   }
   return FitResult(score: score, note: note);
 }

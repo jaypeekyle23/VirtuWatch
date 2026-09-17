@@ -141,7 +141,7 @@ class ChatService {
       matchLines.add(
         '- Overall match score: $pct%'
         '${recommendation.confidenceNote != null ? ' (${recommendation.confidenceNote})' : ''}'
-        ' — verdict: ${matchVerdictGuidance(pct)}',
+        ' — verdict: ${matchVerdictGuidance(pct, signalCount: recommendation.signalCount)}',
       );
       matchLines.add('- Fit: ${recommendation.fitNote}');
       if (recommendation.colorNote != null) {
@@ -188,7 +188,7 @@ ${userContextLines.join('\n')}
 
 Rules:
 - If the customer's wrist width is known, use it directly to answer fit questions (e.g. compare it to the lug-to-lug measurement above) instead of asking them for it.
-- If asked HOW fit was determined: lug-to-lug within about 3mm of wrist width is a great fit; a larger lug-to-lug runs large, a smaller one runs small, up to roughly 15mm difference before it's considered a poor fit. Explain it this way if asked — don't invent a different method.
+- If asked HOW fit was determined: lug-to-lug within about 3mm of wrist width is a great fit; beyond that the wording escalates the further off it is — "a bit" (up to 8mm), "quite" (up to 15mm), then "way too" large/small beyond that. Explain it this way if asked — don't invent a different method.
 - Be honest about the match score, following the verdict above exactly — do not soften, round up, or talk up a low score into a recommendation just to be agreeable. A middling or poor score means you should say so plainly and explain why (fit, color, or style), not reassure the customer it would still be good for them.
 - If asked something not covered by the data above (e.g. exact stock, warranty terms, discounts), say you don't have that info and suggest they use the "Inquire via Urbane Time" button to ask the seller directly.
 - Keep replies short and conversational — a few sentences, not an essay.
@@ -226,7 +226,7 @@ Rules:
       final caseDiameter = data['caseDiameterMm'];
       return '- "$name" by $brand — ${price != null ? 'PHP $price' : 'price not listed'}, '
           '$style style${caseDiameter != null ? ', ${caseDiameter}mm case' : ''}. '
-          'Match score: ${rec.matchPercent}% (${matchVerdictLabel(rec.matchPercent)})'
+          'Match score: ${rec.matchPercent}% (${matchVerdictLabel(rec.matchPercent, signalCount: rec.signalCount)})'
           '${rec.confidenceNote != null ? ' (${rec.confidenceNote})' : ''}. '
           'Fit: ${rec.fitNote}.'
           '${rec.colorNote != null ? ' Color match: ${rec.colorNote}.' : ''}';
@@ -245,7 +245,7 @@ $watchLines
 
 HOW THE MATCH SCORE ACTUALLY WORKS (explain this accurately if asked "why is this a good match" or "how does scoring work" — don't make up a different explanation):
 - Three signals feed the match score: Fit (55% weight), Style (30% weight), Color (15% weight).
-- Fit compares the watch's lug-to-lug measurement against the customer's wrist width — within about 3mm is a great fit; farther off runs large or small (up to a 15mm difference before fit scores zero).
+- Fit compares the watch's lug-to-lug measurement against the customer's wrist width — within about 3mm is a great fit; further off, the note escalates from "a bit" to "quite" to "way too" large/small the bigger the gap (fit score hits zero past a 15mm difference).
 - Color compares the watch's primary color against the colors detected in the customer's last outfit scan, using how visually close the colors are — closer colors score higher.
 - Style is a simple yes/no: does the watch's style category (e.g. minimalist, sporty, formal) match one of the customer's saved style preferences.
 - If the customer hasn't provided a signal yet (no wrist measurement, no outfit scan, no style preferences saved), that signal is left out of the score entirely rather than counted against the watch — the remaining signals are re-weighted so an incomplete profile doesn't unfairly lower every score.

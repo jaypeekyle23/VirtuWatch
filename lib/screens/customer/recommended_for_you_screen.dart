@@ -513,7 +513,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     required double budgetMax,
   }) {
     final match = rec.matchPercent;
-    final matchColor = matchScoreColor(match);
+    final matchColor = matchScoreColor(match, signalCount: rec.signalCount);
 
     final data = rec.data;
     final brand = (data['brand'] as String? ?? '').toUpperCase();
@@ -680,6 +680,15 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  matchVerdictLabel(match, signalCount: rec.signalCount),
+                  style: TextStyle(
+                    color: matchColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (rec.confidenceNote != null) ...[

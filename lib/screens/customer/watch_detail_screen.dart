@@ -397,7 +397,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
   /// confidence than the data supports.
   Widget _matchCard(WatchRecommendation rec) {
     final match = rec.matchPercent;
-    final matchColor = matchScoreColor(match);
+    final matchColor = matchScoreColor(match, signalCount: rec.signalCount);
 
     final activeSignals = [
       if (rec.fitScore != null) 'fit',
@@ -461,7 +461,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            matchVerdictLabel(match),
+                            matchVerdictLabel(match, signalCount: rec.signalCount),
                             style: TextStyle(
                               color: matchColor,
                               fontSize: 11,
@@ -524,6 +524,34 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
             ),
           ],
           const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(
+                rec.fitScore != null
+                    ? (rec.fitScore! >= 0.8
+                        ? Icons.check_box
+                        : Icons.indeterminate_check_box)
+                    : Icons.check_box_outline_blank,
+                size: 16,
+                color: rec.fitScore != null
+                    ? (rec.fitScore! >= 0.8
+                        ? Colors.greenAccent
+                        : Colors.orangeAccent)
+                    : AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                rec.fitNote,
+                style: TextStyle(
+                  color: rec.fitScore != null
+                      ? AppTheme.textPrimary
+                      : AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Icon(
