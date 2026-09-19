@@ -42,7 +42,8 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
   late final TextEditingController _waterResistanceController;
 
   late String _styleCategory;
-  late String _colorHex;
+  late List<String> _colorHexes;
+  String _customColorHex = watchColorPalette.first.hex;
   bool _useCustomColor = false;
   late bool _listedInCatalog;
   bool _isLoading = false;
@@ -93,7 +94,15 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     _waterResistanceController =
         TextEditingController(text: _asString(d['waterResistance']));
     _styleCategory = (d['styleCategory'] as String?) ?? 'Sport';
-    _colorHex = (d['colorHex'] as String?) ?? watchColorPalette.first.hex;
+    // Watches saved before multi-color support only have a single
+    // `colorHex` — treat that as the sole existing color, same
+    // fallback pattern used for the legacy single `imageUrl` above.
+    final existingColorHexes =
+        (d['colorHexes'] as List?)?.cast<String>() ?? [];
+    final legacyColorHex = (d['colorHex'] as String?) ?? '';
+    _colorHexes = existingColorHexes.isNotEmpty
+        ? List<String>.from(existingColorHexes)
+        : [legacyColorHex.isNotEmpty ? legacyColorHex : watchColorPalette.first.hex];
     _listedInCatalog = (d['listedInCatalog'] as bool?) ?? true;
     // Watches saved before multi-photo support only have a single
     // `imageUrl` — treat that as the sole existing photo so nothing is
@@ -137,6 +146,36 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
 
   void _removeNewImage(int index) {
     setState(() => _newImages.removeAt(index));
+  }
+
+  /// Tapping a palette swatch toggles it in the watch's color list —
+  /// adds it (if under the cap) if not already chosen, removes it if it
+  /// is. There must always be at least one color.
+  void _toggleColor(String hex) {
+    setState(() {
+      final alreadyChosen =
+          _colorHexes.any((c) => c.toUpperCase() == hex.toUpperCase());
+      if (alreadyChosen) {
+        if (_colorHexes.length > 1) {
+          _colorHexes.removeWhere((c) => c.toUpperCase() == hex.toUpperCase());
+        }
+      } else if (_colorHexes.length < maxWatchColors) {
+        _colorHexes.add(hex);
+      }
+    });
+  }
+
+  void _addCustomColor() {
+    if (_colorHexes.length >= maxWatchColors) return;
+    if (_colorHexes.any((c) => c.toUpperCase() == _customColorHex.toUpperCase())) {
+      return;
+    }
+    setState(() => _colorHexes.add(_customColorHex));
+  }
+
+  void _removeColorAt(int index) {
+    if (_colorHexes.length <= 1) return;
+    setState(() => _colorHexes.removeAt(index));
   }
 
   Future<void> _pickModelFile() async {
@@ -194,7 +233,8 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         'brand': _brandController.text.trim(),
         'price': double.parse(_priceController.text.trim()),
         'styleCategory': _styleCategory,
-        'colorHex': _colorHex,
+        'colorHex': _colorHexes.first,
+        'colorHexes': _colorHexes,
         'caseDiameterMm': double.tryParse(_caseDiameterController.text.trim()),
         'caseThicknessMm':
             double.tryParse(_caseThicknessController.text.trim()),
@@ -517,45 +557,77 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
               ),
               const SizedBox(height: 16),
 
-              _fieldLabel('PRIMARY COLOR'),
-              WatchColorPicker(
-                selectedHex: _colorHex,
-                onChanged: (hex) => setState(() {
-                  _colorHex = hex;
-                  _useCustomColor = false;
-                }),
+              _fieldLabel('WATCH COLORS (up to $maxWatchColors) — first is primary'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var i = 0; i < _colorHexes.length; i++)
+                    _colorChip(
+                      _colorHexes[i],
+                      isPrimary: i == 0,
+                      onRemove: _colorHexes.length > 1
+                          ? () => _removeColorAt(i)
+                          : null,
+                    ),
+                ],
               ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () =>
-                    setState(() => _useCustomColor = !_useCustomColor),
-                icon: Icon(
-                  _useCustomColor
-                      ? Icons.expand_less
-                      : Icons.color_lens_outlined,
-                  size: 16,
-                  color: AppTheme.gold,
+              const SizedBox(height: 12),
+              if (_colorHexes.length < maxWatchColors) ...[
+                Text(
+                  'Tap a swatch to add it as another color',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                 ),
-                label: Text(
-                  _useCustomColor
-                      ? 'Hide custom color'
-                      : "Don't see a match? Use a custom color",
-                  style: TextStyle(color: AppTheme.gold, fontSize: 12),
-                ),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 32),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  alignment: Alignment.centerLeft,
-                ),
-              ),
-              if (_useCustomColor) ...[
                 const SizedBox(height: 8),
-                WatchColorWheelPicker(
-                  initialHex: _colorHex,
-                  onChanged: (hex) => setState(() => _colorHex = hex),
+                WatchColorPicker(
+                  selectedHexes: _colorHexes,
+                  onChanged: _toggleColor,
                 ),
-              ],
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () =>
+                      setState(() => _useCustomColor = !_useCustomColor),
+                  icon: Icon(
+                    _useCustomColor
+                        ? Icons.expand_less
+                        : Icons.color_lens_outlined,
+                    size: 16,
+                    color: AppTheme.gold,
+                  ),
+                  label: Text(
+                    _useCustomColor
+                        ? 'Hide custom color'
+                        : "Don't see a match? Use a custom color",
+                    style: TextStyle(color: AppTheme.gold, fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    alignment: Alignment.centerLeft,
+                  ),
+                ),
+                if (_useCustomColor) ...[
+                  const SizedBox(height: 8),
+                  WatchColorWheelPicker(
+                    initialHex: _customColorHex,
+                    onChanged: (hex) => setState(() => _customColorHex = hex),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _addCustomColor,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add This Color'),
+                    ),
+                  ),
+                ],
+              ] else
+                Text(
+                  'Maximum of $maxWatchColors colors reached. Remove one to add another.',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                ),
               const SizedBox(height: 24),
 
               Text(
@@ -729,6 +801,53 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
           color: AppTheme.textSecondary,
           letterSpacing: 0.5,
         ),
+      ),
+    );
+  }
+
+  /// A chip for one already-chosen color in the watch's color list: a
+  /// swatch, its palette name (or raw hex for a custom color), a
+  /// "Primary" tag on the first one, and a remove button (hidden on the
+  /// last remaining color, since a watch always needs at least one).
+  Widget _colorChip(String hex, {required bool isPrimary, VoidCallback? onRemove}) {
+    final label = paletteNameForHex(hex) ?? hex.toUpperCase();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isPrimary
+              ? AppTheme.gold.withValues(alpha: 0.5)
+              : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: hexToColor(hex),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24, width: 1),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isPrimary ? '$label · Primary' : label,
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+          ),
+          if (onRemove != null) ...[
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onRemove,
+              child: const Icon(Icons.close,
+                  size: 14, color: AppTheme.textSecondary),
+            ),
+          ],
+        ],
       ),
     );
   }

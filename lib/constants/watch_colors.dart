@@ -27,6 +27,36 @@ const List<WatchColorOption> watchColorPalette = [
   WatchColorOption('White', '#F5F5F5'),
 ];
 
+/// Max number of colors a single watch can carry (e.g. case, dial, and
+/// strap accents on a two/three-tone piece). Kept small and deliberate —
+/// see [colorProminenceWeights] for why more colors isn't automatically
+/// "better" for a watch's color-match score.
+const int maxWatchColors = 3;
+
+/// Implicit prominence weight for a watch's colors by list position —
+/// index 0 (the merchant-chosen primary/dominant color) counts fully,
+/// each color after it counts for less. Used by RecommendationService to
+/// blend a multi-color watch's color-match score.
+///
+/// This is deliberately a strict generalization of the old single-color
+/// model: a watch with just one color has nothing to blend, so its score
+/// is exactly what it would have been before multi-color support
+/// existed. A secondary or tertiary color can only ever nudge the score
+/// toward the outfit, never dominate it — that keeps a merchant from
+/// gaming the match score by tacking on a barely-visible accent color.
+const List<double> colorProminenceWeights = [1.0, 0.6, 0.4];
+
+/// Looks up a palette color's display name for [hex], if it's one of the
+/// known [watchColorPalette] swatches. Returns null for a custom
+/// (wheel-picked) color that isn't in the palette, so callers can fall
+/// back to showing the raw hex instead.
+String? paletteNameForHex(String hex) {
+  for (final option in watchColorPalette) {
+    if (option.hex.toUpperCase() == hex.toUpperCase()) return option.name;
+  }
+  return null;
+}
+
 /// Parses a '#RRGGBB' string into a [Color]. Falls back to mid-gray if
 /// the string is malformed, so a bad value never crashes a build.
 Color hexToColor(String hex) {

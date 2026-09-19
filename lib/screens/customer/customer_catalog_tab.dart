@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../constants/watch_colors.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import 'watch_detail_screen.dart';
@@ -196,7 +197,7 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
                         crossAxisCount: 2,
                         mainAxisSpacing: 12,
                         crossAxisSpacing: 12,
-                        childAspectRatio: 0.58,
+                        childAspectRatio: 0.60,
                       ),
                       itemCount: docs.length,
                       itemBuilder: (context, index) {
@@ -283,6 +284,11 @@ class _WatchCard extends StatelessWidget {
     final style = data['styleCategory'] as String? ?? '';
     final caseDiameter = data['caseDiameterMm'];
     final imageUrl = data['imageUrl'] as String? ?? '';
+    final colorHexesRaw = (data['colorHexes'] as List?)?.cast<String>();
+    final legacyColorHex = data['colorHex'] as String?;
+    final colorHexes = (colorHexesRaw != null && colorHexesRaw.isNotEmpty)
+        ? colorHexesRaw
+        : (legacyColorHex != null ? [legacyColorHex] : const <String>[]);
 
     return InkWell(
       onTap: () {
@@ -388,6 +394,29 @@ class _WatchCard extends StatelessWidget {
                         fontSize: 12,
                       ),
                     ),
+                  if (colorHexes.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        for (final hex in colorHexes.take(3))
+                          Padding(
+                            padding: const EdgeInsets.only(right: 3),
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: hexToColor(hex),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white24,
+                                  width: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -249,6 +249,13 @@ class RecommendationService {
     final lugToLugMm = (data['lugToLugMm'] as num?)?.toDouble();
     final styleCategory = data['styleCategory'] as String?;
     final colorHex = data['colorHex'] as String?;
+    // Watches saved before multi-color support only have a single
+    // `colorHex` — fall back to that as a 1-color list so the blended
+    // scoring below still works unchanged for them.
+    final colorHexesRaw = (data['colorHexes'] as List?)?.cast<String>();
+    final colorHexes = (colorHexesRaw != null && colorHexesRaw.isNotEmpty)
+        ? colorHexesRaw
+        : (colorHex != null ? [colorHex] : const <String>[]);
 
     double? fitScore;
     String fitNote;
@@ -272,27 +279,46 @@ class RecommendationService {
 
     double? colorScore;
     String? colorNote;
-    if (outfitColors.isNotEmpty && colorHex != null) {
-      final (watchR, watchG, watchB) = hexToRgb(colorHex);
-      double weightedSimilarity = 0;
+    if (outfitColors.isNotEmpty && colorHexes.isNotEmpty) {
+      // Blend each of the watch's colors' own outfit-match score,
+      // weighted by that color's prominence (colorProminenceWeights —
+      // primary counts fully, later colors count for less). For a
+      // single-color watch this collapses to exactly the old formula:
+      // one color at weight 1.0, nothing else to blend.
+      double weightedSum = 0;
       double weightTotal = 0;
-      for (final entry in outfitColors) {
-        final hex = entry['hex'] as String?;
-        final percentage = (entry['percentage'] as num?)?.toDouble();
-        if (hex == null || percentage == null || percentage <= 0) continue;
+      for (var i = 0; i < colorHexes.length; i++) {
+        final prominence = i < colorProminenceWeights.length
+            ? colorProminenceWeights[i]
+            : colorProminenceWeights.last;
+        final (watchR, watchG, watchB) = hexToRgb(colorHexes[i]);
 
-        final (r, g, b) = hexToRgb(hex);
-        final dr = (watchR - r).toDouble();
-        final dg = (watchG - g).toDouble();
-        final db = (watchB - b).toDouble();
-        final distance = sqrt(dr * dr + dg * dg + db * db);
-        final similarity = (1 - distance / _maxRgbDistance).clamp(0.0, 1.0);
+        double weightedSimilarity = 0;
+        double outfitWeightTotal = 0;
+        for (final entry in outfitColors) {
+          final hex = entry['hex'] as String?;
+          final percentage = (entry['percentage'] as num?)?.toDouble();
+          if (hex == null || percentage == null || percentage <= 0) continue;
 
-        weightedSimilarity += similarity * percentage;
-        weightTotal += percentage;
+          final (r, g, b) = hexToRgb(hex);
+          final dr = (watchR - r).toDouble();
+          final dg = (watchG - g).toDouble();
+          final db = (watchB - b).toDouble();
+          final distance = sqrt(dr * dr + dg * dg + db * db);
+          final similarity = (1 - distance / _maxRgbDistance).clamp(0.0, 1.0);
+
+          weightedSimilarity += similarity * percentage;
+          outfitWeightTotal += percentage;
+        }
+
+        if (outfitWeightTotal > 0) {
+          final perColorSimilarity = weightedSimilarity / outfitWeightTotal;
+          weightedSum += perColorSimilarity * prominence;
+          weightTotal += prominence;
+        }
       }
       if (weightTotal > 0) {
-        colorScore = weightedSimilarity / weightTotal;
+        colorScore = weightedSum / weightTotal;
         if (colorScore >= 0.65) {
           colorNote = 'Matches your outfit colors';
         } else if (colorScore <= 0.3) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../constants/watch_colors.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import 'merchant_edit_watch_screen.dart';
@@ -24,6 +25,11 @@ class MerchantWatchDetailScreen extends StatelessWidget {
     final brand = data['brand'] as String? ?? '';
     final price = data['price'];
     final style = data['styleCategory'] as String? ?? '';
+    final colorHexesRaw = (data['colorHexes'] as List?)?.cast<String>();
+    final legacyColorHex = data['colorHex'] as String?;
+    final colorHexes = (colorHexesRaw != null && colorHexesRaw.isNotEmpty)
+        ? colorHexesRaw
+        : (legacyColorHex != null ? [legacyColorHex] : const <String>[]);
     final caseDiameter = data['caseDiameterMm'];
     final caseThickness = data['caseThicknessMm'];
     final lugToLug = data['lugToLugMm'];
@@ -112,6 +118,36 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
+                          ),
+                        ),
+                      if (colorHexes.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surface,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final hex in colorHexes.take(3))
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Container(
+                                    width: 14,
+                                    height: 14,
+                                    decoration: BoxDecoration(
+                                      color: hexToColor(hex),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white24,
+                                        width: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                     ],

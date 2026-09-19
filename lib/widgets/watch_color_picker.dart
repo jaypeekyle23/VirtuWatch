@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import '../constants/watch_colors.dart';
 import '../theme/app_theme.dart';
 
-/// Row of tappable color swatches for picking a watch's primary color
-/// from [watchColorPalette]. Used identically on the merchant add and
-/// edit watch screens.
+/// Row of tappable color swatches for picking a watch's colors from
+/// [watchColorPalette]. Tapping a swatch toggles it in/out of
+/// [selectedHexes] — used to build a watch's ordered color list (first
+/// selected = primary) rather than a single selection.
 class WatchColorPicker extends StatelessWidget {
-  final String selectedHex;
+  final List<String> selectedHexes;
   final ValueChanged<String> onChanged;
 
   const WatchColorPicker({
     super.key,
-    required this.selectedHex,
+    required this.selectedHexes,
     required this.onChanged,
   });
 
@@ -21,7 +22,8 @@ class WatchColorPicker extends StatelessWidget {
       spacing: 14,
       runSpacing: 10,
       children: watchColorPalette.map((option) {
-        final isSelected = option.hex == selectedHex;
+        final isSelected = selectedHexes
+            .any((hex) => hex.toUpperCase() == option.hex.toUpperCase());
         final swatchColor = hexToColor(option.hex);
         // Light swatches (e.g. Silver, White) need a dark checkmark;
         // dark ones need a light checkmark to stay visible.
