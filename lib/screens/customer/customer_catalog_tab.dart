@@ -28,6 +28,9 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
   String _searchQuery = '';
   String _selectedFilter = 'All';
   _SortOption _sortOption = _SortOption.newest;
+  // Multi-column grid is the default; the toggle in the app bar lets the
+  // customer switch to a single-column list instead.
+  bool _isMultiColumn = true;
 
   final List<String> _filters = ['All', 'Classic', 'Sport', 'Luxury', 'Casual'];
 
@@ -43,6 +46,11 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
       appBar: AppBar(
         title: const Text('Watch Catalog'),
         actions: [
+          IconButton(
+            icon: Icon(_isMultiColumn ? Icons.view_agenda_outlined : Icons.grid_view),
+            tooltip: _isMultiColumn ? 'Switch to list view' : 'Switch to grid view',
+            onPressed: () => setState(() => _isMultiColumn = !_isMultiColumn),
+          ),
           PopupMenuButton<_SortOption>(
             icon: const Icon(Icons.sort),
             color: AppTheme.surface,
@@ -178,24 +186,38 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
                   );
                 }
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: GridView.builder(
-                    padding: const EdgeInsets.only(bottom: 16, top: 4),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.58,
+                if (_isMultiColumn) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: GridView.builder(
+                      padding: const EdgeInsets.only(bottom: 16, top: 4),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.58,
+                      ),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final data = doc.data();
+                        return _WatchCard(watchId: doc.id, data: data);
+                      },
                     ),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final doc = docs[index];
-                      final data = doc.data();
-                      return _WatchCard(watchId: doc.id, data: data);
-                    },
-                  ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  itemCount: docs.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final doc = docs[index];
+                    final data = doc.data();
+                    return _WatchListTile(watchId: doc.id, data: data);
+                  },
                 );
               },
             ),
@@ -369,6 +391,129 @@ class _WatchCard extends StatelessWidget {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+/// Single-column list row shown when the catalog's view toggle is set to
+/// list mode instead of the default grid.
+class _WatchListTile extends StatelessWidget {
+  final String watchId;
+  final Map<String, dynamic> data;
+
+  const _WatchListTile({required this.watchId, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = data['name'] as String? ?? 'Unnamed Watch';
+    final brand = data['brand'] as String? ?? '';
+    final price = data['price'];
+    final style = data['styleCategory'] as String? ?? '';
+    final caseDiameter = data['caseDiameterMm'];
+    final imageUrl = data['imageUrl'] as String? ?? '';
+
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => WatchDetailScreen(watchId: watchId, data: data),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: imageUrl.isNotEmpty
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.watch,
+                          color: AppTheme.gold,
+                          size: 36),
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      },
+                    )
+                  : const Icon(Icons.watch, color: AppTheme.gold, size: 36),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (brand.isNotEmpty)
+                    Text(
+                      brand.toUpperCase(),
+                      style: const TextStyle(
+                        color: AppTheme.gold,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  const SizedBox(height: 2),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      if (caseDiameter != null) '${caseDiameter}mm',
+                      if (style.isNotEmpty) style,
+                    ].join(' · '),
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  if (price != null)
+                    Text(
+                      'PHP $price',
+                      style: const TextStyle(
+                        color: AppTheme.gold,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
           ],
         ),
       ),

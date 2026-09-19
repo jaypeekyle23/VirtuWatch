@@ -395,111 +395,136 @@ class _SavedWatchesPreviewCard extends StatelessWidget {
           color: AppTheme.surface,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: savedWatchIds.isEmpty
+            ? _buildContent(context, existingIds: const [], imageByWatchId: const {})
+            : FutureBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
+                // Saved watch IDs can point at watches a merchant has since
+                // deleted. Fetch the docs so we only show/count ones that
+                // still exist, instead of rendering a photo-less thumbnail
+                // for a watch that's gone.
+                future: Future.wait(
+                  savedWatchIds.map((id) => FirebaseFirestore.instance
+                      .collection('watches')
+                      .doc(id)
+                      .get()),
+                ),
+                builder: (context, snapshot) {
+                  final docs = snapshot.data ?? const [];
+                  final existingIds = [
+                    for (final doc in docs)
+                      if (doc.exists) doc.id,
+                  ];
+                  final imageByWatchId = {
+                    for (final doc in docs)
+                      if (doc.exists)
+                        doc.id: doc.data()?['imageUrl'] as String? ?? '',
+                  };
+                  return _buildContent(
+                    context,
+                    existingIds: existingIds,
+                    imageByWatchId: imageByWatchId,
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context, {
+    required List<String> existingIds,
+    required Map<String, String> imageByWatchId,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Saved Watches (${savedWatchIds.length})',
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                const Text(
-                  'View All',
-                  style: TextStyle(color: AppTheme.gold, fontSize: 12),
-                ),
-              ],
+            Text(
+              'Saved Watches (${existingIds.length})',
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
             ),
-            if (savedWatchIds.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  for (var i = 0; i < savedWatchIds.length && i < 4; i++) ...[
-                    if (i > 0) const SizedBox(width: 8),
-                    _SavedWatchThumbnail(watchId: savedWatchIds[i]),
-                  ],
-                  if (savedWatchIds.length > 4) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.background,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '+${savedWatchIds.length - 4}',
-                          style: const TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ] else ...[
-              const SizedBox(height: 8),
-              const Text(
-                'No saved watches yet. Tap the heart on a watch to save it here.',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              ),
-            ],
+            const Text(
+              'View All',
+              style: TextStyle(color: AppTheme.gold, fontSize: 12),
+            ),
           ],
         ),
-      ),
+        if (existingIds.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              for (var i = 0; i < existingIds.length && i < 4; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                _SavedWatchThumbnail(
+                  imageUrl: imageByWatchId[existingIds[i]] ?? '',
+                ),
+              ],
+              if (existingIds.length > 4) ...[
+                const SizedBox(width: 8),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppTheme.background,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '+${existingIds.length - 4}',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          const Text(
+            'No saved watches yet. Tap the heart on a watch to save it here.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+        ],
+      ],
     );
   }
 }
 
-/// A single circular thumbnail for the saved-watches preview strip. Looks
-/// up its own watch document by ID so it can show the real photo, falling
-/// back to the generic watch icon while loading, on error, or if the watch
-/// has no photo yet.
+/// A single circular thumbnail for the saved-watches preview strip. Shows
+/// the watch's photo, or a generic watch icon if it has none.
 class _SavedWatchThumbnail extends StatelessWidget {
-  final String watchId;
+  final String imageUrl;
 
-  const _SavedWatchThumbnail({required this.watchId});
+  const _SavedWatchThumbnail({required this.imageUrl});
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance
-          .collection('watches')
-          .doc(watchId)
-          .get(),
-      builder: (context, snapshot) {
-        final imageUrl =
-            snapshot.data?.data()?['imageUrl'] as String? ?? '';
-
-        return Container(
-          width: 44,
-          height: 44,
-          decoration: const BoxDecoration(
-            color: AppTheme.background,
-            shape: BoxShape.circle,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: imageUrl.isNotEmpty
-              ? Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.watch,
-                      color: AppTheme.gold,
-                      size: 20),
-                )
-              : const Icon(Icons.watch, color: AppTheme.gold, size: 20),
-        );
-      },
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: const BoxDecoration(
+        color: AppTheme.background,
+        shape: BoxShape.circle,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: imageUrl.isNotEmpty
+          ? Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.watch, color: AppTheme.gold, size: 20),
+            )
+          : const Icon(Icons.watch, color: AppTheme.gold, size: 20),
     );
   }
 }

@@ -102,6 +102,10 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
     final bandMaterial = data['bandMaterial'] as String? ?? '';
     final caseMaterial = data['caseMaterial'] as String? ?? '';
     final imageUrl = data['imageUrl'] as String? ?? '';
+    final imageUrls = (data['imageUrls'] as List?)?.cast<String>() ?? [];
+    final photoUrls = imageUrls.isNotEmpty
+        ? imageUrls
+        : (imageUrl.isNotEmpty ? [imageUrl] : <String>[]);
 
     return Scaffold(
       appBar: AppBar(
@@ -151,32 +155,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AspectRatio(
-              aspectRatio: 1.1,
-              child: Container(
-                color: AppTheme.surface,
-                child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Center(
-                          child:
-                              Icon(Icons.watch, size: 100, color: AppTheme.gold),
-                        ),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        },
-                      )
-                    : const Center(
-                        child:
-                            Icon(Icons.watch, size: 100, color: AppTheme.gold),
-                      ),
-              ),
-            ),
+            _WatchPhotoCarousel(imageUrls: photoUrls),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -540,13 +519,15 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                     : AppTheme.textSecondary,
               ),
               const SizedBox(width: 6),
-              Text(
-                rec.fitNote,
-                style: TextStyle(
-                  color: rec.fitScore != null
-                      ? AppTheme.textPrimary
-                      : AppTheme.textSecondary,
-                  fontSize: 12,
+              Expanded(
+                child: Text(
+                  rec.fitNote,
+                  style: TextStyle(
+                    color: rec.fitScore != null
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ],
@@ -566,15 +547,17 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                     : AppTheme.textSecondary,
               ),
               const SizedBox(width: 6),
-              Text(
-                hasOutfitColor
-                    ? (rec.colorNote ?? 'Outfit color compared')
-                    : 'Outfit color match — scan an outfit to compare',
-                style: TextStyle(
-                  color: hasOutfitColor
-                      ? AppTheme.textPrimary
-                      : AppTheme.textSecondary,
-                  fontSize: 12,
+              Expanded(
+                child: Text(
+                  hasOutfitColor
+                      ? (rec.colorNote ?? 'Outfit color compared')
+                      : 'Outfit color match — scan an outfit to compare',
+                  style: TextStyle(
+                    color: hasOutfitColor
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ],
@@ -612,6 +595,94 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+/// Swipeable photo carousel for a watch's detail screen. Falls back to
+/// the generic watch icon if the watch has no photos on file at all.
+class _WatchPhotoCarousel extends StatefulWidget {
+  final List<String> imageUrls;
+
+  const _WatchPhotoCarousel({required this.imageUrls});
+
+  @override
+  State<_WatchPhotoCarousel> createState() => _WatchPhotoCarouselState();
+}
+
+class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
+  final _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = widget.imageUrls;
+
+    return AspectRatio(
+      aspectRatio: 1.1,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (photos.isEmpty)
+            Container(
+              color: AppTheme.surface,
+              child: const Center(
+                child: Icon(Icons.watch, size: 100, color: AppTheme.gold),
+              ),
+            )
+          else
+            PageView.builder(
+              controller: _pageController,
+              itemCount: photos.length,
+              onPageChanged: (index) => setState(() => _currentPage = index),
+              itemBuilder: (context, index) {
+                return Container(
+                  color: AppTheme.surface,
+                  child: Image.network(
+                    photos[index],
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Center(
+                      child: Icon(Icons.watch, size: 100, color: AppTheme.gold),
+                    ),
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
+                  ),
+                );
+              },
+            ),
+          if (photos.length > 1)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(photos.length, (index) {
+                  final isActive = index == _currentPage;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: isActive ? 18 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? AppTheme.gold
+                          : Colors.white.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  );
+                }),
+              ),
+            ),
         ],
       ),
     );

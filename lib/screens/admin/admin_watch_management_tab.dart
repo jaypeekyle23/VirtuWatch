@@ -4,6 +4,7 @@ import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../merchant/merchant_edit_watch_screen.dart';
 import '../merchant/merchant_add_watch_screen.dart';
+import '../merchant/merchant_watch_detail_screen.dart';
 
 enum _SortOption {
   newest('Newest'),
@@ -30,6 +31,9 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
   String _searchQuery = '';
   String _selectedFilter = 'All';
   _SortOption _sortOption = _SortOption.newest;
+  // Multi-column grid is the default; the toggle in the app bar lets the
+  // admin switch to the original single-column list instead.
+  bool _isMultiColumn = true;
 
   final List<String> _filters = ['All', 'Classic', 'Sport', 'Luxury', 'Casual'];
 
@@ -55,6 +59,11 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
                 ),
               );
             },
+          ),
+          IconButton(
+            icon: Icon(_isMultiColumn ? Icons.view_agenda_outlined : Icons.grid_view),
+            tooltip: _isMultiColumn ? 'Switch to list view' : 'Switch to grid view',
+            onPressed: () => setState(() => _isMultiColumn = !_isMultiColumn),
           ),
           PopupMenuButton<_SortOption>(
             icon: const Icon(Icons.sort),
@@ -191,6 +200,31 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
                   );
                 }
 
+                if (_isMultiColumn) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: GridView.builder(
+                      padding: const EdgeInsets.only(bottom: 16, top: 4),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.62,
+                      ),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        return _AdminWatchGridCard(
+                          watchId: doc.id,
+                          data: doc.data(),
+                          watchService: _watchService,
+                        );
+                      },
+                    ),
+                  );
+                }
+
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                   itemCount: docs.length,
@@ -275,7 +309,19 @@ class _AdminWatchTile extends StatelessWidget {
     final has3D = data['has3DModel'] as bool? ?? false;
     final imageUrl = data['imageUrl'] as String? ?? '';
 
-    return Container(
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MerchantWatchDetailScreen(
+              watchId: watchId,
+              data: data,
+            ),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.surface,
@@ -402,6 +448,7 @@ class _AdminWatchTile extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -441,6 +488,239 @@ class _AdminWatchTile extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Delete Watch?',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text(
+          'This will permanently remove "${data['name']}" from the catalog.',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await watchService.deleteWatch(
+        watchId,
+        watchLabel: data['name'] as String? ?? watchId,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Watch deleted.')),
+        );
+      }
+    }
+  }
+}
+/// Compact grid-cell version of the admin watch tile, shown when the
+/// catalog's view toggle is set to grid mode (the default). Keeps the
+/// same listed switch and edit/delete actions as the single-column tile.
+class _AdminWatchGridCard extends StatelessWidget {
+  final String watchId;
+  final Map<String, dynamic> data;
+  final WatchService watchService;
+
+  const _AdminWatchGridCard({
+    required this.watchId,
+    required this.data,
+    required this.watchService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = data['name'] as String? ?? 'Unnamed Watch';
+    final brand = data['brand'] as String? ?? '';
+    final price = data['price'];
+    final listed = data['listedInCatalog'] as bool? ?? false;
+    final has3D = data['has3DModel'] as bool? ?? false;
+    final imageUrl = data['imageUrl'] as String? ?? '';
+
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MerchantWatchDetailScreen(
+              watchId: watchId,
+              data: data,
+            ),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1.3,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: Container(
+                color: AppTheme.background,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Center(
+                          child: Icon(Icons.watch, size: 32, color: AppTheme.gold),
+                        ),
+                      )
+                    : const Center(
+                        child: Icon(Icons.watch, size: 32, color: AppTheme.gold),
+                      ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  brand.isNotEmpty ? '$brand $name' : name,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    _statusChip(listed ? 'ACTIVE' : 'DRAFT',
+                        listed ? Colors.greenAccent : AppTheme.textSecondary),
+                    _statusChip(has3D ? 'AR' : 'NO 3D',
+                        has3D ? AppTheme.gold : AppTheme.textSecondary),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (price != null)
+                  Text(
+                    'PHP $price',
+                    style: const TextStyle(
+                      color: AppTheme.gold,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Transform.scale(
+                      scale: 0.75,
+                      alignment: Alignment.centerLeft,
+                      child: Switch(
+                        value: listed,
+                        activeThumbColor: AppTheme.gold,
+                        onChanged: (value) => _handleToggleListed(context, value),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          color: AppTheme.textSecondary,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => MerchantEditWatchScreen(
+                                  watchId: watchId,
+                                  data: data,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          color: Colors.redAccent,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          onPressed: () => _confirmDelete(context),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  Future<void> _handleToggleListed(BuildContext context, bool value) async {
+    try {
+      await watchService.updateWatch(watchId, {'listedInCatalog': value});
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value
+                  ? '"${data['name']}" is now listed in the catalog.'
+                  : '"${data['name']}" was unlisted from the catalog.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update listing: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _statusChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
           fontWeight: FontWeight.bold,
         ),
       ),

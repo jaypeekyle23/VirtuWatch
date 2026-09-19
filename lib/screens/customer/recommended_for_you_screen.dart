@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../constants/watch_colors.dart';
+import '../../services/auth_service.dart';
 import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/match_score_color.dart';
@@ -23,11 +24,13 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
   final List<String> _filters = ['All', 'Best Fit', 'Newest', 'Your Style'];
 
   final _recommendationService = RecommendationService();
+  final _authService = AuthService();
   RecommendationResult? _result;
   bool _isLoadingRecommendations = true;
   String? _loadError;
 
   bool _isLoadingPreferences = false;
+  bool _isClearingOutfitColors = false;
 
   @override
   void initState() {
@@ -125,6 +128,55 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     }
   }
 
+  Future<void> _confirmClearOutfitColors() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Remove Outfit Colors?',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'Recommendations will stop factoring in outfit color match '
+          'until you scan an outfit again.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isClearingOutfitColors = true);
+    try {
+      await _authService.clearOutfitColors();
+      // Outfit color no longer contributes to any watch's match score —
+      // re-score the catalog without it.
+      await _loadRecommendations();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Outfit colors removed.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not remove outfit colors: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isClearingOutfitColors = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final wristWidthMm = _result?.wristWidthMm;
@@ -212,7 +264,12 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                         if (outfitColors.isEmpty)
                           _basisChip('NO OUTFIT SCANNED', Colors.purpleAccent)
                         else
-                          _outfitColorChip(outfitColors),
+                          _outfitColorChip(
+                            outfitColors,
+                            onClear: _isClearingOutfitColors
+                                ? null
+                                : _confirmClearOutfitColors,
+                          ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -393,6 +450,10 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                   ],
                 ),
               ),
+              // Extra bottom space so this last card can scroll clear of
+              // the floating "Ask VirtuWatch AI" button instead of ending
+              // up hidden behind it.
+              const SizedBox(height: 88),
             ],
           ),
         ),
@@ -470,7 +531,10 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     );
   }
 
-  Widget _outfitColorChip(List<Map<String, dynamic>> colors) {
+  Widget _outfitColorChip(
+    List<Map<String, dynamic>> colors, {
+    required VoidCallback? onClear,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -502,6 +566,17 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                 ),
               ),
             ),
+          const SizedBox(width: 2),
+          GestureDetector(
+            onTap: onClear,
+            child: Icon(
+              Icons.close,
+              size: 14,
+              color: onClear == null
+                  ? Colors.purpleAccent.withValues(alpha: 0.4)
+                  : Colors.purpleAccent,
+            ),
+          ),
         ],
       ),
     );

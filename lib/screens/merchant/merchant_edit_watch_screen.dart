@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../constants/watch_colors.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/watch_service.dart';
@@ -49,9 +48,10 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  late String _existingImageUrl;
-  File? _selectedImage;
+  late List<String> _existingImageUrls;
+  final List<File> _newImages = [];
   bool _isUploadingImage = false;
+  static const int _maxPhotos = 5;
 
   late String _existingModelUrl;
   File? _selectedModelFile;
@@ -95,7 +95,14 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     _styleCategory = (d['styleCategory'] as String?) ?? 'Sport';
     _colorHex = (d['colorHex'] as String?) ?? watchColorPalette.first.hex;
     _listedInCatalog = (d['listedInCatalog'] as bool?) ?? true;
-    _existingImageUrl = (d['imageUrl'] as String?) ?? '';
+    // Watches saved before multi-photo support only have a single
+    // `imageUrl` — treat that as the sole existing photo so nothing is
+    // lost for older listings.
+    final existingUrls = (d['imageUrls'] as List?)?.cast<String>() ?? [];
+    final legacyImageUrl = (d['imageUrl'] as String?) ?? '';
+    _existingImageUrls = existingUrls.isNotEmpty
+        ? List<String>.from(existingUrls)
+        : (legacyImageUrl.isNotEmpty ? [legacyImageUrl] : []);
     _existingModelUrl = (d['modelUrl'] as String?) ?? '';
   }
 
@@ -115,13 +122,21 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final image = await _cloudinaryService.pickImage(
-      source: ImageSource.gallery,
-    );
-    if (image != null) {
-      setState(() => _selectedImage = image);
-    }
+  Future<void> _pickImages() async {
+    final remaining =
+        _maxPhotos - _existingImageUrls.length - _newImages.length;
+    if (remaining <= 0) return;
+    final images = await _cloudinaryService.pickMultipleImages();
+    if (images.isEmpty) return;
+    setState(() => _newImages.addAll(images.take(remaining)));
+  }
+
+  void _removeExistingImage(int index) {
+    setState(() => _existingImageUrls.removeAt(index));
+  }
+
+  void _removeNewImage(int index) {
+    setState(() => _newImages.removeAt(index));
   }
 
   Future<void> _pickModelFile() async {
@@ -147,17 +162,20 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     });
 
     try {
-      // Only touch imageUrl if the merchant picked a new photo — otherwise
-      // leave the existing one exactly as-is in Firestore.
-      String imageUrl = _existingImageUrl;
-      if (_selectedImage != null) {
+      // Only re-upload photos that are newly picked; existing hosted URLs
+      // are kept as-is (in whatever order they weren't removed from).
+      final List<String> uploadedUrls = [];
+      if (_newImages.isNotEmpty) {
         setState(() => _isUploadingImage = true);
         try {
-          imageUrl = await _cloudinaryService.uploadImage(_selectedImage!);
+          for (final file in _newImages) {
+            uploadedUrls.add(await _cloudinaryService.uploadImage(file));
+          }
         } finally {
           if (mounted) setState(() => _isUploadingImage = false);
         }
       }
+      final imageUrls = [..._existingImageUrls, ...uploadedUrls];
 
       // Same pattern for the 3D model — only re-upload if a new file was
       // picked, otherwise keep whatever's already attached.
@@ -187,7 +205,8 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         'movementType': _movementTypeController.text.trim(),
         'waterResistance': _waterResistanceController.text.trim(),
         'listedInCatalog': _listedInCatalog,
-        'imageUrl': imageUrl,
+        'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : '',
+        'imageUrls': imageUrls,
         'modelUrl': modelUrl,
         'has3DModel': modelUrl.isNotEmpty,
       });
@@ -236,76 +255,129 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _fieldLabel('WATCH PHOTO'),
-              GestureDetector(
-                onTap: _isUploadingImage ? null : _pickImage,
-                child: Container(
-                  height: 160,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.gold.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _isUploadingImage
-                      ? const Center(child: CircularProgressIndicator())
-                      : _selectedImage != null
-                          ? Image.file(_selectedImage!, fit: BoxFit.cover)
-                          : _existingImageUrl.isNotEmpty
-                              ? Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    Image.network(
-                                      _existingImageUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              const Center(
-                                        child: Icon(Icons.watch,
-                                            size: 40,
-                                            color: AppTheme.textSecondary),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      right: 8,
-                                      bottom: 8,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withValues(
-                                              alpha: 0.6),
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                        ),
-                                        child: const Text(
-                                          'Tap to change',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : const Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.add_a_photo_outlined,
-                                        size: 32,
-                                        color: AppTheme.textSecondary),
-                                    SizedBox(height: 8),
-                                    Text('Tap to add a photo',
-                                        style: TextStyle(
-                                            color: AppTheme.textSecondary)),
-                                  ],
-                                ),
+              _fieldLabel('WATCH PHOTOS (up to $_maxPhotos)'),
+              SizedBox(
+                height: 100,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _existingImageUrls.length +
+                      _newImages.length +
+                      ((_existingImageUrls.length + _newImages.length) <
+                              _maxPhotos
+                          ? 1
+                          : 0),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final totalPhotos =
+                        _existingImageUrls.length + _newImages.length;
+
+                    if (index == totalPhotos) {
+                      // The trailing "add photo" tile.
+                      return GestureDetector(
+                        onTap: _isUploadingImage ? null : _pickImages,
+                        child: Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            color: AppTheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppTheme.gold.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo_outlined,
+                                  size: 26, color: AppTheme.textSecondary),
+                              SizedBox(height: 6),
+                              Text('Add photo',
+                                  style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    final isExisting = index < _existingImageUrls.length;
+                    final image = isExisting
+                        ? Image.network(
+                            _existingImageUrls[index],
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                              width: 100,
+                              height: 100,
+                              color: AppTheme.surface,
+                              child: const Icon(Icons.watch,
+                                  color: AppTheme.textSecondary),
+                            ),
+                          )
+                        : Image.file(
+                            _newImages[index - _existingImageUrls.length],
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.cover,
+                          );
+
+                    return Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: image,
+                        ),
+                        if (index == 0)
+                          Positioned(
+                            left: 4,
+                            bottom: 4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Cover',
+                                style:
+                                    TextStyle(color: Colors.white, fontSize: 10),
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          right: 2,
+                          top: 2,
+                          child: GestureDetector(
+                            onTap: () => isExisting
+                                ? _removeExistingImage(index)
+                                : _removeNewImage(
+                                    index - _existingImageUrls.length),
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close,
+                                  size: 14, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
+              if (_isUploadingImage)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: LinearProgressIndicator(),
+                ),
               const SizedBox(height: 16),
 
               _fieldLabel('3D MODEL'),

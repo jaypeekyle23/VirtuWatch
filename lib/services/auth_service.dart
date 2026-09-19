@@ -436,6 +436,21 @@ class AuthService {
     });
   }
 
+  /// Clears a previously scanned outfit's colors from the user's profile,
+  /// so recommendations stop factoring in outfit color match until the
+  /// next scan. Unlike [saveOutfitColors], this also removes
+  /// `lastOutfitScanAt` rather than stamping a fresh one — nothing was
+  /// just scanned, so there's nothing to timestamp.
+  Future<void> clearOutfitColors() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw 'You must be logged in.';
+
+    await _firestore.collection('users').doc(uid).update({
+      'outfitColors': [],
+      'lastOutfitScanAt': FieldValue.delete(),
+    });
+  }
+
   /// Saves the user's wrist width on their profile, so the future
   /// recommendation engine can filter/rank watches by fit (comparing
   /// against each watch's lugToLugMm). [method] distinguishes a manual

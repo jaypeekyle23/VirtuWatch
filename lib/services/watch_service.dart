@@ -41,12 +41,41 @@ class WatchService {
 
   /// Deletes a watch listing. [watchLabel] is an optional human-readable
   /// name for the activity log message; falls back to the watch's ID.
+  ///
+  /// Also strips the watch's ID out of every customer's `savedWatches` and
+  /// `recentlyViewedWatches` lists, so a deleted watch doesn't linger as a
+  /// dangling reference (e.g. a photo-less thumbnail on the profile tab).
   Future<void> deleteWatch(String watchId, {String? watchLabel}) async {
     await _watches.doc(watchId).delete();
+    await _removeWatchReferences(watchId);
     await _activityLog.log(
       'watch_deleted',
       'Watch deleted: ${watchLabel ?? watchId}',
     );
+  }
+
+  /// Removes [watchId] from any user documents that still reference it in
+  /// `savedWatches` or `recentlyViewedWatches`.
+  Future<void> _removeWatchReferences(String watchId) async {
+    final users = _firestore.collection('users');
+    final affected = await Future.wait([
+      users.where('savedWatches', arrayContains: watchId).get(),
+      users.where('recentlyViewedWatches', arrayContains: watchId).get(),
+    ]);
+
+    final docsToUpdate = {
+      for (final snapshot in affected) for (final doc in snapshot.docs) doc.id: doc.reference,
+    };
+    if (docsToUpdate.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final ref in docsToUpdate.values) {
+      batch.update(ref, {
+        'savedWatches': FieldValue.arrayRemove([watchId]),
+        'recentlyViewedWatches': FieldValue.arrayRemove([watchId]),
+      });
+    }
+    await batch.commit();
   }
 
   /// Stream of watches belonging to the currently logged-in merchant.

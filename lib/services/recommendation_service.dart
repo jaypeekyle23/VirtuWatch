@@ -126,10 +126,10 @@ class RecommendationService {
   static const double _colorWeight = 0.15;
   static const double _styleWeight = 0.30;
 
-  // How many mm of lug-to-lug vs wrist-width difference is treated as
-  // the edge of "still fits reasonably" before the fit score hits zero.
-  // (Moved to lib/utils/fit_scoring.dart as `fitToleranceMm` so ChatService
-  // can share the exact same rule — kept here only as a doc pointer.)
+  // How closely lug-to-lug should track wrist width for a "great fit" —
+  // it's a ratio (lug-to-lug / wrist width), not a raw mm difference.
+  // (Lives in lib/utils/fit_scoring.dart so ChatService can share the
+  // exact same rule — kept here only as a doc pointer.)
 
   // Euclidean distance between pure black and pure white in RGB space —
   // the maximum possible distance between two colors, used to normalize

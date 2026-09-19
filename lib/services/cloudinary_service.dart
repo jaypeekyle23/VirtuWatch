@@ -26,6 +26,14 @@ class CloudinaryService {
     return File(pickedFile.path);
   }
 
+  /// Opens the device's gallery allowing multiple images to be selected
+  /// at once. Returns an empty list if the user cancels without picking
+  /// anything.
+  Future<List<File>> pickMultipleImages() async {
+    final pickedFiles = await _picker.pickMultiImage(imageQuality: 85);
+    return pickedFiles.map((f) => File(f.path)).toList();
+  }
+
   /// Uploads an image file to Cloudinary using the unsigned preset and
   /// returns the hosted image URL. Throws a readable error string on
   /// failure so calling screens can show it directly.
