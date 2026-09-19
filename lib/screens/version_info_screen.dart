@@ -29,99 +29,121 @@ class VersionInfoScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Logo
-            Transform.translate(
-              offset: const Offset(0, -120),
-              child: Center(
-                child: Image.asset(
-                  'assets/images/branding/logo.png',
-                  height: 350,
-                  fit: BoxFit.contain,
+            // Logo (cropped to just its visible mark — the source asset has
+            // large transparent bands above/below it that would otherwise
+            // reserve blank space at the bottom of this page).
+            Center(
+              child: ClipRect(
+                child: Align(
+                  alignment: Alignment.center,
+                  heightFactor: 0.34,
+                  child: Image.asset(
+                    'assets/images/branding/logo.png',
+                    width: 300,
+                    fit: BoxFit.fitWidth,
+                  ),
                 ),
               ),
             ),
+            const SizedBox(height: 20),
 
-            // Everything below the logo
-            Transform.translate(
-              offset: const Offset(0, -220),
+            Center(
+              child: Text(
+                'Version $_versionName ($_buildNumber)',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            _sectionCard(
+              title: 'Build Details',
               child: Column(
-                children: [
-                  Center(
-                    child: Text(
-                      'Version $_versionName ($_buildNumber)',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
+                children: const [
+                  _InfoRow(
+                    label: 'Version',
+                    value: _versionName,
                   ),
-                  const SizedBox(height: 28),
-
-                  _sectionCard(
-                    title: 'Build Details',
-                    child: Column(
-                      children: const [
-                        _InfoRow(
-                          label: 'Version',
-                          value: _versionName,
-                        ),
-                        _InfoRow(
-                          label: 'Build Number',
-                          value: _buildNumber,
-                        ),
-                        _InfoRow(
-                          label: 'Release',
-                          value: 'Initial Capstone Release',
-                          isLast: true,
-                        ),
-                      ],
-                    ),
+                  _InfoRow(
+                    label: 'Build Number',
+                    value: _buildNumber,
                   ),
-                  const SizedBox(height: 16),
-
-                  _sectionCard(
-                    title: "What's Included",
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _ReleaseNote(
-                          text:
-                              'Customer, Merchant, and Admin accounts with role-based access',
-                        ),
-                        _ReleaseNote(
-                          text:
-                              'Full watch catalog with search, filters, and sorting',
-                        ),
-                        _ReleaseNote(
-                          text:
-                              'Outfit color scanning and fit/color/style-based watch recommendations',
-                        ),
-                        _ReleaseNote(
-                          text:
-                              'Merchant tools to list, edit, and manage watches',
-                        ),
-                        _ReleaseNote(
-                          text:
-                              'Admin dashboard for account, role, and catalog oversight',
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  Center(
-                    child: Text(
-                      '© 2026 VirtuWatch. All rights reserved.',
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
+                  _InfoRow(
+                    label: 'Release',
+                    value: 'Initial Capstone Release',
+                    isLast: true,
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+
+            _sectionCard(
+              title: "What's Included — For Shoppers",
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ReleaseNote(
+                    text:
+                        'AR virtual try-on with screen-calibrated wrist measurement',
+                  ),
+                  _ReleaseNote(
+                    text:
+                        'Outfit color scanning and fit/style/color-based watch recommendations',
+                  ),
+                  _ReleaseNote(
+                    text: 'Ask VirtuWatch AI in-app chat assistant',
+                  ),
+                  _ReleaseNote(
+                    text:
+                        'Full watch catalog with search, filters, sorting, and grid/list view',
+                  ),
+                  _ReleaseNote(
+                    text: 'Multi-photo and multi-color watch listings',
+                  ),
+                  _ReleaseNote(
+                    text: 'Save and revisit favorite watches',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            _sectionCard(
+              title: "What's Included — For Merchants & Admins",
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ReleaseNote(
+                    text:
+                        'Customer, Merchant, and Admin accounts with role-based access',
+                  ),
+                  _ReleaseNote(
+                    text:
+                        'Merchant tools to list, edit, and manage watches, including 3D models for AR',
+                  ),
+                  _ReleaseNote(
+                    text:
+                        'Admin dashboard for account, role, and catalog oversight',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            Center(
+              child: Text(
+                '© 2026 VirtuWatch. All rights reserved.',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
