@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Covers the directory path_provider's getTemporaryDirectory() resolves
+  to on Android (the app's cache dir), where UpdateCheckerService saves
+  the downloaded update APK before handing it to the installer.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="update_apk" path="." />
+</paths>

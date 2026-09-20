@@ -116,6 +116,20 @@ class UserService {
     return _users.doc(uid).snapshots();
   }
 
+  /// Returns how many watches the current user has saved, without
+  /// fetching the watch documents themselves. Used by
+  /// EngagementNotificationService to decide whether a saved-watches
+  /// reminder notification is worth showing.
+  Future<int> savedWatchCount() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 0;
+
+    final userDoc = await _users.doc(uid).get();
+    final savedIds =
+        (userDoc.data()?['savedWatches'] as List?)?.cast<String>() ?? [];
+    return savedIds.length;
+  }
+
   /// Fetches brief data (name, brand, price, style) for the current
   /// user's saved/wishlist watches — used to give the AI chat assistant
   /// context on what the customer has already shown interest in,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/app_version.dart';
 import '../theme/app_theme.dart';
 
 /// Shows details about the current app build — version number, build
@@ -6,16 +7,18 @@ import '../theme/app_theme.dart';
 /// from [AboutScreen], which covers what the app is and who built it
 /// rather than which specific build someone is running.
 ///
-/// The version/build numbers below are read from pubspec.yaml's
-/// `version:` line by hand rather than via a package like
-/// package_info_plus, so they need to be kept in sync manually if that
-/// value changes — a deliberate tradeoff to avoid adding a new
-/// dependency for a single static string.
+/// The version/build numbers below come from [AppVersion], which is
+/// read from pubspec.yaml's `version:` line by hand rather than via a
+/// package like package_info_plus — a deliberate tradeoff to avoid
+/// adding a new dependency for a couple of static strings. The update
+/// checker (see UpdateCheckerService) reads the same constants, so this
+/// screen and the "update available" check never disagree about what
+/// version is currently installed.
 class VersionInfoScreen extends StatelessWidget {
   const VersionInfoScreen({super.key});
 
-  static const _versionName = '1.0.0';
-  static const _buildNumber = '1';
+  static const _versionName = AppVersion.versionName;
+  static const _buildNumber = AppVersion.buildNumber;
 
   @override
   Widget build(BuildContext context) {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../services/engagement_notification_service.dart';
+import '../services/update_checker_service.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
@@ -38,7 +40,23 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     _profileFuture = _authService.fetchCurrentUserProfile();
+    _profileFuture.then(_runPostLoginChecks);
     _loadOnboardingFlag();
+  }
+
+  /// Runs once, right after a signed-in profile is found — this is the
+  /// app's "open/resume" moment. The update check applies to every
+  /// role; the email-verification and saved-watches reminders are
+  /// customer-only concepts, so they're skipped for merchant/admin
+  /// accounts. Both are fire-and-forget: neither should block or affect
+  /// what AuthGate renders.
+  void _runPostLoginChecks(Map<String, dynamic>? profile) {
+    if (profile == null) return;
+    UpdateCheckerService.instance.checkForUpdate();
+    final role = profile['role'] as String? ?? 'customer';
+    if (role == 'customer') {
+      EngagementNotificationService.instance.runChecks();
+    }
   }
 
   Future<void> _loadOnboardingFlag() async {

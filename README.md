@@ -64,6 +64,17 @@ lib/
   theme/        # app-wide styling
 ```
 
+## Notifications
+
+VirtuWatch shows four local (on-device, not server-pushed) notifications:
+
+- **Update available** — checked against GitHub's releases API once per app open/resume (see `UpdateCheckerService`), against `jaypeekyle23/VirtuWatch`. Tapping it downloads the release's `.apk` asset and opens the system installer. Make sure every GitHub release is tagged `v<version>` (e.g. `v1.1.0`) with a `.apk` file attached as a release asset.
+- **Password updated** — fires right after a successful password change.
+- **Verify your email** — reminds a signed-in customer with an unverified email, throttled to once a day.
+- **Saved watches waiting** — reminds a customer with saved/wishlist watches, throttled to once every 3 days.
+
+None of these need Firebase Cloud Messaging or a backend component, since each is triggered by something the app itself just checked, not by a remote event.
+
 ## Known Limitations
 
 - No automated test coverage beyond the default Flutter scaffold test.

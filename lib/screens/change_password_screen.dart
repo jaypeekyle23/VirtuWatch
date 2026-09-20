@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -44,6 +45,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         currentPassword: _currentPasswordController.text.trim(),
         newPassword: _newPasswordController.text.trim(),
       );
+      // Doesn't need `mounted` — it doesn't touch context or widget state,
+      // so it's fine to fire even if the screen is gone by the time it
+      // resolves.
+      NotificationService.instance.showPasswordChanged();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Password changed successfully!')),
