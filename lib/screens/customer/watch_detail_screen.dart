@@ -94,6 +94,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
     final brand = data['brand'] as String? ?? '';
     final price = data['price'];
     final style = data['styleCategory'] as String? ?? '';
+    final targetGender = data['targetGender'] as String?;
     final colorHexesRaw = (data['colorHexes'] as List?)?.cast<String>();
     final legacyColorHex = data['colorHex'] as String?;
     final colorHexes = (colorHexesRaw != null && colorHexesRaw.isNotEmpty)
@@ -248,6 +249,23 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                             ),
                           ),
                         ),
+                      if (targetGender != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surface,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            targetGender.toUpperCase(),
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       if (colorHexes.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -275,6 +293,27 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                                     ),
                                   ),
                                 ),
+                              // Plain-language name(s) alongside the
+                              // swatches, using the same lookup the
+                              // chatbot uses (palette name, or a
+                              // hue-based description for a custom
+                              // color) — so the screen and the AI
+                              // describe a watch's color the same way,
+                              // instead of leaving the customer to read
+                              // a colored dot on their own.
+                              Text(
+                                colorHexes
+                                    .take(3)
+                                    .map((hex) =>
+                                        paletteNameForHex(hex) ??
+                                        describeHexColor(hex))
+                                    .join(' / '),
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ],
                           ),
                         ),

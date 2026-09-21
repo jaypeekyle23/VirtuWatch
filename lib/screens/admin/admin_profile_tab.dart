@@ -144,7 +144,7 @@ class AdminProfileTab extends StatelessWidget {
                           ),
                         );
                       }),
-                      _menuTile(context, 'Version Info (v1.0.0)',
+                      _menuTile(context, 'Version Info (v1.1.0)',
                           Icons.numbers_outlined, () {
                         Navigator.of(context).push(
                           MaterialPageRoute(

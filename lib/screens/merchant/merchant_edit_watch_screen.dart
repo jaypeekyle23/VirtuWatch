@@ -42,6 +42,10 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
   late final TextEditingController _waterResistanceController;
 
   late String _styleCategory;
+  // Null means "not specified" — a legacy watch saved before this field
+  // existed will naturally read as null here, same as a merchant
+  // actively choosing not to set it.
+  String? _targetGender;
   late List<String> _colorHexes;
   String _customColorHex = watchColorPalette.first.hex;
   bool _useCustomColor = false;
@@ -67,6 +71,8 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     'Minimalist',
     'Dress',
   ];
+
+  final List<String> _genderOptions = ["Men's", "Women's", 'Unisex'];
 
   String _asString(dynamic value) => value?.toString() ?? '';
 
@@ -94,6 +100,7 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
     _waterResistanceController =
         TextEditingController(text: _asString(d['waterResistance']));
     _styleCategory = (d['styleCategory'] as String?) ?? 'Sport';
+    _targetGender = d['targetGender'] as String?;
     // Watches saved before multi-color support only have a single
     // `colorHex` — treat that as the sole existing color, same
     // fallback pattern used for the legacy single `imageUrl` above.
@@ -233,6 +240,7 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         'brand': _brandController.text.trim(),
         'price': double.parse(_priceController.text.trim()),
         'styleCategory': _styleCategory,
+        'targetGender': _targetGender,
         'colorHex': _colorHexes.first,
         'colorHexes': _colorHexes,
         'caseDiameterMm': double.tryParse(_caseDiameterController.text.trim()),
@@ -553,6 +561,26 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
                     .toList(),
                 onChanged: (value) {
                   setState(() => _styleCategory = value ?? _styleCategory);
+                },
+              ),
+              const SizedBox(height: 16),
+
+              _fieldLabel('TARGET GENDER'),
+              DropdownButtonFormField<String?>(
+                initialValue: _targetGender,
+                dropdownColor: AppTheme.surface,
+                decoration: const InputDecoration(),
+                hint: const Text('Not specified'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Not specified'),
+                  ),
+                  ..._genderOptions
+                      .map((g) => DropdownMenuItem(value: g, child: Text(g))),
+                ],
+                onChanged: (value) {
+                  setState(() => _targetGender = value);
                 },
               ),
               const SizedBox(height: 16),

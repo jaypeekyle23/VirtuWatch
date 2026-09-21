@@ -25,6 +25,7 @@ class MerchantWatchDetailScreen extends StatelessWidget {
     final brand = data['brand'] as String? ?? '';
     final price = data['price'];
     final style = data['styleCategory'] as String? ?? '';
+    final targetGender = data['targetGender'] as String?;
     final colorHexesRaw = (data['colorHexes'] as List?)?.cast<String>();
     final legacyColorHex = data['colorHex'] as String?;
     final colorHexes = (colorHexesRaw != null && colorHexesRaw.isNotEmpty)
@@ -120,6 +121,30 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                             ),
                           ),
                         ),
+                      // Unlike the customer-facing screen, an unset gender
+                      // is flagged here rather than just omitted — this is
+                      // the merchant's own view of their listing, so it
+                      // should surface gaps that need filling in, not hide
+                      // them.
+                      if (targetGender != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surface,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            targetGender.toUpperCase(),
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      else
+                        _statusChip('GENDER NOT SET', Colors.orangeAccent),
                       if (colorHexes.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -147,6 +172,23 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                                     ),
                                   ),
                                 ),
+                              // Same plain-language lookup the chatbot
+                              // uses, so a merchant sees a watch's color
+                              // described the same way a customer (or
+                              // the AI) would.
+                              Text(
+                                colorHexes
+                                    .take(3)
+                                    .map((hex) =>
+                                        paletteNameForHex(hex) ??
+                                        describeHexColor(hex))
+                                    .join(' / '),
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ],
                           ),
                         ),

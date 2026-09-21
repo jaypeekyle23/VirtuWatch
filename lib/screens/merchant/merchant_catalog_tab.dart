@@ -2,9 +2,30 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/catalog_filter_sheet.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_edit_watch_screen.dart';
 import 'merchant_watch_detail_screen.dart';
+
+/// Which fields this watch is missing that the recommendation engine and
+/// chatbot actually rely on: gender (informational, but customer-facing
+/// via the catalog filter and chat), color (feeds the color-match score
+/// and is what the chatbot describes), and lug-to-lug (feeds the fit
+/// score — the single biggest weighted signal at 55%). Deliberately
+/// narrower than "every empty field" — this flags gaps that actually
+/// degrade what the customer sees or what the AI can honestly answer,
+/// not cosmetic specs like water resistance.
+List<String> missingWatchFields(Map<String, dynamic> data) {
+  final missing = <String>[];
+  if (data['targetGender'] == null) missing.add('Gender');
+  final colorHex = data['colorHex'] as String?;
+  final colorHexes = (data['colorHexes'] as List?)?.cast<String>();
+  if (colorHex == null && (colorHexes == null || colorHexes.isEmpty)) {
+    missing.add('Color');
+  }
+  if (data['lugToLugMm'] == null) missing.add('Lug-to-Lug');
+  return missing;
+}
 
 enum _SortOption {
   newest('Newest'),
@@ -28,13 +49,27 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
   final _searchController = TextEditingController();
 
   String _searchQuery = '';
-  String _selectedFilter = 'All';
+  // Style/gender/AR/brand/price/listing-status all live in one shared
+  // CatalogFilters, set via the filter sheet — the same model and sheet
+  // the customer catalog uses, so merchants get the identical set of
+  // filters rather than a hand-maintained subset.
+  CatalogFilters _filters = const CatalogFilters();
+  // "Needs Info" stays a separate toggle rather than folding into
+  // CatalogFilters — it's a merchant/admin data-completeness tool, not a
+  // catalog-browsing filter a customer would ever have a use for, so it
+  // doesn't belong in the model shared with the customer screen.
+  bool _needsInfoOnly = false;
   _SortOption _sortOption = _SortOption.newest;
   // Multi-column grid is the default; the toggle in the app bar lets the
   // merchant switch to the original single-column list instead.
   bool _isMultiColumn = true;
 
-  final List<String> _filters = ['All', 'Classic', 'Sport', 'Luxury', 'Casual'];
+  static const List<String> _styleOptions = [
+    'Classic',
+    'Sport',
+    'Luxury',
+    'Casual',
+  ];
 
   @override
   void dispose() {
@@ -44,219 +79,277 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Catalog'),
-        actions: [
-          IconButton(
-            icon: Icon(_isMultiColumn ? Icons.view_agenda_outlined : Icons.grid_view),
-            tooltip: _isMultiColumn ? 'Switch to list view' : 'Switch to grid view',
-            onPressed: () => setState(() => _isMultiColumn = !_isMultiColumn),
-          ),
-          PopupMenuButton<_SortOption>(
-            icon: const Icon(Icons.sort),
-            color: AppTheme.surface,
-            initialValue: _sortOption,
-            onSelected: (option) => setState(() => _sortOption = option),
-            itemBuilder: (context) => _SortOption.values.map((option) {
-              final isSelected = option == _sortOption;
-              return PopupMenuItem(
-                value: option,
-                child: Row(
-                  children: [
-                    if (isSelected)
-                      const Icon(Icons.check, color: AppTheme.gold, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      option.label,
-                      style: TextStyle(
-                        color: isSelected
-                            ? AppTheme.gold
-                            : AppTheme.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const MerchantAddWatchScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search by name, brand, or style...',
-                prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        color: AppTheme.textSecondary,
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _watchService.myWatches(),
+      builder: (context, snapshot) {
+        final allDocs = snapshot.data?.docs ?? [];
+
+        final brandOptions = allDocs
+            .map((d) => d.data()['brand'] as String? ?? '')
+            .where((b) => b.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+        final prices = allDocs
+            .map((d) => (d.data()['price'] as num?)?.toDouble())
+            .whereType<double>()
+            .toList();
+        final priceFloor =
+            prices.isEmpty ? 0.0 : prices.reduce((a, b) => a < b ? a : b);
+        final priceCeiling =
+            prices.isEmpty ? 0.0 : prices.reduce((a, b) => a > b ? a : b);
+
+        // Computed from the FULL unfiltered set, so the banner always
+        // reflects the whole catalog regardless of which filters are
+        // currently applied.
+        final incompleteCount = allDocs
+            .where((d) => missingWatchFields(d.data()).isNotEmpty)
+            .length;
+
+        var docs = allDocs;
+
+        if (_needsInfoOnly) {
+          docs = docs
+              .where((d) => missingWatchFields(d.data()).isNotEmpty)
+              .toList();
+        }
+        if (_filters.style != 'All') {
+          docs = docs
+              .where((d) => d.data()['styleCategory'] == _filters.style)
+              .toList();
+        }
+        if (_filters.brand != 'All') {
+          docs =
+              docs.where((d) => d.data()['brand'] == _filters.brand).toList();
+        }
+        if (_filters.gender != 'All') {
+          docs = docs
+              .where((d) => d.data()['targetGender'] == _filters.gender)
+              .toList();
+        }
+        if (_filters.arOnly) {
+          docs = docs
+              .where((d) => d.data()['has3DModel'] as bool? ?? false)
+              .toList();
+        }
+        if (_filters.listingStatus != 'All') {
+          final wantListed = _filters.listingStatus == 'Active';
+          docs = docs
+              .where((d) =>
+                  (d.data()['listedInCatalog'] as bool? ?? false) ==
+                  wantListed)
+              .toList();
+        }
+        if (_filters.priceRange != null) {
+          final range = _filters.priceRange!;
+          docs = docs.where((d) {
+            final price = (d.data()['price'] as num?)?.toDouble();
+            if (price == null) return false;
+            return price >= range.start && price <= range.end;
+          }).toList();
+        }
+        if (_searchQuery.isNotEmpty) {
+          docs = docs.where((d) {
+            final data = d.data();
+            final name = (data['name'] as String? ?? '').toLowerCase();
+            final brand = (data['brand'] as String? ?? '').toLowerCase();
+            final style =
+                (data['styleCategory'] as String? ?? '').toLowerCase();
+            return name.contains(_searchQuery) ||
+                brand.contains(_searchQuery) ||
+                style.contains(_searchQuery);
+          }).toList();
+        }
+
+        docs = _applySort(docs);
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('My Catalog'),
+            actions: [
+              CatalogFilterButton(
+                activeCount: _filters.activeCount,
+                onPressed: () async {
+                  final result = await showCatalogFilterSheet(
+                    context,
+                    initial: _filters,
+                    styleOptions: _styleOptions,
+                    brandOptions: brandOptions,
+                    priceFloor: priceFloor,
+                    priceCeiling: priceCeiling,
+                    showGenderFilter: true,
+                    showArFilter: true,
+                    showListingStatusFilter: true,
+                  );
+                  if (result != null) setState(() => _filters = result);
+                },
               ),
-              onChanged: (value) {
-                setState(() => _searchQuery = value.toLowerCase());
-              },
-            ),
-          ),
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filters.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final filter = _filters[index];
-                final isSelected = _selectedFilter == filter;
-                return ChoiceChip(
-                  label: Text(filter),
-                  selected: isSelected,
-                  onSelected: (_) => setState(() => _selectedFilter = filter),
-                  backgroundColor: AppTheme.surface,
-                  selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                  labelStyle: TextStyle(
-                    color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                    fontSize: 13,
-                  ),
-                  side: BorderSide(
-                    color: isSelected ? AppTheme.gold : Colors.transparent,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _watchService.myWatches(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error loading catalog: ${snapshot.error}',
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                  );
-                }
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                var docs = snapshot.data?.docs ?? [];
-
-                if (_selectedFilter != 'All') {
-                  docs = docs
-                      .where((d) => d.data()['styleCategory'] == _selectedFilter)
-                      .toList();
-                }
-                if (_searchQuery.isNotEmpty) {
-                  docs = docs.where((d) {
-                    final data = d.data();
-                    final name = (data['name'] as String? ?? '').toLowerCase();
-                    final brand = (data['brand'] as String? ?? '').toLowerCase();
-                    final style =
-                        (data['styleCategory'] as String? ?? '').toLowerCase();
-                    return name.contains(_searchQuery) ||
-                        brand.contains(_searchQuery) ||
-                        style.contains(_searchQuery);
-                  }).toList();
-                }
-
-                docs = _applySort(docs);
-
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.watch_outlined,
-                              size: 48, color: AppTheme.textSecondary),
-                          const SizedBox(height: 12),
-                          Text(
-                            _searchQuery.isEmpty && _selectedFilter == 'All'
-                                ? 'No watches yet. Tap + to add your first one.'
-                                : 'No watches match your search or filter.',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium,
+              IconButton(
+                icon: Icon(_isMultiColumn
+                    ? Icons.view_agenda_outlined
+                    : Icons.grid_view),
+                tooltip:
+                    _isMultiColumn ? 'Switch to list view' : 'Switch to grid view',
+                onPressed: () =>
+                    setState(() => _isMultiColumn = !_isMultiColumn),
+              ),
+              PopupMenuButton<_SortOption>(
+                icon: const Icon(Icons.sort),
+                color: AppTheme.surface,
+                initialValue: _sortOption,
+                onSelected: (option) => setState(() => _sortOption = option),
+                itemBuilder: (context) => _SortOption.values.map((option) {
+                  final isSelected = option == _sortOption;
+                  return PopupMenuItem(
+                    value: option,
+                    child: Row(
+                      children: [
+                        if (isSelected)
+                          const Icon(Icons.check, color: AppTheme.gold, size: 18)
+                        else
+                          const SizedBox(width: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          option.label,
+                          style: TextStyle(
+                            color: isSelected
+                                ? AppTheme.gold
+                                : AppTheme.textPrimary,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   );
-                }
-
-                if (_isMultiColumn) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: GridView.builder(
-                      padding: const EdgeInsets.only(bottom: 16, top: 4),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.62,
-                      ),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        final doc = docs[index];
-                        final data = doc.data();
-                        return _WatchGridCard(
-                          watchId: doc.id,
-                          data: data,
-                          watchService: _watchService,
-                        );
-                      },
+                }).toList(),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const MerchantAddWatchScreen(),
                     ),
                   );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  itemCount: docs.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final doc = docs[index];
-                    final data = doc.data();
-                    return _WatchListTile(
-                      watchId: doc.id,
-                      data: data,
-                      watchService: _watchService,
-                    );
-                  },
-                );
-              },
-            ),
+                },
+              ),
+            ],
           ),
-        ],
-      ),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search by name, brand, or style...',
+                    prefixIcon:
+                        const Icon(Icons.search, color: AppTheme.textSecondary),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            color: AppTheme.textSecondary,
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (value) {
+                    setState(() => _searchQuery = value.toLowerCase());
+                  },
+                ),
+              ),
+              if (incompleteCount > 0)
+                _NeedsInfoBanner(
+                  count: incompleteCount,
+                  isActive: _needsInfoOnly,
+                  onToggle: () =>
+                      setState(() => _needsInfoOnly = !_needsInfoOnly),
+                ),
+              Expanded(
+                child: Builder(builder: (context) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error loading catalog: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    );
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.watch_outlined,
+                                size: 48, color: AppTheme.textSecondary),
+                            const SizedBox(height: 12),
+                            Text(
+                              _searchQuery.isEmpty && _filters.isDefault && !_needsInfoOnly
+                                  ? 'No watches yet. Tap + to add your first one.'
+                                  : 'No watches match your search or filters.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (_isMultiColumn) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: GridView.builder(
+                        padding: const EdgeInsets.only(bottom: 16, top: 4),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.62,
+                        ),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          final doc = docs[index];
+                          final data = doc.data();
+                          return _WatchGridCard(
+                            watchId: doc.id,
+                            data: data,
+                            watchService: _watchService,
+                          );
+                        },
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    itemCount: docs.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data();
+                      return _WatchListTile(
+                        watchId: doc.id,
+                        data: data,
+                        watchService: _watchService,
+                      );
+                    },
+                  );
+                }),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -302,6 +395,67 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
   }
 }
 
+/// Summary bar above the catalog grid/list, shown only when at least one
+/// of the merchant's watches is missing gender, color, or lug-to-lug data
+/// (see [missingWatchFields]). Tapping it toggles between showing only
+/// the incomplete watches and showing everything — this exists so a
+/// merchant with a large catalog can find the gaps without opening every
+/// watch one by one.
+class _NeedsInfoBanner extends StatelessWidget {
+  final int count;
+  final bool isActive;
+  final VoidCallback onToggle;
+
+  const _NeedsInfoBanner({
+    required this.count,
+    required this.isActive,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onToggle,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.orangeAccent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Colors.orangeAccent, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isActive
+                    ? 'Showing ${count == 1 ? '1 watch' : '$count watches'} needing gender, color, or fit data.'
+                    : '${count == 1 ? '1 watch is' : '$count watches are'} missing gender, color, or fit data.',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              isActive ? 'Show all' : 'Review',
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _WatchListTile extends StatelessWidget {
   final String watchId;
   final Map<String, dynamic> data;
@@ -320,6 +474,7 @@ class _WatchListTile extends StatelessWidget {
     final price = data['price'];
     final listed = data['listedInCatalog'] as bool? ?? false;
     final has3D = data['has3DModel'] as bool? ?? false;
+    final missing = missingWatchFields(data);
     final imageUrl = data['imageUrl'] as String? ?? '';
 
     return InkWell(
@@ -399,6 +554,12 @@ class _WatchListTile extends StatelessWidget {
                             listed ? Colors.greenAccent : AppTheme.textSecondary),
                         _statusChip(has3D ? 'AR' : 'NO 3D',
                             has3D ? AppTheme.gold : AppTheme.textSecondary),
+                        if (missing.isNotEmpty)
+                          Tooltip(
+                            message: 'Missing: ${missing.join(', ')}',
+                            child: _statusChip(
+                                'NEEDS INFO', Colors.orangeAccent),
+                          ),
                       ],
                     ),
                   ],
@@ -565,6 +726,7 @@ class _WatchGridCard extends StatelessWidget {
     final price = data['price'];
     final listed = data['listedInCatalog'] as bool? ?? false;
     final has3D = data['has3DModel'] as bool? ?? false;
+    final missing = missingWatchFields(data);
     final imageUrl = data['imageUrl'] as String? ?? '';
 
     return InkWell(
@@ -633,6 +795,11 @@ class _WatchGridCard extends StatelessWidget {
                         listed ? Colors.greenAccent : AppTheme.textSecondary),
                     _statusChip(has3D ? 'AR' : 'NO 3D',
                         has3D ? AppTheme.gold : AppTheme.textSecondary),
+                    if (missing.isNotEmpty)
+                      Tooltip(
+                        message: 'Missing: ${missing.join(', ')}',
+                        child: _statusChip('NEEDS INFO', Colors.orangeAccent),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 6),

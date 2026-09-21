@@ -38,6 +38,11 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
   final _waterResistanceController = TextEditingController();
 
   String _styleCategory = 'Sport';
+  // Null means "not specified" — deliberately not defaulted to a real
+  // value like _styleCategory is, since a wrong gender guess is worse
+  // than an honest gap. Stored as null in Firestore until a merchant
+  // actively picks one.
+  String? _targetGender;
   final List<String> _colorHexes = [watchColorPalette.first.hex];
   String _customColorHex = watchColorPalette.first.hex;
   bool _useCustomColor = false;
@@ -62,6 +67,8 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
     'Minimalist',
     'Dress',
   ];
+
+  final List<String> _genderOptions = ["Men's", "Women's", 'Unisex'];
 
   @override
   void dispose() {
@@ -180,6 +187,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
           'brand': _brandController.text.trim(),
           'price': double.parse(_priceController.text.trim()),
           'styleCategory': _styleCategory,
+          'targetGender': _targetGender,
           'colorHex': _colorHexes.first,
           'colorHexes': _colorHexes,
           'caseDiameterMm': double.tryParse(_caseDiameterController.text.trim()),
@@ -434,6 +442,26 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
                     .toList(),
                 onChanged: (value) {
                   setState(() => _styleCategory = value ?? _styleCategory);
+                },
+              ),
+              const SizedBox(height: 16),
+
+              _fieldLabel('TARGET GENDER'),
+              DropdownButtonFormField<String?>(
+                initialValue: _targetGender,
+                dropdownColor: AppTheme.surface,
+                decoration: const InputDecoration(),
+                hint: const Text('Not specified'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Not specified'),
+                  ),
+                  ..._genderOptions
+                      .map((g) => DropdownMenuItem(value: g, child: Text(g))),
+                ],
+                onChanged: (value) {
+                  setState(() => _targetGender = value);
                 },
               ),
               const SizedBox(height: 16),

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../services/recommendation_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import 'customer_catalog_tab.dart';
@@ -11,15 +12,44 @@ import 'wrist_measurement_screen.dart';
 import 'outfit_scan_screen.dart';
 import 'customer_profile_tab.dart';
 
-class CustomerHomeTab extends StatelessWidget {
+class CustomerHomeTab extends StatefulWidget {
   final String username;
   const CustomerHomeTab({super.key, required this.username});
+
+  @override
+  State<CustomerHomeTab> createState() => _CustomerHomeTabState();
+}
+
+class _CustomerHomeTabState extends State<CustomerHomeTab> {
+  final _recommendationService = RecommendationService();
+
+  // Loaded once in initState and cached, same pattern as
+  // RecommendedForYouScreen, rather than re-scoring the whole catalog
+  // on every rebuild of this tab.
+  RecommendationResult? _recommendationResult;
 
   String get _greeting {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning';
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecommendations();
+  }
+
+  Future<void> _loadRecommendations() async {
+    try {
+      final result = await _recommendationService.getRecommendations();
+      if (!mounted) return;
+      setState(() => _recommendationResult = result);
+    } catch (_) {
+      // Leave _recommendationResult null on failure — the section below
+      // just falls back to its empty state, same as an empty catalog.
+    }
   }
 
   @override
@@ -33,7 +63,7 @@ class CustomerHomeTab extends StatelessWidget {
           : FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, userSnapshot) {
         final liveUsername =
-            userSnapshot.data?.data()?['username'] as String? ?? username;
+            userSnapshot.data?.data()?['username'] as String? ?? widget.username;
         final photoUrl =
             userSnapshot.data?.data()?['photoUrl'] as String? ?? '';
         final initials = liveUsername.isNotEmpty
@@ -42,11 +72,14 @@ class CustomerHomeTab extends StatelessWidget {
 
         return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: RefreshIndicator(
+          onRefresh: _loadRecommendations,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               SizedBox(
                 height: 84,
                 child: Stack(
@@ -65,12 +98,16 @@ class CustomerHomeTab extends StatelessWidget {
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: InkWell(
-                          onTap: () {
-                            Navigator.of(context).push(
+                          onTap: () async {
+                            await Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const CustomerProfileTab(),
                               ),
                             );
+                            // Style preferences/budget may have changed
+                            // while in there (or further in, on Edit
+                            // Profile), so re-score on return.
+                            _loadRecommendations();
                           },
                           customBorder: const CircleBorder(),
                           child: CircleAvatar(
@@ -168,7 +205,7 @@ class CustomerHomeTab extends StatelessWidget {
                           width: 56,
                           height: 56,
                           child: Icon(
-                            Icons.watch_outlined,
+                            Icons.view_in_ar,
                             color: Color(0xFF0E1A2B),
                             size: 26,
                           ),
@@ -187,12 +224,14 @@ class CustomerHomeTab extends StatelessWidget {
                       context,
                       icon: Icons.straighten_outlined,
                       label: 'Measure Wrist',
-                      onTap: () {
-                        Navigator.of(context).push(
+                      onTap: () async {
+                        await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const WristMeasurementScreen(),
                           ),
                         );
+                        // Wrist width feeds the fit score directly.
+                        _loadRecommendations();
                       },
                     ),
                   ),
@@ -202,12 +241,14 @@ class CustomerHomeTab extends StatelessWidget {
                       context,
                       icon: Icons.checkroom_outlined,
                       label: 'Outfit Scan',
-                      onTap: () {
-                        Navigator.of(context).push(
+                      onTap: () async {
+                        await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const OutfitScanScreen(),
                           ),
                         );
+                        // Outfit colors feed the color score directly.
+                        _loadRecommendations();
                       },
                     ),
                   ),
@@ -300,12 +341,15 @@ class CustomerHomeTab extends StatelessWidget {
                         ),
                   ),
                   TextButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const RecommendedForYouScreen(),
                         ),
                       );
+                      // That screen lets you edit style/budget prefs and
+                      // clear outfit colors in place, so re-score on return.
+                      _loadRecommendations();
                     },
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,
@@ -318,24 +362,24 @@ class CustomerHomeTab extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: watchService.allListedWatches(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+              Builder(
+                builder: (context) {
+                  final result = _recommendationResult;
+                  if (result == null) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Center(child: CircularProgressIndicator()),
                     );
                   }
-                  final docs = snapshot.data?.docs ?? [];
-                  if (docs.isEmpty) {
+                  if (result.recommendations.isEmpty) {
                     return Text(
                       'No watches available yet.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     );
                   }
 
-                  final preview = docs.take(4).toList();
+                  // Already ranked best-match-first by RecommendationService.
+                  final preview = result.recommendations.take(4).toList();
 
                   return SizedBox(
                     height: 180,
@@ -345,9 +389,11 @@ class CustomerHomeTab extends StatelessWidget {
                       separatorBuilder: (context, index) =>
                           const SizedBox(width: 12),
                       itemBuilder: (context, index) {
-                        final doc = preview[index];
-                        final data = doc.data();
-                        return _HomeWatchCard(watchId: doc.id, data: data);
+                        final rec = preview[index];
+                        return _HomeWatchCard(
+                          watchId: rec.watchId,
+                          data: rec.data,
+                        );
                       },
                     ),
                   );
@@ -425,6 +471,7 @@ class CustomerHomeTab extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

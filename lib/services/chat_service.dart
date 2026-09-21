@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../constants/app_knowledge.dart';
+import '../constants/watch_colors.dart';
 import '../utils/match_score_color.dart';
 import 'recommendation_service.dart';
 
@@ -106,6 +107,38 @@ class ChatService {
     return '- Saved/wishlist watches: $items';
   }
 
+  /// Formats a watch's actual color(s) as a readable string for the
+  /// prompt — e.g. "Rose Gold" when it matches a standard palette swatch,
+  /// or a plain-language description (e.g. "burgundy") for a custom
+  /// color outside the palette, via [describeHexColor]. Mirrors the
+  /// exact colorHex/colorHexes fallback RecommendationService uses for
+  /// scoring, so the colors the AI describes are always the same ones
+  /// actually being scored. Never surfaces a raw hex code — that's
+  /// meaningless read out loud in a chat conversation.
+  static String _colorsLine(Map<String, dynamic> watchData) {
+    final colorHex = watchData['colorHex'] as String?;
+    final colorHexesRaw = (watchData['colorHexes'] as List?)?.cast<String>();
+    final colorHexes = (colorHexesRaw != null && colorHexesRaw.isNotEmpty)
+        ? colorHexesRaw
+        : (colorHex != null ? [colorHex] : const <String>[]);
+
+    if (colorHexes.isEmpty) return 'Not listed';
+    return colorHexes
+        .map((hex) => paletteNameForHex(hex) ?? describeHexColor(hex))
+        .join(', ');
+  }
+
+  /// Formats a watch's target-gender category for the prompt. Returns
+  /// null (rather than a string) when unset, so callers can decide
+  /// whether to include the line at all — a watch with no gender set
+  /// yet should read as "not specified" if it comes up, never guessed
+  /// from the name/case size/color the way this was considered and
+  /// deliberately rejected in favor of a real, merchant-set field.
+  static String _genderLine(Map<String, dynamic> watchData) {
+    final gender = watchData['targetGender'] as String?;
+    return gender ?? 'Not specified';
+  }
+
   static String _buildWatchPrompt(
     Map<String, dynamic> watchData,
     Map<String, dynamic>? userProfile,
@@ -116,6 +149,8 @@ class ChatService {
     final brand = watchData['brand'] as String? ?? 'Unknown';
     final price = watchData['price'];
     final style = watchData['styleCategory'] as String? ?? 'Unknown';
+    final colors = _colorsLine(watchData);
+    final gender = _genderLine(watchData);
     final caseDiameter = watchData['caseDiameterMm'];
     final caseThickness = watchData['caseThicknessMm'];
     final lugToLugMm = watchData['lugToLugMm'];
@@ -174,6 +209,8 @@ Here is the ONLY factual data you know about THIS watch — never invent specs, 
 - Brand: $brand
 - Price: ${price != null ? 'PHP $price' : 'Not listed'}
 - Style category: $style
+- Color(s): $colors
+- Suited for: $gender
 - Case diameter: ${caseDiameter != null ? '${caseDiameter}mm' : 'Not listed'}
 - Case thickness: ${caseThickness != null ? '${caseThickness}mm' : 'Not listed'}
 - Lug-to-lug: ${lugToLugMm != null ? '${lugToLugMm}mm' : 'Not listed'}
@@ -188,7 +225,10 @@ ${userContextLines.join('\n')}
 
 Rules:
 - If the customer's wrist width is known, use it directly to answer fit questions (e.g. compare it to the lug-to-lug measurement above) instead of asking them for it.
-- If asked HOW fit was determined: lug-to-lug within about 3mm of wrist width is a great fit; beyond that the wording escalates the further off it is — "a bit" (up to 8mm), "quite" (up to 15mm), then "way too" large/small beyond that. Explain it this way if asked — don't invent a different method.
+- If asked HOW fit was determined: it's based on the lug-to-lug measurement as a proportion of the customer's wrist width, NOT a flat millimeter difference — roughly 75-95% of wrist width is the well-proportioned "classic" sweet spot and scores highest; below ~60% the watch reads as running small/dainty; 95-105% is a "bold" fit that fills the wrist with barely any overhang; past ~105% the lugs start to overhang the wrist edge, more noticeably past ~120%. Explain it this way if asked — don't invent a flat millimeter cutoff or a different method.
+- If asked about this watch's color, answer using the Color(s) listed above exactly — never guess or invent a color that isn't listed there.
+- Describe colors in plain language only (e.g. "burgundy", "teal") — never state a hex code like "#6F1011" to the customer, even if they ask for one; explain you don't expose technical color codes and give the plain-language name instead.
+- If asked whether this watch is for men, women, or unisex, answer using "Suited for" above exactly. If it says "Not specified", say plainly that the merchant hasn't categorized it yet — never guess based on the name, size, or color.
 - Be honest about the match score, following the verdict above exactly — do not soften, round up, or talk up a low score into a recommendation just to be agreeable. A middling or poor score means you should say so plainly and explain why (fit, color, or style), not reassure the customer it would still be good for them.
 - If asked something not covered by the data above (e.g. exact stock, warranty terms, discounts), say you don't have that info and suggest they use the "Inquire via Urbane Time" button to ask the seller directly.
 - Keep replies short and conversational — a few sentences, not an essay.
@@ -211,11 +251,13 @@ Rules:
         _savedWatchesLine(savedWatches)!,
     ];
 
-    // Cap the list sent to the model — this is the user's already-ranked
-    // recommendation set, so the top N are the ones worth discussing;
-    // sending the entire catalog here would bloat every request for
-    // little benefit.
-    final topRecs = result.recommendations.take(15);
+    // Send the customer's ENTIRE ranked catalog, not just a top slice —
+    // capped only as a safety ceiling in case the catalog grows very
+    // large someday. Previously this took only the top 15, which meant
+    // the assistant genuinely had no data for lower-scoring watches
+    // (e.g. it couldn't correctly answer "what's my lowest score watch"
+    // once the catalog passed 15 items) — this fixes that.
+    final topRecs = result.recommendations.take(60);
 
     final watchLines = topRecs.map((rec) {
       final data = rec.data;
@@ -223,9 +265,19 @@ Rules:
       final brand = data['brand'] as String? ?? 'Unknown brand';
       final price = data['price'];
       final style = data['styleCategory'] as String? ?? 'Unknown style';
+      final colors = _colorsLine(data);
+      final gender = _genderLine(data);
       final caseDiameter = data['caseDiameterMm'];
+      final lugToLugMm = data['lugToLugMm'];
       return '- "$name" by $brand — ${price != null ? 'PHP $price' : 'price not listed'}, '
-          '$style style${caseDiameter != null ? ', ${caseDiameter}mm case' : ''}. '
+          '$style style, $colors, suited for: $gender'
+          '${caseDiameter != null ? ', ${caseDiameter}mm case' : ''}'
+          // Lug-to-lug is the number the fit score is actually computed
+          // from (case diameter is just visual size) — without it here,
+          // the assistant could state the fitNote verdict but had no
+          // raw number to back it up if asked "by how much" or "what's
+          // the actual lug-to-lug".
+          '${lugToLugMm != null ? ', ${lugToLugMm}mm lug-to-lug' : ''}. '
           'Match score: ${rec.matchPercent}% (${matchVerdictLabel(rec.matchPercent, signalCount: rec.signalCount)})'
           '${rec.confidenceNote != null ? ' (${rec.confidenceNote})' : ''}. '
           'Fit: ${rec.fitNote}.'
@@ -240,19 +292,22 @@ $appKnowledgeBlock
 What you know about the CUSTOMER:
 ${userContextLines.join('\n')}
 
-The customer's current recommended watches, already ranked and scored by the app (never recompute or contradict these match/fit scores — state them as-is):
+The customer's current recommended watches, already ranked and scored by the app, listed from BEST match to WORST match (never recompute or contradict these match/fit scores — state them as-is; if asked for the lowest-scoring watch, it's the last one in this list):
 $watchLines
 
 HOW THE MATCH SCORE ACTUALLY WORKS (explain this accurately if asked "why is this a good match" or "how does scoring work" — don't make up a different explanation):
-- Three signals feed the match score: Fit (55% weight), Style (30% weight), Color (15% weight).
-- Fit compares the watch's lug-to-lug measurement against the customer's wrist width — within about 3mm is a great fit; further off, the note escalates from "a bit" to "quite" to "way too" large/small the bigger the gap (fit score hits zero past a 15mm difference).
-- Color compares the watch's primary color against the colors detected in the customer's last outfit scan, using how visually close the colors are — closer colors score higher.
+- Three signals feed the match score: Fit (55% weight), Style (30% weight), Color (15% weight). "Suited for" (gender) is shown for reference only and does NOT factor into the match score.
+- Fit compares the watch's lug-to-lug measurement against the customer's wrist width as a PROPORTION (lug-to-lug ÷ wrist width), not a flat millimeter gap — roughly 75-95% of wrist width is the well-proportioned sweet spot and scores highest; below that it reads as running small, above it the fit gets "bold" then the lugs increasingly overhang the wrist the further past 105% the ratio goes.
+- Color compares the watch's actual color(s), listed with each watch above, against the colors detected in the customer's last outfit scan, using how visually close the colors are — closer colors score higher.
 - Style is a simple yes/no: does the watch's style category (e.g. minimalist, sporty, formal) match one of the customer's saved style preferences.
 - If the customer hasn't provided a signal yet (no wrist measurement, no outfit scan, no style preferences saved), that signal is left out of the score entirely rather than counted against the watch — the remaining signals are re-weighted so an incomplete profile doesn't unfairly lower every score.
 - The percentage shown is this weighted blend, not a simple average, and not something you should recompute — just explain the reasoning behind the number already given.
 
 Rules:
 - Only discuss specific watches from the list above — never invent specs/prices for a watch not on this list. If asked about a specific watch not on this list, say you can only discuss their current recommendations and suggest they browse the full catalog or search for it directly. Questions about the app itself or the general domain (see above) are welcome, not off-topic.
+- If asked about color (e.g. "do you have a red watch", "which ones are rose gold"), check the color(s) listed with each watch above and answer from that exactly — if none match, say so plainly rather than guessing or suggesting the closest thing as if it matched.
+- Describe colors in plain language only (e.g. "burgundy", "teal") — never state a hex code like "#6F1011" to the customer, even if they ask for one; explain you don't expose technical color codes and give the plain-language name instead.
+- If asked which watches are for men, women, or unisex, use each watch's "suited for" value exactly. If it says "Not specified", say plainly that watch hasn't been categorized yet — never guess based on its name, size, or color.
 - When asked "which is best for X", pick from the list using the match scores, fit notes, and budget as your basis, and explain briefly why.
 - When you state a watch's match score, if it has a confidence caveat noted (e.g. "Based on style only"), mention that caveat too — don't present a high percentage as full confidence when it's actually based on one or two signals.
 - Be honest about match quality, using the label next to each score above: "Great match" and "Good match" can be recommended normally; "Fair match" should be presented as only a partial fit, naming the weak signal; "Weak match" and "Poor match" must NOT be recommended as good for the customer — say plainly it's a poor match and why, and steer them to a higher-scoring watch instead. Never round a low score up into a positive recommendation just to be agreeable.

@@ -6,7 +6,12 @@ import '../../theme/app_theme.dart';
 import 'admin_create_account_screen.dart';
 
 class AdminAccountManagementScreen extends StatefulWidget {
-  const AdminAccountManagementScreen({super.key});
+  /// One of the entries in [_AdminAccountManagementScreenState._filters]
+  /// (e.g. 'Active', 'Merchant') to have the list pre-filtered on open.
+  /// Defaults to 'All'.
+  final String initialFilter;
+
+  const AdminAccountManagementScreen({super.key, this.initialFilter = 'All'});
 
   @override
   State<AdminAccountManagementScreen> createState() =>
@@ -19,7 +24,7 @@ class _AdminAccountManagementScreenState
   final _searchController = TextEditingController();
 
   String _searchQuery = '';
-  String _selectedFilter = 'All';
+  late String _selectedFilter;
 
   final List<String> _filters = [
     'All',
@@ -28,6 +33,14 @@ class _AdminAccountManagementScreenState
     'Admin',
     'Merchant',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedFilter = _filters.contains(widget.initialFilter)
+        ? widget.initialFilter
+        : 'All';
+  }
 
   @override
   void dispose() {

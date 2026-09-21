@@ -100,3 +100,74 @@ WatchColorOption nearestPaletteColor(Color color) {
   }
   return closest;
 }
+
+/// Best-effort plain-language name for an arbitrary hex color, bucketed
+/// by hue with a lightness/saturation adjustment (so a dark, muted red
+/// reads as "burgundy" rather than a flat "red", a washed-out blue reads
+/// as "muted blue" rather than overclaiming a bold shade, etc.).
+///
+/// Used as the fallback for a custom (wheel-picked) color that doesn't
+/// match one of the fixed [watchColorPalette] swatches — without this,
+/// the only "name" available for a custom color was its raw hex string
+/// (e.g. '#6F1011'), which is meaningless read out loud in a chat
+/// conversation. This is deliberately approximate — a human-readable
+/// descriptor for conversation, not a precise color-science classifier.
+String describeHexColor(String hex) {
+  final (r, g, b) = hexToRgb(hex);
+  final rf = r / 255, gf = g / 255, bf = b / 255;
+  final maxC = [rf, gf, bf].reduce((a, v) => a > v ? a : v);
+  final minC = [rf, gf, bf].reduce((a, v) => a < v ? a : v);
+  final lightness = (maxC + minC) / 2;
+  final delta = maxC - minC;
+
+  // Near-neutral: too little saturation for a hue name to mean anything.
+  if (delta < 0.08) {
+    if (lightness < 0.15) return 'black';
+    if (lightness > 0.85) return 'white';
+    if (lightness < 0.4) return 'dark gray';
+    if (lightness > 0.65) return 'light gray';
+    return 'gray';
+  }
+
+  final saturation = delta / (1 - (2 * lightness - 1).abs());
+
+  double hue;
+  if (maxC == rf) {
+    hue = 60 * (((gf - bf) / delta) % 6);
+  } else if (maxC == gf) {
+    hue = 60 * (((bf - rf) / delta) + 2);
+  } else {
+    hue = 60 * (((rf - gf) / delta) + 4);
+  }
+  if (hue < 0) hue += 360;
+
+  final String base;
+  if (hue < 15 || hue >= 345) {
+    base = 'red';
+  } else if (hue < 45) {
+    base = 'orange';
+  } else if (hue < 65) {
+    base = 'yellow';
+  } else if (hue < 170) {
+    base = 'green';
+  } else if (hue < 200) {
+    base = 'teal';
+  } else if (hue < 255) {
+    base = 'blue';
+  } else if (hue < 290) {
+    base = 'purple';
+  } else {
+    base = 'pink';
+  }
+
+  if (lightness < 0.25) {
+    return base == 'red' ? 'burgundy' : 'dark $base';
+  }
+  if (lightness > 0.8 && saturation < 0.4) {
+    return 'light $base';
+  }
+  if (saturation < 0.35) {
+    return 'muted $base';
+  }
+  return base;
+}

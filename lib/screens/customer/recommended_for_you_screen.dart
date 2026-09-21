@@ -106,7 +106,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                 (data['stylePreferences'] as List?)?.cast<String>() ?? [],
             currentPreferredBrands:
                 (data['preferredBrands'] as List?)?.cast<String>() ?? [],
-            currentBudgetMin: (data['budgetMin'] as num?)?.toDouble() ?? 5000,
+            currentBudgetMin: (data['budgetMin'] as num?)?.toDouble() ?? 0,
             currentBudgetMax:
                 (data['budgetMax'] as num?)?.toDouble() ?? 50000,
             currentPhotoUrl: data['photoUrl'] as String? ?? '',
@@ -423,7 +423,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _recommendationTile(
                         rec,
-                        budgetMin: _result?.budgetMin ?? 5000,
+                        budgetMin: _result?.budgetMin ?? 0,
                         budgetMax: _result?.budgetMax ?? 50000,
                       ),
                     )),

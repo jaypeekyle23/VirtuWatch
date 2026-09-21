@@ -181,6 +181,13 @@ class AdminDashboardTab extends StatelessWidget {
                       final merchants = users
                           .where((d) => d.data()['role'] == 'merchant')
                           .length;
+                      final savedWatches = users.fold<int>(
+                        0,
+                        (sum, d) =>
+                            sum +
+                            ((d.data()['savedWatches'] as List?)?.length ??
+                                0),
+                      );
 
                       return Column(
                         children: [
@@ -192,6 +199,14 @@ class AdminDashboardTab extends StatelessWidget {
                                   label: 'Total Watches',
                                   value: '${watches.length}',
                                   color: AppTheme.gold,
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const AdminWatchManagementTab(),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -201,6 +216,16 @@ class AdminDashboardTab extends StatelessWidget {
                                   label: 'Active Users',
                                   value: '$activeUsers',
                                   color: Colors.greenAccent,
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const AdminAccountManagementScreen(
+                                          initialFilter: 'Active',
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ],
@@ -214,16 +239,25 @@ class AdminDashboardTab extends StatelessWidget {
                                   label: 'Merchants',
                                   value: '$merchants',
                                   color: Colors.purpleAccent,
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const AdminAccountManagementScreen(
+                                          initialFilter: 'Merchant',
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: _statCard(
-                                  icon: Icons.straighten,
-                                  label: 'Wrist Scans',
-                                  value: '—',
-                                  color: AppTheme.textSecondary,
-                                  subtitle: 'Coming soon',
+                                  icon: Icons.favorite_border,
+                                  label: 'Saved Watches',
+                                  value: '$savedWatches',
+                                  color: Colors.pinkAccent,
                                 ),
                               ),
                             ],
@@ -442,8 +476,9 @@ class AdminDashboardTab extends StatelessWidget {
     required String value,
     required Color color,
     String? subtitle,
+    VoidCallback? onTap,
   }) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.surface,
@@ -474,6 +509,14 @@ class AdminDashboardTab extends StatelessWidget {
             ),
         ],
       ),
+    );
+
+    if (onTap == null) return card;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: card,
     );
   }
 

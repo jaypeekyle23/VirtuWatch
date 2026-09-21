@@ -41,7 +41,7 @@ class CustomerProfileTab extends StatelessWidget {
                 final preferredBrands =
                     (data['preferredBrands'] as List?)?.cast<String>() ?? [];
                 final budgetMin =
-                    (data['budgetMin'] as num?)?.toDouble() ?? 5000;
+                    (data['budgetMin'] as num?)?.toDouble() ?? 0;
                 final budgetMax =
                     (data['budgetMax'] as num?)?.toDouble() ?? 50000;
                 final wristWidthMm = (data['wristWidthMm'] as num?)?.toDouble();

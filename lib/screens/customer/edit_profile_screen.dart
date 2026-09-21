@@ -21,7 +21,7 @@ class EditProfileScreen extends StatefulWidget {
     required this.currentEmail,
     this.currentStylePreferences = const [],
     this.currentPreferredBrands = const [],
-    this.currentBudgetMin = 5000,
+    this.currentBudgetMin = 0,
     this.currentBudgetMax = 50000,
     this.currentPhotoUrl = '',
   });

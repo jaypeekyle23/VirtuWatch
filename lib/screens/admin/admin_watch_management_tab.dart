@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/catalog_filter_sheet.dart';
+import '../merchant/merchant_catalog_tab.dart' show missingWatchFields;
 import '../merchant/merchant_edit_watch_screen.dart';
 import '../merchant/merchant_add_watch_screen.dart';
 import '../merchant/merchant_watch_detail_screen.dart';
@@ -29,13 +31,24 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
   final _searchController = TextEditingController();
 
   String _searchQuery = '';
-  String _selectedFilter = 'All';
+  // Same shared CatalogFilters/filter sheet as the customer and merchant
+  // catalogs — see lib/widgets/catalog_filter_sheet.dart.
+  CatalogFilters _filters = const CatalogFilters();
+  // Same data-completeness helper the merchant catalog uses — admins
+  // manage the whole platform's catalog, so the same "which watches are
+  // missing gender/color/fit data" concern applies here too, if not more.
+  bool _needsInfoOnly = false;
   _SortOption _sortOption = _SortOption.newest;
   // Multi-column grid is the default; the toggle in the app bar lets the
   // admin switch to the original single-column list instead.
   bool _isMultiColumn = true;
 
-  final List<String> _filters = ['All', 'Classic', 'Sport', 'Luxury', 'Casual'];
+  static const List<String> _styleOptions = [
+    'Classic',
+    'Sport',
+    'Luxury',
+    'Casual',
+  ];
 
   @override
   void dispose() {
@@ -45,205 +58,259 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Watch Management'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Add Watch',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const MerchantAddWatchScreen(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: Icon(_isMultiColumn ? Icons.view_agenda_outlined : Icons.grid_view),
-            tooltip: _isMultiColumn ? 'Switch to list view' : 'Switch to grid view',
-            onPressed: () => setState(() => _isMultiColumn = !_isMultiColumn),
-          ),
-          PopupMenuButton<_SortOption>(
-            icon: const Icon(Icons.sort),
-            color: AppTheme.surface,
-            initialValue: _sortOption,
-            onSelected: (option) => setState(() => _sortOption = option),
-            itemBuilder: (context) => _SortOption.values.map((option) {
-              final isSelected = option == _sortOption;
-              return PopupMenuItem(
-                value: option,
-                child: Row(
-                  children: [
-                    if (isSelected)
-                      const Icon(Icons.check, color: AppTheme.gold, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      option.label,
-                      style: TextStyle(
-                        color: isSelected
-                            ? AppTheme.gold
-                            : AppTheme.textPrimary,
-                      ),
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('watches')
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final allDocs = snapshot.data?.docs ?? [];
+
+        final brandOptions = allDocs
+            .map((d) => d.data()['brand'] as String? ?? '')
+            .where((b) => b.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+        final prices = allDocs
+            .map((d) => (d.data()['price'] as num?)?.toDouble())
+            .whereType<double>()
+            .toList();
+        final priceFloor =
+            prices.isEmpty ? 0.0 : prices.reduce((a, b) => a < b ? a : b);
+        final priceCeiling =
+            prices.isEmpty ? 0.0 : prices.reduce((a, b) => a > b ? a : b);
+
+        final incompleteCount = allDocs
+            .where((d) => missingWatchFields(d.data()).isNotEmpty)
+            .length;
+
+        var docs = allDocs;
+
+        if (_needsInfoOnly) {
+          docs = docs
+              .where((d) => missingWatchFields(d.data()).isNotEmpty)
+              .toList();
+        }
+        if (_filters.style != 'All') {
+          docs = docs
+              .where((d) => d.data()['styleCategory'] == _filters.style)
+              .toList();
+        }
+        if (_filters.brand != 'All') {
+          docs =
+              docs.where((d) => d.data()['brand'] == _filters.brand).toList();
+        }
+        if (_filters.gender != 'All') {
+          docs = docs
+              .where((d) => d.data()['targetGender'] == _filters.gender)
+              .toList();
+        }
+        if (_filters.arOnly) {
+          docs = docs
+              .where((d) => d.data()['has3DModel'] as bool? ?? false)
+              .toList();
+        }
+        if (_filters.listingStatus != 'All') {
+          final wantListed = _filters.listingStatus == 'Active';
+          docs = docs
+              .where((d) =>
+                  (d.data()['listedInCatalog'] as bool? ?? false) ==
+                  wantListed)
+              .toList();
+        }
+        if (_filters.priceRange != null) {
+          final range = _filters.priceRange!;
+          docs = docs.where((d) {
+            final price = (d.data()['price'] as num?)?.toDouble();
+            if (price == null) return false;
+            return price >= range.start && price <= range.end;
+          }).toList();
+        }
+        if (_searchQuery.isNotEmpty) {
+          docs = docs.where((d) {
+            final data = d.data();
+            final name = (data['name'] as String? ?? '').toLowerCase();
+            final brand = (data['brand'] as String? ?? '').toLowerCase();
+            return name.contains(_searchQuery) || brand.contains(_searchQuery);
+          }).toList();
+        }
+
+        docs = _applySort(docs);
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Watch Management'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: 'Add Watch',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const MerchantAddWatchScreen(),
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search watches by name or brand...',
-                prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        color: AppTheme.textSecondary,
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
+                  );
+                },
               ),
-              onChanged: (value) {
-                setState(() => _searchQuery = value.toLowerCase());
-              },
-            ),
+              CatalogFilterButton(
+                activeCount: _filters.activeCount,
+                onPressed: () async {
+                  final result = await showCatalogFilterSheet(
+                    context,
+                    initial: _filters,
+                    styleOptions: _styleOptions,
+                    brandOptions: brandOptions,
+                    priceFloor: priceFloor,
+                    priceCeiling: priceCeiling,
+                    showGenderFilter: true,
+                    showArFilter: true,
+                    showListingStatusFilter: true,
+                  );
+                  if (result != null) setState(() => _filters = result);
+                },
+              ),
+              IconButton(
+                icon: Icon(_isMultiColumn
+                    ? Icons.view_agenda_outlined
+                    : Icons.grid_view),
+                tooltip:
+                    _isMultiColumn ? 'Switch to list view' : 'Switch to grid view',
+                onPressed: () =>
+                    setState(() => _isMultiColumn = !_isMultiColumn),
+              ),
+              PopupMenuButton<_SortOption>(
+                icon: const Icon(Icons.sort),
+                color: AppTheme.surface,
+                initialValue: _sortOption,
+                onSelected: (option) => setState(() => _sortOption = option),
+                itemBuilder: (context) => _SortOption.values.map((option) {
+                  final isSelected = option == _sortOption;
+                  return PopupMenuItem(
+                    value: option,
+                    child: Row(
+                      children: [
+                        if (isSelected)
+                          const Icon(Icons.check, color: AppTheme.gold, size: 18)
+                        else
+                          const SizedBox(width: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          option.label,
+                          style: TextStyle(
+                            color: isSelected
+                                ? AppTheme.gold
+                                : AppTheme.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filters.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final filter = _filters[index];
-                final isSelected = _selectedFilter == filter;
-                return ChoiceChip(
-                  label: Text(filter),
-                  selected: isSelected,
-                  onSelected: (_) => setState(() => _selectedFilter = filter),
-                  backgroundColor: AppTheme.surface,
-                  selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                  labelStyle: TextStyle(
-                    color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                    fontSize: 13,
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search watches by name or brand...',
+                    prefixIcon:
+                        const Icon(Icons.search, color: AppTheme.textSecondary),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            color: AppTheme.textSecondary,
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
                   ),
-                  side: BorderSide(
-                    color: isSelected ? AppTheme.gold : Colors.transparent,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('watches')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error: ${snapshot.error}',
-                      style: const TextStyle(color: Colors.redAccent),
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                }
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                var docs = snapshot.data?.docs ?? [];
-
-                if (_selectedFilter != 'All') {
-                  docs = docs
-                      .where((d) => d.data()['styleCategory'] == _selectedFilter)
-                      .toList();
-                }
-                if (_searchQuery.isNotEmpty) {
-                  docs = docs.where((d) {
-                    final data = d.data();
-                    final name = (data['name'] as String? ?? '').toLowerCase();
-                    final brand = (data['brand'] as String? ?? '').toLowerCase();
-                    return name.contains(_searchQuery) ||
-                        brand.contains(_searchQuery);
-                  }).toList();
-                }
-
-                docs = _applySort(docs);
-
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No watches found.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  );
-                }
-
-                if (_isMultiColumn) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: GridView.builder(
-                      padding: const EdgeInsets.only(bottom: 16, top: 4),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.62,
-                      ),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        final doc = docs[index];
-                        return _AdminWatchGridCard(
-                          watchId: doc.id,
-                          data: doc.data(),
-                          watchService: _watchService,
-                        );
-                      },
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  itemCount: docs.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final doc = docs[index];
-                    return _AdminWatchTile(
-                      watchId: doc.id,
-                      data: doc.data(),
-                      watchService: _watchService,
-                    );
+                  onChanged: (value) {
+                    setState(() => _searchQuery = value.toLowerCase());
                   },
-                );
-              },
-            ),
+                ),
+              ),
+              if (incompleteCount > 0)
+                _NeedsInfoBanner(
+                  count: incompleteCount,
+                  isActive: _needsInfoOnly,
+                  onToggle: () =>
+                      setState(() => _needsInfoOnly = !_needsInfoOnly),
+                ),
+              Expanded(
+                child: Builder(builder: (context) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.redAccent),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No watches found.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    );
+                  }
+
+                  if (_isMultiColumn) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: GridView.builder(
+                        padding: const EdgeInsets.only(bottom: 16, top: 4),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.62,
+                        ),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          final doc = docs[index];
+                          return _AdminWatchGridCard(
+                            watchId: doc.id,
+                            data: doc.data(),
+                            watchService: _watchService,
+                          );
+                        },
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    itemCount: docs.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      return _AdminWatchTile(
+                        watchId: doc.id,
+                        data: doc.data(),
+                        watchService: _watchService,
+                      );
+                    },
+                  );
+                }),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -289,6 +356,63 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
   }
 }
 
+/// Same completeness-banner concept as the merchant catalog — see
+/// merchant_catalog_tab.dart's _NeedsInfoBanner for the reasoning.
+class _NeedsInfoBanner extends StatelessWidget {
+  final int count;
+  final bool isActive;
+  final VoidCallback onToggle;
+
+  const _NeedsInfoBanner({
+    required this.count,
+    required this.isActive,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onToggle,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.orangeAccent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Colors.orangeAccent, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isActive
+                    ? 'Showing ${count == 1 ? '1 watch' : '$count watches'} needing gender, color, or fit data.'
+                    : '${count == 1 ? '1 watch is' : '$count watches are'} missing gender, color, or fit data.',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              isActive ? 'Show all' : 'Review',
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AdminWatchTile extends StatelessWidget {
   final String watchId;
   final Map<String, dynamic> data;
@@ -307,6 +431,7 @@ class _AdminWatchTile extends StatelessWidget {
     final price = data['price'];
     final listed = data['listedInCatalog'] as bool? ?? false;
     final has3D = data['has3DModel'] as bool? ?? false;
+    final missing = missingWatchFields(data);
     final imageUrl = data['imageUrl'] as String? ?? '';
 
     return InkWell(
@@ -386,6 +511,12 @@ class _AdminWatchTile extends StatelessWidget {
                             listed ? Colors.greenAccent : AppTheme.textSecondary),
                         _statusChip(has3D ? 'AR' : 'NO 3D',
                             has3D ? AppTheme.gold : AppTheme.textSecondary),
+                        if (missing.isNotEmpty)
+                          Tooltip(
+                            message: 'Missing: ${missing.join(', ')}',
+                            child: _statusChip(
+                                'NEEDS INFO', Colors.orangeAccent),
+                          ),
                       ],
                     ),
                   ],
@@ -552,6 +683,7 @@ class _AdminWatchGridCard extends StatelessWidget {
     final price = data['price'];
     final listed = data['listedInCatalog'] as bool? ?? false;
     final has3D = data['has3DModel'] as bool? ?? false;
+    final missing = missingWatchFields(data);
     final imageUrl = data['imageUrl'] as String? ?? '';
 
     return InkWell(
@@ -620,6 +752,11 @@ class _AdminWatchGridCard extends StatelessWidget {
                         listed ? Colors.greenAccent : AppTheme.textSecondary),
                     _statusChip(has3D ? 'AR' : 'NO 3D',
                         has3D ? AppTheme.gold : AppTheme.textSecondary),
+                    if (missing.isNotEmpty)
+                      Tooltip(
+                        message: 'Missing: ${missing.join(', ')}',
+                        child: _statusChip('NEEDS INFO', Colors.orangeAccent),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -709,24 +846,6 @@ class _AdminWatchGridCard extends StatelessWidget {
     }
   }
 
-  Widget _statusChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
   Future<void> _confirmDelete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -762,5 +881,23 @@ class _AdminWatchGridCard extends StatelessWidget {
         );
       }
     }
+  }
+
+  Widget _statusChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
   }
 }

@@ -158,7 +158,7 @@ class RecommendationService {
               ?.map((e) => Map<String, dynamic>.from(e as Map))
               .toList() ??
           [],
-      budgetMin: (userData['budgetMin'] as num?)?.toDouble() ?? 5000,
+      budgetMin: (userData['budgetMin'] as num?)?.toDouble() ?? 0,
       budgetMax: (userData['budgetMax'] as num?)?.toDouble() ?? 50000,
     );
   }
@@ -201,7 +201,7 @@ class RecommendationService {
         wristWidthMm: null,
         stylePreferences: [],
         outfitColors: [],
-        budgetMin: 5000,
+        budgetMin: 0,
         budgetMax: 50000,
       );
     }

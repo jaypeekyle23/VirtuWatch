@@ -48,78 +48,84 @@ class _CustomerShellState extends State<CustomerShell> {
               index: persistentIndex,
               children: persistentTabs,
             ),
-      bottomNavigationBar: SizedBox(
-        height: 72,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.topCenter,
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                color: AppTheme.surface,
-                border: Border(
-                  top: BorderSide(color: Color(0x1AFFFFFF)),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _navItem(
-                      icon: Icons.home_outlined,
-                      selectedIcon: Icons.home,
-                      label: 'Home',
-                      index: 0,
+      bottomNavigationBar: Container(
+        color: AppTheme.surface,
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 56,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.topCenter,
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: AppTheme.surface,
+                    border: Border(
+                      top: BorderSide(color: Color(0x1AFFFFFF)),
                     ),
                   ),
-                  Expanded(
-                    child: _navItem(
-                      icon: Icons.watch_outlined,
-                      selectedIcon: Icons.watch,
-                      label: 'Catalog',
-                      index: 1,
-                    ),
-                  ),
-                  const Expanded(child: SizedBox()),
-                  Expanded(
-                    child: _navItem(
-                      icon: Icons.auto_awesome_outlined,
-                      selectedIcon: Icons.auto_awesome,
-                      label: 'For You',
-                      index: 3,
-                    ),
-                  ),
-                  Expanded(
-                    child: _navItem(
-                      icon: Icons.person_outline,
-                      selectedIcon: Icons.person,
-                      label: 'Profile',
-                      index: 4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              top: -16,
-              child: GestureDetector(
-                onTap: () => setState(() => _currentIndex = 2),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: AppTheme.gold,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.background, width: 3),
-                  ),
-                  child: Icon(
-                    Icons.view_in_ar,
-                    color: const Color(0xFF0E1A2B),
-                    size: _currentIndex == 2 ? 28 : 24,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _navItem(
+                          icon: Icons.home_outlined,
+                          selectedIcon: Icons.home,
+                          label: 'Home',
+                          index: 0,
+                        ),
+                      ),
+                      Expanded(
+                        child: _navItem(
+                          icon: Icons.watch_outlined,
+                          selectedIcon: Icons.watch,
+                          label: 'Catalog',
+                          index: 1,
+                        ),
+                      ),
+                      const Expanded(child: SizedBox()),
+                      Expanded(
+                        child: _navItem(
+                          icon: Icons.auto_awesome_outlined,
+                          selectedIcon: Icons.auto_awesome,
+                          label: 'For You',
+                          index: 3,
+                        ),
+                      ),
+                      Expanded(
+                        child: _navItem(
+                          icon: Icons.person_outline,
+                          selectedIcon: Icons.person,
+                          label: 'Profile',
+                          index: 4,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+                Positioned(
+                  top: -16,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _currentIndex = 2),
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppTheme.gold,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.surface, width: 3),
+                      ),
+                      child: Icon(
+                        Icons.view_in_ar,
+                        color: const Color(0xFF0E1A2B),
+                        size: _currentIndex == 2 ? 28 : 24,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
