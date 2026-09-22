@@ -1,9 +1,6 @@
-import 'dart:math' show sqrt;
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../constants/watch_colors.dart';
-import '../utils/fit_scoring.dart';
+import '../utils/recommendation_scoring.dart';
 
 /// One watch scored against the current user's profile.
 class WatchRecommendation {
@@ -115,26 +112,12 @@ class RecommendationResult {
 class RecommendationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Base weights, out of 1.0, when all three signals are available. Fit
-  // is weighted highest since it's the one hard physical constraint (an
-  // ill-fitting watch is a worse recommendation than an off-style or
-  // off-color one). Color is weighted lightest since it comes from a
-  // single outfit scan — one snapshot of what the user happened to wear
-  // once — so it's a noisier signal than style, which is an explicit,
-  // stated preference.
-  static const double _fitWeight = 0.55;
-  static const double _colorWeight = 0.15;
-  static const double _styleWeight = 0.30;
-
-  // How closely lug-to-lug should track wrist width for a "great fit" —
-  // it's a ratio (lug-to-lug / wrist width), not a raw mm difference.
-  // (Lives in lib/utils/fit_scoring.dart so ChatService can share the
-  // exact same rule — kept here only as a doc pointer.)
-
-  // Euclidean distance between pure black and pure white in RGB space —
-  // the maximum possible distance between two colors, used to normalize
-  // color distance into a 0.0–1.0 similarity score.
-  static const double _maxRgbDistance = 441.67; // sqrt(255^2 * 3)
+  // The actual weights, thresholds, and blending math live in
+  // lib/utils/recommendation_scoring.dart (scoreWatchAgainstProfile) —
+  // pulled out into a pure function so the scoring algorithm can be unit
+  // tested directly, without Firestore/FirebaseAuth involved. This class
+  // only handles loading profile/catalog data and wrapping the result as
+  // a [WatchRecommendation].
 
   /// Loads the current user's profile fields relevant to scoring. Shared
   /// by [getRecommendations] (scoring the whole catalog) and [scoreWatch]
@@ -246,116 +229,22 @@ class RecommendationService {
     required List<String> stylePreferences,
     required List<Map<String, dynamic>> outfitColors,
   }) {
-    final lugToLugMm = (data['lugToLugMm'] as num?)?.toDouble();
-    final styleCategory = data['styleCategory'] as String?;
-    final colorHex = data['colorHex'] as String?;
-    // Watches saved before multi-color support only have a single
-    // `colorHex` — fall back to that as a 1-color list so the blended
-    // scoring below still works unchanged for them.
-    final colorHexesRaw = (data['colorHexes'] as List?)?.cast<String>();
-    final colorHexes = (colorHexesRaw != null && colorHexesRaw.isNotEmpty)
-        ? colorHexesRaw
-        : (colorHex != null ? [colorHex] : const <String>[]);
-
-    double? fitScore;
-    String fitNote;
-    if (wristWidthMm == null) {
-      fitNote = 'Add your wrist measurement for fit-based ranking';
-    } else if (lugToLugMm == null) {
-      fitNote = 'Fit info unavailable for this watch';
-    } else {
-      final fit = scoreFit(wristWidthMm: wristWidthMm, lugToLugMm: lugToLugMm);
-      fitScore = fit.score;
-      fitNote = fit.note;
-    }
-
-    double? styleScore;
-    if (stylePreferences.isNotEmpty && styleCategory != null) {
-      styleScore = stylePreferences
-              .any((s) => s.toLowerCase() == styleCategory.toLowerCase())
-          ? 1.0
-          : 0.0;
-    }
-
-    double? colorScore;
-    String? colorNote;
-    if (outfitColors.isNotEmpty && colorHexes.isNotEmpty) {
-      // Blend each of the watch's colors' own outfit-match score,
-      // weighted by that color's prominence (colorProminenceWeights —
-      // primary counts fully, later colors count for less). For a
-      // single-color watch this collapses to exactly the old formula:
-      // one color at weight 1.0, nothing else to blend.
-      double weightedSum = 0;
-      double weightTotal = 0;
-      for (var i = 0; i < colorHexes.length; i++) {
-        final prominence = i < colorProminenceWeights.length
-            ? colorProminenceWeights[i]
-            : colorProminenceWeights.last;
-        final (watchR, watchG, watchB) = hexToRgb(colorHexes[i]);
-
-        double weightedSimilarity = 0;
-        double outfitWeightTotal = 0;
-        for (final entry in outfitColors) {
-          final hex = entry['hex'] as String?;
-          final percentage = (entry['percentage'] as num?)?.toDouble();
-          if (hex == null || percentage == null || percentage <= 0) continue;
-
-          final (r, g, b) = hexToRgb(hex);
-          final dr = (watchR - r).toDouble();
-          final dg = (watchG - g).toDouble();
-          final db = (watchB - b).toDouble();
-          final distance = sqrt(dr * dr + dg * dg + db * db);
-          final similarity = (1 - distance / _maxRgbDistance).clamp(0.0, 1.0);
-
-          weightedSimilarity += similarity * percentage;
-          outfitWeightTotal += percentage;
-        }
-
-        if (outfitWeightTotal > 0) {
-          final perColorSimilarity = weightedSimilarity / outfitWeightTotal;
-          weightedSum += perColorSimilarity * prominence;
-          weightTotal += prominence;
-        }
-      }
-      if (weightTotal > 0) {
-        colorScore = weightedSum / weightTotal;
-        if (colorScore >= 0.65) {
-          colorNote = 'Matches your outfit colors';
-        } else if (colorScore <= 0.3) {
-          colorNote = "Doesn't match your outfit colors";
-        }
-      }
-    }
-
-    // Weighted average over whichever signals are actually available,
-    // re-normalized so a missing signal doesn't just get treated as a
-    // zero (which would unfairly tank every score while a user's
-    // wrist/style/outfit data is still incomplete).
-    double weightedSum = 0;
-    double totalWeight = 0;
-    if (fitScore != null) {
-      weightedSum += fitScore * _fitWeight;
-      totalWeight += _fitWeight;
-    }
-    if (colorScore != null) {
-      weightedSum += colorScore * _colorWeight;
-      totalWeight += _colorWeight;
-    }
-    if (styleScore != null) {
-      weightedSum += styleScore * _styleWeight;
-      totalWeight += _styleWeight;
-    }
-    final combinedScore = totalWeight == 0 ? 0.5 : weightedSum / totalWeight;
+    final result = scoreWatchAgainstProfile(
+      watchData: data,
+      wristWidthMm: wristWidthMm,
+      stylePreferences: stylePreferences,
+      outfitColors: outfitColors,
+    );
 
     return WatchRecommendation(
       watchId: watchId,
       data: data,
-      fitScore: fitScore,
-      styleScore: styleScore,
-      colorScore: colorScore,
-      combinedScore: combinedScore,
-      fitNote: fitNote,
-      colorNote: colorNote,
+      fitScore: result.fitScore,
+      styleScore: result.styleScore,
+      colorScore: result.colorScore,
+      combinedScore: result.combinedScore,
+      fitNote: result.fitNote,
+      colorNote: result.colorNote,
     );
   }
 }

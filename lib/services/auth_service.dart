@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../utils/auth_error_messages.dart';
 import 'activity_log_service.dart';
 
 class AuthService {
@@ -470,21 +471,6 @@ class AuthService {
     });
   }
 
-  String _mapAuthError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'email-already-in-use':
-        return 'An account already exists with that email.';
-      case 'invalid-email':
-        return 'That email address looks invalid.';
-      case 'weak-password':
-        return 'Password should be at least 6 characters.';
-      case 'user-not-found':
-        return 'No account found with that email.';
-      case 'wrong-password':
-      case 'invalid-credential':
-        return 'Incorrect email or password.';
-      default:
-        return e.message ?? 'Something went wrong. Please try again.';
-    }
-  }
+  String _mapAuthError(FirebaseAuthException e) =>
+      authErrorMessage(e.code, fallbackMessage: e.message);
 }

@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/app_version.dart';
+import '../utils/version_compare.dart';
 import 'notification_service.dart';
 
 /// Checks GitHub's releases API for a newer VirtuWatch build than the
@@ -50,7 +51,7 @@ class UpdateCheckerService {
       final latestVersion =
           tagName.startsWith('v') ? tagName.substring(1) : tagName;
       if (latestVersion.isEmpty ||
-          !_isNewer(latestVersion, AppVersion.versionName)) {
+          !isNewerVersion(latestVersion, AppVersion.versionName)) {
         return;
       }
 
@@ -75,24 +76,6 @@ class UpdateCheckerService {
     } catch (_) {
       // Best-effort only.
     }
-  }
-
-  /// Naive dotted-integer version comparison (1.2.10 > 1.2.9). Falls
-  /// back to a plain string comparison if either side isn't purely
-  /// dotted numbers — an unusual tag name should never trigger a false
-  /// "update available".
-  bool _isNewer(String remote, String current) {
-    final remoteParts = remote.split('.').map(int.tryParse).toList();
-    final currentParts = current.split('.').map(int.tryParse).toList();
-    if (remoteParts.contains(null) || currentParts.contains(null)) {
-      return remote != current && remote.compareTo(current) > 0;
-    }
-    for (var i = 0; i < remoteParts.length || i < currentParts.length; i++) {
-      final r = i < remoteParts.length ? remoteParts[i]! : 0;
-      final c = i < currentParts.length ? currentParts[i]! : 0;
-      if (r != c) return r > c;
-    }
-    return false;
   }
 
   /// Downloads the APK at [apkUrl] to the app's cache directory and
