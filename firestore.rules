@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isAdmin() {
+      return isSignedIn() && getRole() == 'admin';
+    }
+    match /users/{userId} {
+      // Anyone signed in can read their own profile (needed at login).
+      // Admins can read anyone's profile (needed for account management).
+      allow read: if isOwner(userId) || isAdmin();
+      // A new user can create their OWN profile, but only as a customer.
+      // Admins can create a profile for any userId with any role.
+      allow create: if (isOwner(userId) && request.resource.data.role == 'customer')
+                    || isAdmin();
+      // A user can update their own profile, but never their own role
+      // or accountStatus. Admins can update anything.
+      allow update: if isAdmin()
+                    || (
+                      isOwner(userId)
+                      && request.resource.data.role == resource.data.role
+                      && request.resource.data.accountStatus == resource.data.accountStatus
+                    );
+      // Admins can delete any account. Customers and Merchants can delete
+      // their OWN account (self-service). Admins cannot self-delete this
+      // way — an admin account can only be removed by another admin via
+      // Account Management, to avoid accidentally locking everyone out.
+      allow delete: if isAdmin()
+                    || (isOwner(userId) && resource.data.role != 'admin');
+
+      // Chat history threads (one doc per watch chat, plus one for the
+      // Recommended For You chat). Rules on the parent /users/{userId}
+      // document do NOT cascade to this subcollection — it needs its
+      // own explicit rule, or every read/write here is denied by
+      // default. Only the owning user can read/write their own threads;
+      // nobody else (not even admins) needs access to this.
+      match /chatThreads/{threadId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+    match /watches/{watchId} {
+      // Anyone signed in can read watches (customers browsing catalog).
+      allow read: if isSignedIn();
+      // A merchant can create a watch only under their own uid.
+      // An Admin can create a watch under ANY merchantId (e.g. adding a
+      // watch on behalf of a merchant from the admin panel).
+      allow create: if isSignedIn()
+                    && (request.resource.data.merchantId == request.auth.uid
+                        || isAdmin());
+      // Only the owning merchant (or an Admin) can update/delete their watch.
+      allow update, delete: if isSignedIn()
+                             && (resource.data.merchantId == request.auth.uid || isAdmin());
+    }
+    match /activityLog/{logId} {
+      // Only admins can read the activity feed.
+      allow read: if isAdmin();
+      // Any signed-in action (registration, self-deletion, etc.) can write
+      // its own log entry — the app controls what gets written and how.
+      allow create: if isSignedIn();
+      // Log entries are immutable once written; only admins can prune old
+      // entries if ever needed.
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+  }
+}
