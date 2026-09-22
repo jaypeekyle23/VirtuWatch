@@ -183,8 +183,8 @@ class AdminDashboardTab extends StatelessWidget {
                           .length;
                       final savedWatches = users.fold<int>(
                         0,
-                        (sum, d) =>
-                            sum +
+                        (total, d) =>
+                            total +
                             ((d.data()['savedWatches'] as List?)?.length ??
                                 0),
                       );

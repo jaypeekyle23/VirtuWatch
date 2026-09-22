@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/skeleton_box.dart';
 import 'customer_catalog_tab.dart';
 import 'watch_detail_screen.dart';
 import 'ar_try_on_screen.dart';
@@ -366,9 +367,20 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                 builder: (context) {
                   final result = _recommendationResult;
                   if (result == null) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
+                    // Same height and card shape as the real row below
+                    // (_HomeWatchCard), so there's no layout jump once
+                    // the actual recommendations come in.
+                    return SizedBox(
+                      height: 180,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: 4,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(width: 12),
+                        itemBuilder: (context, index) =>
+                            const _HomeWatchCardSkeleton(),
+                      ),
                     );
                   }
                   if (result.recommendations.isEmpty) {
@@ -610,6 +622,51 @@ class _HomeWatchCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Placeholder for [_HomeWatchCard], matching its exact dimensions
+/// (120 width, 1.3 aspect-ratio image block, brand + name text lines)
+/// so the "Recommended for You" row keeps its shape while
+/// [RecommendationResult] is still loading.
+class _HomeWatchCardSkeleton extends StatelessWidget {
+  const _HomeWatchCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 120,
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1.3,
+            child: SkeletonBox(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SkeletonBox(width: 32, height: 8),
+                SizedBox(height: 5),
+                SkeletonBox(width: 72, height: 10),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

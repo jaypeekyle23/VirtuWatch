@@ -7,6 +7,7 @@ import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/match_score_color.dart';
 import '../../widgets/recommendations_chat_sheet.dart';
+import '../../widgets/skeleton_box.dart';
 import 'edit_profile_screen.dart';
 import 'outfit_scan_screen.dart';
 import 'watch_detail_screen.dart';
@@ -386,9 +387,14 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
               const SizedBox(height: 16),
 
               if (_isLoadingRecommendations)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(child: CircularProgressIndicator()),
+                Column(
+                  children: List.generate(
+                    4,
+                    (index) => const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: _RecommendationTileSkeleton(),
+                    ),
+                  ),
                 )
               else if (_loadError != null)
                 Padding(
@@ -836,6 +842,54 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+/// Placeholder for `_recommendationTile`'s row shape (48x48 thumbnail,
+/// brand/name/note lines, trailing match badge), shown while
+/// `_isLoadingRecommendations` is true so the list doesn't jump when
+/// the real rows come in.
+class _RecommendationTileSkeleton extends StatelessWidget {
+  const _RecommendationTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const SkeletonBox(
+            width: 48,
+            height: 48,
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SkeletonBox(width: 40, height: 8),
+                SizedBox(height: 6),
+                SkeletonBox(width: 120, height: 12),
+                SizedBox(height: 6),
+                SkeletonBox(width: 160, height: 9),
+                SizedBox(height: 6),
+                SkeletonBox(width: 70, height: 11),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const SkeletonBox(
+            width: 40,
+            height: 20,
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+        ],
+      ),
     );
   }
 }
