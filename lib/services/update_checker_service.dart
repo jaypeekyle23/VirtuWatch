@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,9 +15,7 @@ import 'notification_service.dart';
 /// one currently installed, and shows a local notification if one
 /// exists. Tapping that notification triggers [downloadAndInstall],
 /// which downloads the release's APK asset and hands it to the Android
-/// package installer — the same "tap the notification, it grabs the
-/// APK for you" flow apps like Metrolist use for GitHub-distributed
-/// releases.
+/// package installer.
 ///
 /// This deliberately doesn't use Firebase Cloud Messaging or any
 /// backend: nothing is being pushed here, the app is just polling a
@@ -29,6 +28,13 @@ class UpdateCheckerService {
 
   static const _lastNotifiedVersionKey =
       'update_checker_last_notified_version';
+
+  // If no new bytes arrive within this window during a download, the
+  // connection is treated as stalled and the download is aborted with
+  // an error, instead of hanging with no feedback (this is what caused
+  // the "closed the app, still old version" issue: the download had
+  // no timeout at all, so a dead connection just sat there silently).
+  static const Duration _stallTimeout = Duration(seconds: 20);
 
   /// Fetches the latest GitHub release and, if it's newer than
   /// [AppVersion.versionName] and hasn't already been notified about,
@@ -82,19 +88,96 @@ class UpdateCheckerService {
   /// opens it with the system package installer. Requires the
   /// REQUEST_INSTALL_PACKAGES permission and the FileProvider entry
   /// declared in AndroidManifest.xml.
-  Future<void> downloadAndInstall(String apkUrl) async {
-    final response = await http.get(Uri.parse(apkUrl));
-    if (response.statusCode != 200) {
-      throw 'Download failed (HTTP ${response.statusCode}).';
-    }
+  ///
+  /// Streams the response straight to disk instead of buffering the
+  /// whole file in memory, and reports progress through [onProgress] as
+  /// a 0.0 to 1.0 value (or null if the server didn't report a content
+  /// length, so progress can't be computed). If no new data arrives for
+  /// [_stallTimeout], the download is aborted and this throws, instead
+  /// of hanging with no feedback.
+  ///
+  /// The app needs to stay open for this to finish. Nothing here runs
+  /// as a background service, so closing or swiping the app away will
+  /// still interrupt an in-progress download.
+  Future<void> downloadAndInstall(
+    String apkUrl, {
+    void Function(double? progress)? onProgress,
+  }) async {
+    final client = http.Client();
+    IOSink? sink;
+    StreamSubscription<List<int>>? subscription;
+    Timer? stallTimer;
 
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/virtuwatch_update.apk');
-    await file.writeAsBytes(response.bodyBytes);
+    try {
+      final request = http.Request('GET', Uri.parse(apkUrl));
+      final streamedResponse = await client.send(request).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => throw 'Could not connect to download the update.',
+          );
 
-    final result = await OpenFilex.open(file.path);
-    if (result.type != ResultType.done) {
-      throw result.message;
+      if (streamedResponse.statusCode != 200) {
+        throw 'Download failed (HTTP ${streamedResponse.statusCode}).';
+      }
+
+      final total = streamedResponse.contentLength;
+      var received = 0;
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/virtuwatch_update.apk');
+      sink = file.openWrite();
+
+      final completer = Completer<void>();
+
+      void resetStallTimer() {
+        stallTimer?.cancel();
+        stallTimer = Timer(_stallTimeout, () {
+          subscription?.cancel();
+          if (!completer.isCompleted) {
+            completer.completeError(
+              'Download stalled (no data received for ${_stallTimeout.inSeconds}s).',
+            );
+          }
+        });
+      }
+
+      resetStallTimer();
+
+      subscription = streamedResponse.stream.listen(
+        (chunk) {
+          sink!.add(chunk);
+          received += chunk.length;
+          resetStallTimer();
+          if (total != null && total > 0) {
+            onProgress?.call(received / total);
+          } else {
+            onProgress?.call(null);
+          }
+        },
+        onDone: () {
+          stallTimer?.cancel();
+          if (!completer.isCompleted) completer.complete();
+        },
+        onError: (Object e) {
+          stallTimer?.cancel();
+          if (!completer.isCompleted) completer.completeError(e);
+        },
+        cancelOnError: true,
+      );
+
+      await completer.future;
+      await sink.flush();
+      await sink.close();
+      sink = null;
+
+      final result = await OpenFilex.open(file.path);
+      if (result.type != ResultType.done) {
+        throw result.message;
+      }
+    } finally {
+      stallTimer?.cancel();
+      await subscription?.cancel();
+      await sink?.close();
+      client.close();
     }
   }
 }

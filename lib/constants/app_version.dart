@@ -10,7 +10,7 @@
 class AppVersion {
   AppVersion._();
 
-  static const String versionName = '1.1.0';
+  static const String versionName = '1.1.1';
   static const String buildNumber = '1';
 
   /// The GitHub owner/repo the update checker polls via

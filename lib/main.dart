@@ -36,17 +36,52 @@ void _handleNotificationTap(String payload) {
   }
 }
 
+// Tracks the last progress percent shown, so the snackbar updates in
+// visible 5% steps instead of rebuilding on every single chunk that
+// arrives (which would be many times a second on a fast connection).
+int? _lastShownPercent;
+
+// Shown alongside every "still downloading" snackbar — nothing in the
+// download runs as a background service, so leaving the app (locking
+// the screen, switching away, swiping it closed) can still interrupt
+// an in-progress download. Left off the final done/error message,
+// since the download is no longer at risk by then.
+const _keepOpenReminder = 'Keep the app open until this finishes.';
+
 Future<void> _downloadUpdate(String apkUrl) async {
-  scaffoldMessengerKey.currentState?.showSnackBar(
-    const SnackBar(content: Text('Downloading update...')),
-  );
+  _lastShownPercent = null;
+  _showUpdateSnackBar('Downloading update...\n$_keepOpenReminder');
+
   try {
-    await UpdateCheckerService.instance.downloadAndInstall(apkUrl);
-  } catch (e) {
-    scaffoldMessengerKey.currentState?.showSnackBar(
-      SnackBar(content: Text('Update download failed: $e')),
+    await UpdateCheckerService.instance.downloadAndInstall(
+      apkUrl,
+      onProgress: (progress) {
+        if (progress == null) return; // Server didn't report a size.
+        final percent = (progress * 100).clamp(0, 100).round();
+        if (percent == _lastShownPercent) return;
+        if (percent % 5 != 0 && percent != 100) return;
+        _lastShownPercent = percent;
+        final message = percent < 100
+            ? 'Downloading update... $percent%\n$_keepOpenReminder'
+            : 'Downloading update... $percent%';
+        _showUpdateSnackBar(message);
+      },
     );
+  } catch (e) {
+    _showUpdateSnackBar('Update download failed: $e', isError: true);
   }
+}
+
+void _showUpdateSnackBar(String message, {bool isError = false}) {
+  final messenger = scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(message),
+      duration: isError ? const Duration(seconds: 4) : const Duration(seconds: 3),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
