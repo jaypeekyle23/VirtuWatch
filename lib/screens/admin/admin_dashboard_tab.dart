@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/update_available_banner.dart';
 import 'admin_create_account_screen.dart';
 import 'admin_account_management_screen.dart';
 import 'admin_watch_management_tab.dart';
@@ -166,6 +167,8 @@ class AdminDashboardTab extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 20),
+
+              const UpdateAvailableBanner(),
 
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: usersStream,

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../constants/app_version.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import 'edit_profile_screen.dart';
@@ -9,6 +10,7 @@ import 'wrist_measurement_screen.dart';
 import '../change_password_screen.dart';
 import '../about_screen.dart';
 import '../version_info_screen.dart';
+import '../update_screen.dart';
 import '../delete_account_screen.dart';
 import '../terms_of_service_screen.dart';
 import '../privacy_policy_screen.dart';
@@ -252,11 +254,21 @@ class CustomerProfileTab extends StatelessWidget {
                           ),
                         );
                       }),
-                      _menuTile(context, 'Version Info (v1.0.0)',
+                      _menuTile(
+                          context,
+                          'Version Info (v${AppVersion.versionName})',
                           Icons.numbers_outlined, () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const VersionInfoScreen(),
+                          ),
+                        );
+                      }),
+                      _menuTile(context, 'Check for Updates',
+                          Icons.system_update_alt, () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const UpdateScreen(),
                           ),
                         );
                       }),

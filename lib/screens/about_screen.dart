@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/app_version.dart';
 import '../theme/app_theme.dart';
 
 class AboutScreen extends StatelessWidget {
@@ -180,7 +181,7 @@ class AboutScreen extends StatelessWidget {
 
             Center(
               child: Text(
-                'VirtuWatch v1.0.0',
+                'VirtuWatch v${AppVersion.versionName}',
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,

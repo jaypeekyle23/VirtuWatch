@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/update_available_banner.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_catalog_tab.dart';
 import 'merchant_analytics_tab.dart';
@@ -129,6 +130,8 @@ class MerchantDashboardTab extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 20),
+
+                const UpdateAvailableBanner(),
 
                 Row(
                   children: [

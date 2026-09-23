@@ -5,6 +5,7 @@ import '../../services/recommendation_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/skeleton_box.dart';
+import '../../widgets/update_available_banner.dart';
 import 'customer_catalog_tab.dart';
 import 'watch_detail_screen.dart';
 import 'ar_try_on_screen.dart';
@@ -147,6 +148,8 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 20),
+
+              const UpdateAvailableBanner(),
 
               Container(
                 width: double.infinity,
