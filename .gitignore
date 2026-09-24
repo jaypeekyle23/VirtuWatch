@@ -33,3 +33,9 @@ android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 lib/firebase_options.dart
 firebase.json
+
+# Release signing — never commit the real keystore or its passwords.
+# android/key.properties.example (tracked) shows the expected format.
+android/key.properties
+*.jks
+*.keystore

@@ -1,0 +1,11 @@
+# Copy this file to android/key.properties (same folder) and fill in your
+# own values. android/key.properties is gitignored — never commit your
+# real passwords or keystore file.
+#
+# See the "Building a release APK" section in the project README for how
+# to generate the keystore file these values describe.
+
+storePassword=<your keystore password>
+keyPassword=<your key password>
+keyAlias=upload
+storeFile=C:\\Users\\user\\upload-keystore.jks

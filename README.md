@@ -42,12 +42,23 @@ AI-assisted virtual watch try-on and fit-recommendation app, built for Urbane Ti
    ```
 
 ### Building a release APK
+
+First time only — generate your own release keystore (keep this file and
+its passwords private; back them up somewhere safe, since a lost Play
+Store upload key can't be recovered or swapped later):
+```
+keytool -genkey -v -keystore ~/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+Then copy `android/key.properties.example` to `android/key.properties`
+and fill in the passwords, alias, and the path to the `.jks` file you just
+created. `android/key.properties` is gitignored, so it stays local.
+
 ```
 flutter build apk --release --dart-define-from-file=.env
 ```
 `--dart-define-from-file=.env` is required — without it, the chat assistant builds fine but silently has no API key at runtime.
 
-> **Note:** the release build type in `android/app/build.gradle` is currently signed with the debug keystore (the default Flutter template setup, never replaced with a real release signing config). Fine for local installs and demos; a proper signing config is needed before any wider distribution.
+If `android/key.properties` isn't present yet, the release build falls back to the debug keystore so the command above still works while you're setting things up — just not suitable for real distribution until the keystore is in place.
 
 ## Project Structure
 
@@ -68,7 +79,7 @@ lib/
 
 VirtuWatch shows four local (on-device, not server-pushed) notifications:
 
-- **Update available** — checked against GitHub's releases API once per app open/resume (see `UpdateCheckerService`), against `jaypeekyle23/VirtuWatch`. Tapping it downloads the release's `.apk` asset and opens the system installer. Make sure every GitHub release is tagged `v<version>` (e.g. `v1.1.0`) with a `.apk` file attached as a release asset.
+- **Update available** — checked against GitHub's releases API once per app open/resume (see `UpdateCheckerService`), against `jaypeekyle23/VirtuWatch`. Tapping it downloads the release's `.apk` asset and opens the system installer. Make sure every GitHub release is tagged `v<version>` (e.g. `v1.1.5`) with a `.apk` file attached as a release asset.
 - **Password updated** — fires right after a successful password change.
 - **Verify your email** — reminds a signed-in customer with an unverified email, throttled to once a day.
 - **Saved watches waiting** — reminds a customer with saved/wishlist watches, throttled to once every 3 days.
@@ -77,6 +88,5 @@ None of these need Firebase Cloud Messaging or a backend component, since each i
 
 ## Known Limitations
 
-- No automated test coverage beyond the default Flutter scaffold test.
+- No automated test coverage beyond the default Flutter scaffold test and unit tests for scoring/validation logic — the Firebase-backed services and screens have no test coverage yet.
 - AR/hand-tracking package versions are unpinned — the underlying MediaPipe bindings can change API between versions.
-- Release APKs are debug-signed (see build note above).
