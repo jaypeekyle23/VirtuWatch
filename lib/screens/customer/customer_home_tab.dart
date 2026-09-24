@@ -14,6 +14,14 @@ import 'wrist_measurement_screen.dart';
 import 'outfit_scan_screen.dart';
 import 'customer_profile_tab.dart';
 
+/// Height of the "Recently Viewed" / "Recommended for You" horizontal
+/// card rows. Sized to fit _HomeWatchCard's fixed-height content block
+/// (120-wide image at 1.3 aspect ratio + reserved brand line + a
+/// reserved 2-line name box) with a small safety margin — every card
+/// renders at exactly this content height, so the row is neither
+/// clipping cards nor leaving mismatched blank space under them.
+const double _kHomeCardRowHeight = 156;
+
 class CustomerHomeTab extends StatefulWidget {
   final String username;
   const CustomerHomeTab({super.key, required this.username});
@@ -290,7 +298,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
                             return const SizedBox(
-                              height: 180,
+                              height: _kHomeCardRowHeight,
                               child: Center(child: CircularProgressIndicator()),
                             );
                           }
@@ -310,7 +318,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                           }
 
                           return SizedBox(
-                            height: 180,
+                            height: _kHomeCardRowHeight,
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
                               itemCount: ordered.length,
@@ -318,9 +326,15 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                                   const SizedBox(width: 12),
                               itemBuilder: (context, index) {
                                 final doc = ordered[index];
-                                return _HomeWatchCard(
-                                  watchId: doc.id,
-                                  data: doc.data(),
+                                // topCenter so each card sizes to its own
+                                // content instead of being stretched to
+                                // fill the row's fixed height.
+                                return Align(
+                                  alignment: Alignment.topCenter,
+                                  child: _HomeWatchCard(
+                                    watchId: doc.id,
+                                    data: doc.data(),
+                                  ),
                                 );
                               },
                             ),
@@ -374,15 +388,17 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                     // (_HomeWatchCard), so there's no layout jump once
                     // the actual recommendations come in.
                     return SizedBox(
-                      height: 180,
+                      height: _kHomeCardRowHeight,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: 4,
                         separatorBuilder: (context, index) =>
                             const SizedBox(width: 12),
-                        itemBuilder: (context, index) =>
-                            const _HomeWatchCardSkeleton(),
+                        itemBuilder: (context, index) => const Align(
+                          alignment: Alignment.topCenter,
+                          child: _HomeWatchCardSkeleton(),
+                        ),
                       ),
                     );
                   }
@@ -397,7 +413,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                   final preview = result.recommendations.take(4).toList();
 
                   return SizedBox(
-                    height: 180,
+                    height: _kHomeCardRowHeight,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: preview.length,
@@ -405,9 +421,12 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                           const SizedBox(width: 12),
                       itemBuilder: (context, index) {
                         final rec = preview[index];
-                        return _HomeWatchCard(
-                          watchId: rec.watchId,
-                          data: rec.data,
+                        return Align(
+                          alignment: Alignment.topCenter,
+                          child: _HomeWatchCard(
+                            watchId: rec.watchId,
+                            data: rec.data,
+                          ),
                         );
                       },
                     ),
@@ -464,22 +483,49 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                   }
 
                   final preview = docs.take(4).toList();
+                  // Built row-by-row instead of GridView + a fixed
+                  // childAspectRatio: a hardcoded ratio has to guess a
+                  // worst-case cell height for the narrowest phone this
+                  // app supports, which leaves leftover blank space under
+                  // every card on a normal-width phone. Since
+                  // _BrowseWatchCard already sizes itself to exactly what
+                  // its content needs (mainAxisSize.min throughout),
+                  // putting two cards in a Row and letting the Row size
+                  // itself to them gives every row its exact natural
+                  // height, on any screen width, with no guessing and no
+                  // leftover space.
+                  final rowCount = (preview.length / 2).ceil();
 
-                  return GridView.builder(
+                  return ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.6,
-                    ),
-                    itemCount: preview.length,
-                    itemBuilder: (context, index) {
-                      final doc = preview[index];
-                      final data = doc.data();
-                      return _BrowseWatchCard(watchId: doc.id, data: data);
+                    itemCount: rowCount,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 12),
+                    itemBuilder: (context, rowIndex) {
+                      final firstIndex = rowIndex * 2;
+                      final secondIndex = firstIndex + 1;
+                      final firstDoc = preview[firstIndex];
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _BrowseWatchCard(
+                              watchId: firstDoc.id,
+                              data: firstDoc.data(),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: secondIndex < preview.length
+                                ? _BrowseWatchCard(
+                                    watchId: preview[secondIndex].id,
+                                    data: preview[secondIndex].data(),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      );
                     },
                   );
                 },
@@ -601,24 +647,36 @@ class _HomeWatchCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (brand.isNotEmpty)
-                    Text(
-                      brand.toUpperCase(),
-                      style: TextStyle(
-                        color: AppTheme.gold,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  // Always rendered (not `if brand.isNotEmpty`) so this
+                  // line's height is reserved consistently — see the
+                  // matching comment in customer_catalog_tab.dart's
+                  // _WatchCard for why conditionally-included widgets are
+                  // what makes cards in the same row end up different
+                  // heights.
                   Text(
-                    name,
+                    brand.toUpperCase(),
                     style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
+                      color: AppTheme.gold,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  // Fixed-height box sized for 2 lines, so a short 1-line
+                  // name doesn't leave this card shorter than its
+                  // neighbors.
+                  SizedBox(
+                    height: 30,
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -750,46 +808,58 @@ class _BrowseWatchCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (style.isNotEmpty)
-                    Text(
-                      style.toUpperCase(),
-                      style: TextStyle(
-                        color: AppTheme.gold,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  const SizedBox(height: 1),
+                  // Always rendered so this line's height is reserved
+                  // consistently regardless of whether style is set —
+                  // see _WatchCard in customer_catalog_tab.dart for why
+                  // conditionally-included widgets make cards in the
+                  // same grid row end up different heights.
                   Text(
-                    brand.isNotEmpty ? '$brand $name' : name,
+                    style.toUpperCase(),
                     style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                      color: AppTheme.gold,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  if (caseDiameter != null)
-                    Text(
-                      '${caseDiameter}mm',
+                  const SizedBox(height: 1),
+                  // Fixed-height box sized for 2 lines, so a short name
+                  // doesn't leave this card shorter than its neighbors.
+                  SizedBox(
+                    height: 32,
+                    child: Text(
+                      brand.isNotEmpty ? '$brand $name' : name,
                       style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                  const SizedBox(height: 4),
-                  if (price != null)
-                    Text(
-                      'PHP $price',
-                      style: const TextStyle(
-                        color: AppTheme.gold,
-                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
                         fontSize: 12,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    caseDiameter != null ? '${caseDiameter}mm' : '',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 10,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 16,
+                    child: price != null
+                        ? Text(
+                            'PHP $price',
+                            style: const TextStyle(
+                              color: AppTheme.gold,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          )
+                        : null,
+                  ),
                 ],
               ),
             ),

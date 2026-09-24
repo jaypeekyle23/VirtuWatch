@@ -242,22 +242,49 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
                   }
 
                   if (_isMultiColumn) {
+                    // Built row-by-row instead of GridView + a fixed
+                    // childAspectRatio: a hardcoded ratio has to guess a
+                    // worst-case cell height for the narrowest phone this
+                    // app supports, which leaves leftover blank space
+                    // under every card on a normal-width phone. Since
+                    // _WatchCard already sizes itself to exactly what its
+                    // content needs (mainAxisSize.min throughout), putting
+                    // two cards in a Row and letting the Row size itself
+                    // to them gives every row its exact natural height,
+                    // on any screen width, with no guessing and no
+                    // leftover space.
+                    final rowCount = (docs.length / 2).ceil();
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: GridView.builder(
+                      child: ListView.separated(
                         padding: const EdgeInsets.only(bottom: 16, top: 4),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.60,
-                        ),
-                        itemCount: docs.length,
-                        itemBuilder: (context, index) {
-                          final doc = docs[index];
-                          final data = doc.data();
-                          return _WatchCard(watchId: doc.id, data: data);
+                        itemCount: rowCount,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, rowIndex) {
+                          final firstIndex = rowIndex * 2;
+                          final secondIndex = firstIndex + 1;
+                          final firstDoc = docs[firstIndex];
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _WatchCard(
+                                  watchId: firstDoc.id,
+                                  data: firstDoc.data(),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: secondIndex < docs.length
+                                    ? _WatchCard(
+                                        watchId: docs[secondIndex].id,
+                                        data: docs[secondIndex].data(),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ],
+                          );
                         },
                       ),
                     );
@@ -405,26 +432,39 @@ class _WatchCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (brand.isNotEmpty)
-                    Text(
-                      brand.toUpperCase(),
-                      style: TextStyle(
-                        color: AppTheme.gold,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  const SizedBox(height: 1),
+                  // Brand is a plain (always-rendered) Text rather than
+                  // an `if brand.isNotEmpty` block: a font's line height
+                  // is reserved even for an empty string, so this row is
+                  // the same height whether or not a brand is set. That's
+                  // what keeps every card in the grid the same size —
+                  // conditionally adding/removing whole widgets is what
+                  // made cards different heights before.
                   Text(
-                    name,
+                    brand.toUpperCase(),
                     style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                      color: AppTheme.gold,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 1),
+                  // Fixed-height box sized for 2 lines at this font size,
+                  // so a 1-line name and a 2-line name occupy identical
+                  // space instead of letting the card shrink around
+                  // whichever one is shorter.
+                  SizedBox(
+                    height: 32,
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -439,39 +479,56 @@ class _WatchCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  if (price != null)
-                    Text(
-                      'PHP $price',
-                      style: const TextStyle(
-                        color: AppTheme.gold,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  if (colorHexes.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        for (final hex in colorHexes.take(3))
-                          Padding(
-                            padding: const EdgeInsets.only(right: 3),
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: hexToColor(hex),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white24,
-                                  width: 0.5,
-                                ),
-                              ),
+                  const SizedBox(height: 3),
+                  // Price also gets a fixed-height box: every listed
+                  // watch has a price in practice, but reserving the
+                  // slot regardless means a future watch with no price
+                  // set still can't throw the grid's row heights off.
+                  SizedBox(
+                    height: 16,
+                    child: price != null
+                        ? Text(
+                            'PHP $price',
+                            style: const TextStyle(
+                              color: AppTheme.gold,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
                             ),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(height: 3),
+                  // Color-dot row: always reserves its 8px-tall slot,
+                  // populated with dots only when the watch actually has
+                  // color data. Previously this row (and the spacer above
+                  // it) was left out of the layout entirely when there
+                  // were no colors, which is what made some cards shorter
+                  // than others.
+                  SizedBox(
+                    height: 8,
+                    child: colorHexes.isEmpty
+                        ? null
+                        : Row(
+                            children: [
+                              for (final hex in colorHexes.take(3))
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 3),
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: hexToColor(hex),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white24,
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ],
               ),
             ),
@@ -568,7 +625,7 @@ class _WatchListTile extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),

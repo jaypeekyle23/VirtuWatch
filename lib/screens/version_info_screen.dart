@@ -27,7 +27,6 @@ class VersionInfoScreen extends StatelessWidget {
         title: const Text('Version Info'),
       ),
       body: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

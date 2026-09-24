@@ -267,24 +267,50 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
                   }
 
                   if (_isMultiColumn) {
+                    // Built row-by-row instead of GridView + a fixed
+                    // childAspectRatio: a hardcoded ratio has to guess a
+                    // worst-case cell height for the narrowest phone this
+                    // app supports, which leaves leftover blank space
+                    // under every card on a normal-width phone. Since
+                    // _AdminWatchGridCard already sizes itself to exactly
+                    // what its content needs (mainAxisSize.min
+                    // throughout), putting two cards in a Row and letting
+                    // the Row size itself to them gives every row its
+                    // exact natural height, on any screen width, with no
+                    // guessing and no leftover space.
+                    final rowCount = (docs.length / 2).ceil();
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: GridView.builder(
+                      child: ListView.separated(
                         padding: const EdgeInsets.only(bottom: 16, top: 4),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.62,
-                        ),
-                        itemCount: docs.length,
-                        itemBuilder: (context, index) {
-                          final doc = docs[index];
-                          return _AdminWatchGridCard(
-                            watchId: doc.id,
-                            data: doc.data(),
-                            watchService: _watchService,
+                        itemCount: rowCount,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, rowIndex) {
+                          final firstIndex = rowIndex * 2;
+                          final secondIndex = firstIndex + 1;
+                          final firstDoc = docs[firstIndex];
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _AdminWatchGridCard(
+                                  watchId: firstDoc.id,
+                                  data: firstDoc.data(),
+                                  watchService: _watchService,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: secondIndex < docs.length
+                                    ? _AdminWatchGridCard(
+                                        watchId: docs[secondIndex].id,
+                                        data: docs[secondIndex].data(),
+                                        watchService: _watchService,
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ],
                           );
                         },
                       ),
@@ -499,7 +525,7 @@ class _AdminWatchTile extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
@@ -733,43 +759,60 @@ class _AdminWatchGridCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  brand.isNotEmpty ? '$brand $name' : name,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    _statusChip(listed ? 'ACTIVE' : 'DRAFT',
-                        listed ? Colors.greenAccent : AppTheme.textSecondary),
-                    _statusChip(has3D ? 'AR' : 'NO 3D',
-                        has3D ? AppTheme.gold : AppTheme.textSecondary),
-                    if (missing.isNotEmpty)
-                      Tooltip(
-                        message: 'Missing: ${missing.join(', ')}',
-                        child: _statusChip('NEEDS INFO', Colors.orangeAccent),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                if (price != null)
-                  Text(
-                    'PHP $price',
+                // Fixed-height box sized for 2 lines, so a short name
+                // doesn't leave this card shorter than its neighbors.
+                SizedBox(
+                  height: 36,
+                  child: Text(
+                    brand.isNotEmpty ? '$brand $name' : name,
                     style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
+                ),
                 const SizedBox(height: 4),
+                // Fixed-height box sized for 2 rows of chips: with
+                // "Needs Info" showing, 3 chips can wrap to a second row
+                // on a narrow card, while watches without that chip only
+                // need 1 row. Reserving space for the taller case keeps
+                // every card the same height regardless of chip count.
+                SizedBox(
+                  height: 36,
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      _statusChip(listed ? 'ACTIVE' : 'DRAFT',
+                          listed ? Colors.greenAccent : AppTheme.textSecondary),
+                      _statusChip(has3D ? 'AR' : 'NO 3D',
+                          has3D ? AppTheme.gold : AppTheme.textSecondary),
+                      if (missing.isNotEmpty)
+                        Tooltip(
+                          message: 'Missing: ${missing.join(', ')}',
+                          child: _statusChip('NEEDS INFO', Colors.orangeAccent),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 18,
+                  child: price != null
+                      ? Text(
+                          'PHP $price',
+                          style: const TextStyle(
+                            color: AppTheme.gold,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 2),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

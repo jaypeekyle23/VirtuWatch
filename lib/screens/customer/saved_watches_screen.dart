@@ -122,26 +122,53 @@ class _SavedWatchesScreenState extends State<SavedWatchesScreen> {
                 );
               }
 
+              // Built row-by-row instead of GridView + a fixed
+              // childAspectRatio: a hardcoded ratio has to guess a
+              // worst-case cell height for the narrowest phone this app
+              // supports, which leaves leftover blank space under every
+              // card on a normal-width phone. Since _SavedWatchCard
+              // already sizes itself to exactly what its content needs
+              // (mainAxisSize.min throughout), putting two cards in a Row
+              // and letting the Row size itself to them gives every row
+              // its exact natural height, on any screen width, with no
+              // guessing and no leftover space.
+              final rowCount = (docs.length / 2).ceil();
+
               return RefreshIndicator(
                 color: AppTheme.gold,
                 onRefresh: _handleRefresh,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: GridView.builder(
+                  child: ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(bottom: 16, top: 12),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.58,
-                    ),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final doc = docs[index];
-                      final data = doc.data()!;
-                      return _SavedWatchCard(watchId: doc.id, data: data);
+                    itemCount: rowCount,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 12),
+                    itemBuilder: (context, rowIndex) {
+                      final firstIndex = rowIndex * 2;
+                      final secondIndex = firstIndex + 1;
+                      final firstDoc = docs[firstIndex];
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _SavedWatchCard(
+                              watchId: firstDoc.id,
+                              data: firstDoc.data()!,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: secondIndex < docs.length
+                                ? _SavedWatchCard(
+                                    watchId: docs[secondIndex].id,
+                                    data: docs[secondIndex].data()!,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      );
                     },
                   ),
                 ),
@@ -229,26 +256,35 @@ class _SavedWatchCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (brand.isNotEmpty)
-                    Text(
-                      brand.toUpperCase(),
-                      style: TextStyle(
-                        color: AppTheme.gold,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  const SizedBox(height: 1),
+                  // Always rendered so this line's height is reserved
+                  // consistently regardless of whether brand is set —
+                  // see _WatchCard in customer_catalog_tab.dart for why
+                  // conditionally-included widgets make cards in the
+                  // same grid row end up different heights.
                   Text(
-                    name,
+                    brand.toUpperCase(),
                     style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                      color: AppTheme.gold,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 1),
+                  // Fixed-height box sized for 2 lines, so a short name
+                  // doesn't leave this card shorter than its neighbors.
+                  SizedBox(
+                    height: 32,
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -263,16 +299,20 @@ class _SavedWatchCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  if (price != null)
-                    Text(
-                      'PHP $price',
-                      style: const TextStyle(
-                        color: AppTheme.gold,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
+                  const SizedBox(height: 3),
+                  SizedBox(
+                    height: 16,
+                    child: price != null
+                        ? Text(
+                            'PHP $price',
+                            style: const TextStyle(
+                              color: AppTheme.gold,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          )
+                        : null,
+                  ),
                 ],
               ),
             ),

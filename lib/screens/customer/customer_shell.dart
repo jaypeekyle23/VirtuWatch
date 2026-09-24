@@ -41,89 +41,103 @@ class _CustomerShellState extends State<CustomerShell> {
     final persistentIndex =
         _currentIndex < 2 ? _currentIndex : _currentIndex - 1;
 
-    return Scaffold(
-      body: _currentIndex == 2
-          ? const ArTryOnScreen()
-          : IndexedStack(
-              index: persistentIndex,
-              children: persistentTabs,
-            ),
-      bottomNavigationBar: Container(
-        color: AppTheme.surface,
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: 56,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.topCenter,
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    color: AppTheme.surface,
-                    border: Border(
-                      top: BorderSide(color: Color(0x1AFFFFFF)),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _navItem(
-                          icon: Icons.home_outlined,
-                          selectedIcon: Icons.home,
-                          label: 'Home',
-                          index: 0,
-                        ),
-                      ),
-                      Expanded(
-                        child: _navItem(
-                          icon: Icons.watch_outlined,
-                          selectedIcon: Icons.watch,
-                          label: 'Catalog',
-                          index: 1,
-                        ),
-                      ),
-                      const Expanded(child: SizedBox()),
-                      Expanded(
-                        child: _navItem(
-                          icon: Icons.auto_awesome_outlined,
-                          selectedIcon: Icons.auto_awesome,
-                          label: 'For You',
-                          index: 3,
-                        ),
-                      ),
-                      Expanded(
-                        child: _navItem(
-                          icon: Icons.person_outline,
-                          selectedIcon: Icons.person,
-                          label: 'Profile',
-                          index: 4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  top: -16,
-                  child: GestureDetector(
-                    onTap: () => setState(() => _currentIndex = 2),
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppTheme.gold,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.surface, width: 3),
-                      ),
-                      child: Icon(
-                        Icons.view_in_ar,
-                        color: const Color(0xFF0E1A2B),
-                        size: _currentIndex == 2 ? 28 : 24,
+    return PopScope(
+      // Only let the system/back-gesture actually pop (and exit the app,
+      // since this shell sits directly on AuthGate with no route behind
+      // it) while already on the Home tab. From any other tab, back
+      // should return to Home first, matching standard bottom-nav
+      // behavior — without this, backing out of e.g. the Catalog tab
+      // closes the app entirely, since there's no pushed route for
+      // Navigator to pop.
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        setState(() => _currentIndex = 0);
+      },
+      child: Scaffold(
+        body: _currentIndex == 2
+            ? const ArTryOnScreen()
+            : IndexedStack(
+                index: persistentIndex,
+                children: persistentTabs,
+              ),
+        bottomNavigationBar: Container(
+          color: AppTheme.surface,
+          child: SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 56,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.topCenter,
+                children: [
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: AppTheme.surface,
+                      border: Border(
+                        top: BorderSide(color: Color(0x1AFFFFFF)),
                       ),
                     ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _navItem(
+                            icon: Icons.home_outlined,
+                            selectedIcon: Icons.home,
+                            label: 'Home',
+                            index: 0,
+                          ),
+                        ),
+                        Expanded(
+                          child: _navItem(
+                            icon: Icons.watch_outlined,
+                            selectedIcon: Icons.watch,
+                            label: 'Catalog',
+                            index: 1,
+                          ),
+                        ),
+                        const Expanded(child: SizedBox()),
+                        Expanded(
+                          child: _navItem(
+                            icon: Icons.auto_awesome_outlined,
+                            selectedIcon: Icons.auto_awesome,
+                            label: 'For You',
+                            index: 3,
+                          ),
+                        ),
+                        Expanded(
+                          child: _navItem(
+                            icon: Icons.person_outline,
+                            selectedIcon: Icons.person,
+                            label: 'Profile',
+                            index: 4,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    top: -16,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _currentIndex = 2),
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: AppTheme.gold,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.surface, width: 3),
+                        ),
+                        child: Icon(
+                          Icons.view_in_ar,
+                          color: const Color(0xFF0E1A2B),
+                          size: _currentIndex == 2 ? 28 : 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
