@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../constants/app_knowledge.dart';
 import '../constants/watch_colors.dart';
@@ -362,7 +363,7 @@ Rules:
 
       if (response!.statusCode != 200) {
         // ignore: avoid_print
-        print('Gemini API error ${response.statusCode}: ${response.body}');
+        debugPrint('Gemini API error ${response.statusCode}: ${response.body}');
         if (response.statusCode == 429) {
           throw 'You\'re sending messages a bit fast — please wait a '
               'moment and try again.';

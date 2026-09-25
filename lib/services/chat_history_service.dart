@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'chat_service.dart';
 
 /// Persists chat threads per user so reopening a chat (watch-specific or
@@ -45,7 +46,7 @@ class ChatHistoryService {
           .toList();
     } catch (e) {
       // ignore: avoid_print
-      print('ChatHistoryService.load error for "$threadKey": $e');
+      debugPrint('ChatHistoryService.load error for "$threadKey": $e');
       return [];
     }
   }
@@ -67,7 +68,7 @@ class ChatHistoryService {
       });
     } catch (e) {
       // ignore: avoid_print
-      print('ChatHistoryService.save error for "$threadKey": $e');
+      debugPrint('ChatHistoryService.save error for "$threadKey": $e');
     }
   }
 

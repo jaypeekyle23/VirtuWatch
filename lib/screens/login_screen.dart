@@ -185,7 +185,6 @@ class _LoginScreenState extends State<LoginScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.only(
                 left: 24,
                 right: 24,
@@ -196,12 +195,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 constraints: BoxConstraints(
                   minHeight: constraints.maxHeight - 64,
                 ),
-                child: IntrinsicHeight(
+                child: Center(
                   child: Form(
                     key: _formKey,
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const SizedBox(height: 24),
 
