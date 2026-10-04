@@ -65,6 +65,12 @@ class UserService {
     );
   }
 
+  /// The per-watch engagement summary doc (see [WatchService] and
+  /// firestore.rules) that tracks which customers saved/viewed it,
+  /// without exposing that on the publicly-readable watch document.
+  DocumentReference<Map<String, dynamic>> _engagementRef(String watchId) =>
+      _firestore.collection('watches').doc(watchId).collection('engagement').doc('summary');
+
   /// Toggles a watch's saved status for the currently logged-in user.
   Future<void> toggleSavedWatch(String watchId) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -73,22 +79,37 @@ class UserService {
     final docRef = _users.doc(uid);
     final doc = await docRef.get();
     final saved = (doc.data()?['savedWatches'] as List?)?.cast<String>() ?? [];
+    final nowSaving = !saved.contains(watchId);
 
-    if (saved.contains(watchId)) {
-      await docRef.update({
-        'savedWatches': FieldValue.arrayRemove([watchId]),
-      });
-    } else {
-      await docRef.update({
-        'savedWatches': FieldValue.arrayUnion([watchId]),
-      });
-    }
+    final batch = _firestore.batch();
+    batch.update(docRef, {
+      'savedWatches': nowSaving
+          ? FieldValue.arrayUnion([watchId])
+          : FieldValue.arrayRemove([watchId]),
+    });
+    // set(merge: true) instead of update(), since this summary doc may
+    // not exist yet if nobody has saved/viewed this watch before.
+    batch.set(
+      _engagementRef(watchId),
+      {
+        'saverIds': nowSaving
+            ? FieldValue.arrayUnion([uid])
+            : FieldValue.arrayRemove([uid]),
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit();
   }
 
   /// Records that the current user viewed a watch, for the "Recently
   /// Viewed" section on their home tab. Moves the watch to the front if
   /// it's already in the list (most recent first) and caps the list at
   /// [maxEntries] so it doesn't grow unbounded over time.
+  ///
+  /// Separately, the watch's engagement summary tracks every distinct
+  /// viewer with `viewerIds`. Unlike the capped list above, that set is
+  /// never trimmed, so it stays an exact unique-viewer count rather than
+  /// an approximation of "currently in someone's top 10".
   Future<void> recordRecentlyViewed(String watchId, {int maxEntries = 10}) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -103,7 +124,14 @@ class UserService {
       ...current.where((id) => id != watchId),
     ].take(maxEntries).toList();
 
-    await docRef.update({'recentlyViewedWatches': updated});
+    final batch = _firestore.batch();
+    batch.update(docRef, {'recentlyViewedWatches': updated});
+    batch.set(
+      _engagementRef(watchId),
+      {'viewerIds': FieldValue.arrayUnion([uid])},
+      SetOptions(merge: true),
+    );
+    await batch.commit();
   }
 
   /// Stream of the current user's own profile doc, used to reactively

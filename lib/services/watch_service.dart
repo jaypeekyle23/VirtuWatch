@@ -46,31 +46,34 @@ class WatchService {
   /// `recentlyViewedWatches` lists, so a deleted watch doesn't linger as a
   /// dangling reference (e.g. a photo-less thumbnail on the profile tab).
   Future<void> deleteWatch(String watchId, {String? watchLabel}) async {
+    final engagementRef = _watches.doc(watchId).collection('engagement').doc('summary');
+    // Read this BEFORE deleting anything: it's the only place a merchant
+    // (not just an admin) is allowed to learn which customers reference
+    // this watch — see firestore.rules. Firestore doesn't cascade-delete
+    // subcollections, so the summary doc is removed explicitly below too.
+    final engagementDoc = await engagementRef.get();
+    final saverIds = (engagementDoc.data()?['saverIds'] as List?)?.cast<String>() ?? const [];
+    final viewerIds = (engagementDoc.data()?['viewerIds'] as List?)?.cast<String>() ?? const [];
+    final affectedUserIds = {...saverIds, ...viewerIds};
+
     await _watches.doc(watchId).delete();
-    await _removeWatchReferences(watchId);
+    await engagementRef.delete();
+    await _removeWatchReferences(watchId, affectedUserIds);
     await _activityLog.log(
       'watch_deleted',
       'Watch deleted: ${watchLabel ?? watchId}',
     );
   }
 
-  /// Removes [watchId] from any user documents that still reference it in
-  /// `savedWatches` or `recentlyViewedWatches`.
-  Future<void> _removeWatchReferences(String watchId) async {
-    final users = _firestore.collection('users');
-    final affected = await Future.wait([
-      users.where('savedWatches', arrayContains: watchId).get(),
-      users.where('recentlyViewedWatches', arrayContains: watchId).get(),
-    ]);
-
-    final docsToUpdate = {
-      for (final snapshot in affected) for (final doc in snapshot.docs) doc.id: doc.reference,
-    };
-    if (docsToUpdate.isEmpty) return;
-
+  /// Removes [watchId] from the listed users' `savedWatches` and
+  /// `recentlyViewedWatches`. [affectedUserIds] only covers customers who
+  /// saved/viewed this watch after the engagement summary was introduced —
+  /// any older, pre-existing references won't be caught here.
+  Future<void> _removeWatchReferences(String watchId, Set<String> affectedUserIds) async {
+    if (affectedUserIds.isEmpty) return;
     final batch = _firestore.batch();
-    for (final ref in docsToUpdate.values) {
-      batch.update(ref, {
+    for (final uid in affectedUserIds) {
+      batch.update(_firestore.collection('users').doc(uid), {
         'savedWatches': FieldValue.arrayRemove([watchId]),
         'recentlyViewedWatches': FieldValue.arrayRemove([watchId]),
       });
@@ -97,4 +100,73 @@ class WatchService {
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
+
+  /// Fetches customer-engagement stats for a merchant's own catalog,
+  /// keyed by watch ID, from each watch's engagement summary doc (see
+  /// firestore.rules — this is the only place that data is readable by
+  /// the owning merchant, since a bulk query across the `users`
+  /// collection itself is blocked for non-admins).
+  ///
+  /// Both `saverIds` and `viewerIds` are exact, not approximations:
+  /// saves are a real wishlist signal, and views accumulate every
+  /// distinct viewer permanently, unlike the customer's own capped
+  /// `recentlyViewedWatches` list. A watch that predates this feature
+  /// (or has never been saved/viewed since) simply has no summary doc
+  /// yet, which reads back as all-zero counts, not an error.
+  Future<EngagementStats> fetchEngagementStats(List<String> watchIds) async {
+    if (watchIds.isEmpty) {
+      return const EngagementStats(
+        savedCounts: {},
+        viewedCounts: {},
+        uniqueSaverCount: 0,
+      );
+    }
+
+    final summaries = await Future.wait([
+      for (final id in watchIds) _watches.doc(id).collection('engagement').doc('summary').get(),
+    ]);
+
+    final savedCounts = <String, int>{};
+    final viewedCounts = <String, int>{};
+    final uniqueSavers = <String>{};
+
+    for (var i = 0; i < watchIds.length; i++) {
+      final data = summaries[i].data();
+      final saverIds = (data?['saverIds'] as List?)?.cast<String>() ?? const [];
+      final viewerIds = (data?['viewerIds'] as List?)?.cast<String>() ?? const [];
+      savedCounts[watchIds[i]] = saverIds.length;
+      viewedCounts[watchIds[i]] = viewerIds.length;
+      uniqueSavers.addAll(saverIds);
+    }
+
+    return EngagementStats(
+      savedCounts: savedCounts,
+      viewedCounts: viewedCounts,
+      uniqueSaverCount: uniqueSavers.length,
+    );
+  }
+}
+
+/// Result of [WatchService.fetchEngagementStats]. Not a Firestore
+/// document, just an in-memory bundle of the computed counts, so a plain
+/// class (rather than the raw-map style used for Firestore data
+/// elsewhere in this app) is fine here.
+class EngagementStats {
+  const EngagementStats({
+    required this.savedCounts,
+    required this.viewedCounts,
+    required this.uniqueSaverCount,
+  });
+
+  /// Watch ID -> number of customers who currently have it saved.
+  final Map<String, int> savedCounts;
+
+  /// Watch ID -> number of distinct customers who have ever viewed it.
+  final Map<String, int> viewedCounts;
+
+  /// Number of distinct customers who have saved at least one of this
+  /// merchant's watches.
+  final int uniqueSaverCount;
+
+  int get totalSaves => savedCounts.values.fold(0, (a, b) => a + b);
 }

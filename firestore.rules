@@ -58,6 +58,21 @@ service cloud.firestore {
       // Only the owning merchant (or an Admin) can update/delete their watch.
       allow update, delete: if isSignedIn()
                              && (resource.data.merchantId == request.auth.uid || isAdmin());
+
+      // Per-watch engagement summary (which customers saved/viewed it).
+      // Kept out of the watch document above — which any signed-in user
+      // can read — because it holds customer IDs; only the owning
+      // merchant or an admin should see who's engaging with a listing.
+      // Any signed-in customer can still WRITE their own save/view into
+      // it (the app controls exactly what gets written, same trust
+      // model as activityLog below); they just can't read the
+      // aggregated result back out.
+      match /engagement/{docId} {
+        allow read: if isSignedIn()
+                    && (get(/databases/$(database)/documents/watches/$(watchId)).data.merchantId == request.auth.uid
+                        || isAdmin());
+        allow write: if isSignedIn();
+      }
     }
     match /activityLog/{logId} {
       // Only admins can read the activity feed.
