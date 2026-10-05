@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../constants/watch_colors.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/skeleton_box.dart';
 import 'merchant_edit_watch_screen.dart';
 
 /// Read-only-ish watch details screen used by both the merchant and admin
@@ -419,7 +420,11 @@ class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
                     ),
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
-                      return const Center(child: CircularProgressIndicator());
+                      return const SkeletonBox(
+                        width: double.infinity,
+                        height: double.infinity,
+                        borderRadius: BorderRadius.zero,
+                      );
                     },
                   ),
                 );

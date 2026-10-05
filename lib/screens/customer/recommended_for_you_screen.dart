@@ -661,12 +661,10 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                             const Icon(Icons.watch, color: AppTheme.gold),
                         loadingBuilder: (context, child, progress) {
                           if (progress == null) return child;
-                          return const Center(
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
+                          return const SkeletonBox(
+                            width: double.infinity,
+                            height: double.infinity,
+                            borderRadius: BorderRadius.zero,
                           );
                         },
                       )

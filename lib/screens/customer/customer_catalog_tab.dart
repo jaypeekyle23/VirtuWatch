@@ -4,6 +4,7 @@ import '../../constants/watch_colors.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/catalog_filter_sheet.dart';
+import '../../widgets/skeleton_box.dart';
 import 'watch_detail_screen.dart';
 
 enum _SortOption {
@@ -227,7 +228,11 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
                     );
                   }
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    // Matches whichever view (grid or list) is active, so
+                    // the layout doesn't change shape when data arrives.
+                    return _isMultiColumn
+                        ? const _CatalogGridSkeleton()
+                        : const _CatalogListSkeleton();
                   }
                   if (docs.isEmpty) {
                     return Center(
@@ -409,13 +414,10 @@ class _WatchCard extends StatelessWidget {
                           ),
                           loadingBuilder: (context, child, progress) {
                             if (progress == null) return child;
-                            return const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
+                            return const SkeletonBox(
+                              width: double.infinity,
+                              height: double.infinity,
+                              borderRadius: BorderRadius.zero,
                             );
                           },
                         )
@@ -591,12 +593,10 @@ class _WatchListTile extends StatelessWidget {
                           size: 36),
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
-                        return const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
+                        return const SkeletonBox(
+                          width: double.infinity,
+                          height: double.infinity,
+                          borderRadius: BorderRadius.zero,
                         );
                       },
                     )
@@ -657,6 +657,184 @@ class _WatchListTile extends StatelessWidget {
             const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Loading placeholder for the catalog's grid view: [rows] rows of two
+/// [_WatchCardSkeleton]s, with the same padding and spacing as the real
+/// grid built in [_CustomerCatalogTabState.build].
+class _CatalogGridSkeleton extends StatelessWidget {
+  final int rows;
+
+  const _CatalogGridSkeleton({this.rows = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: ListView.separated(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 16, top: 4),
+        itemCount: rows,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) => const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _WatchCardSkeleton()),
+            SizedBox(width: 12),
+            Expanded(child: _WatchCardSkeleton()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Loading placeholder for the catalog's list view: [count] rows shaped
+/// like [_WatchListTile].
+class _CatalogListSkeleton extends StatelessWidget {
+  final int count;
+
+  const _CatalogListSkeleton({this.count = 6});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      itemCount: count,
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) => const _WatchListTileSkeleton(),
+    );
+  }
+}
+
+/// Placeholder for [_WatchCard], mirroring its layout (square photo, then
+/// brand / 2-line name / size · style / price / color-dot rows at the same
+/// fixed heights).
+class _WatchCardSkeleton extends StatelessWidget {
+  const _WatchCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AspectRatio(
+            aspectRatio: 1,
+            child: SkeletonBox(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SizedBox(
+                  height: 12,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 40, height: 9),
+                  ),
+                ),
+                SizedBox(height: 1),
+                SizedBox(
+                  height: 32,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(width: 100, height: 11),
+                      SizedBox(height: 6),
+                      SkeletonBox(width: 64, height: 11),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 2),
+                SizedBox(
+                  height: 13,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 70, height: 9),
+                  ),
+                ),
+                SizedBox(height: 3),
+                SizedBox(
+                  height: 16,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 72, height: 12),
+                  ),
+                ),
+                SizedBox(height: 3),
+                SizedBox(
+                  height: 8,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(
+                      width: 30,
+                      height: 8,
+                      borderRadius: BorderRadius.all(Radius.circular(4)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder for [_WatchListTile]: an 80x80 photo block beside a few
+/// text lines, inside the same padded, rounded surface as the real row.
+class _WatchListTileSkeleton extends StatelessWidget {
+  const _WatchListTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SkeletonBox(
+            width: 80,
+            height: 80,
+            borderRadius: BorderRadius.all(Radius.circular(10)),
+          ),
+          SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonBox(width: 44, height: 10),
+                SizedBox(height: 8),
+                SkeletonBox(width: 150, height: 14),
+                SizedBox(height: 8),
+                SkeletonBox(width: 90, height: 11),
+                SizedBox(height: 8),
+                SkeletonBox(width: 70, height: 14),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

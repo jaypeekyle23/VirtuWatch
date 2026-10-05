@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/catalog_filter_sheet.dart';
+import '../../widgets/skeleton_box.dart';
 import '../merchant/merchant_catalog_tab.dart' show missingWatchFields;
 import '../merchant/merchant_edit_watch_screen.dart';
 import '../merchant/merchant_add_watch_screen.dart';
@@ -255,7 +256,11 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
                     );
                   }
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    // Matches whichever view (grid or list) is active, so
+                    // the layout doesn't change shape when data arrives.
+                    return _isMultiColumn
+                        ? const _CatalogGridSkeleton()
+                        : const _CatalogListSkeleton();
                   }
                   if (docs.isEmpty) {
                     return Center(
@@ -502,12 +507,10 @@ class _AdminWatchTile extends StatelessWidget {
                             size: 36),
                         loadingBuilder: (context, child, progress) {
                           if (progress == null) return child;
-                          return const Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
+                          return const SkeletonBox(
+                            width: double.infinity,
+                            height: double.infinity,
+                            borderRadius: BorderRadius.zero,
                           );
                         },
                       )
@@ -940,6 +943,256 @@ class _AdminWatchGridCard extends StatelessWidget {
           fontSize: 9,
           fontWeight: FontWeight.bold,
         ),
+      ),
+    );
+  }
+}
+
+/// Loading placeholder for the admin watch management grid view: [rows] rows
+/// of two [_WatchGridCardSkeleton]s, with the same padding and spacing as
+/// the real grid built in [_AdminWatchManagementTabState.build].
+class _CatalogGridSkeleton extends StatelessWidget {
+  final int rows;
+
+  const _CatalogGridSkeleton({this.rows = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: ListView.separated(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 16, top: 4),
+        itemCount: rows,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) => const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _WatchGridCardSkeleton()),
+            SizedBox(width: 12),
+            Expanded(child: _WatchGridCardSkeleton()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Loading placeholder for the admin watch management list view: [count] rows
+/// shaped like [_AdminWatchTile].
+class _CatalogListSkeleton extends StatelessWidget {
+  final int count;
+
+  const _CatalogListSkeleton({this.count = 5});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      itemCount: count,
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) => const _WatchListTileSkeleton(),
+    );
+  }
+}
+
+/// Placeholder for [_AdminWatchGridCard], mirroring its layout: a 1.3-ratio
+/// photo, a 2-line name, a row of status chips, the price, and the
+/// switch / edit / delete row, at the same fixed heights.
+class _WatchGridCardSkeleton extends StatelessWidget {
+  const _WatchGridCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AspectRatio(
+            aspectRatio: 1.3,
+            child: SkeletonBox(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                SizedBox(
+                  height: 36,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(width: 110, height: 13),
+                      SizedBox(height: 6),
+                      SkeletonBox(width: 70, height: 13),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 4),
+                SizedBox(
+                  height: 36,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(
+                        width: 44,
+                        height: 18,
+                        borderRadius: BorderRadius.all(Radius.circular(9)),
+                      ),
+                      SizedBox(width: 4),
+                      SkeletonBox(
+                        width: 36,
+                        height: 18,
+                        borderRadius: BorderRadius.all(Radius.circular(9)),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 6),
+                SizedBox(
+                  height: 18,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 76, height: 14),
+                  ),
+                ),
+                SizedBox(height: 2),
+                SizedBox(
+                  height: 44,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      SkeletonBox(
+                        width: 36,
+                        height: 20,
+                        borderRadius: BorderRadius.all(Radius.circular(10)),
+                      ),
+                      Row(
+                        children: [
+                          SkeletonBox(
+                            width: 20,
+                            height: 20,
+                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                          ),
+                          SizedBox(width: 8),
+                          SkeletonBox(
+                            width: 20,
+                            height: 20,
+                            borderRadius: BorderRadius.all(Radius.circular(10)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder for [_AdminWatchTile]: photo, name, status chips and
+/// listing switch on top, then a divider and the price / edit / delete row,
+/// inside the same padded, rounded surface as the real row.
+class _WatchListTileSkeleton extends StatelessWidget {
+  const _WatchListTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SkeletonBox(
+                width: 72,
+                height: 72,
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonBox(width: 150, height: 14),
+                    SizedBox(height: 6),
+                    SkeletonBox(width: 100, height: 14),
+                    SizedBox(height: 8),
+                    Row(
+                      children: [
+                        SkeletonBox(
+                          width: 46,
+                          height: 18,
+                          borderRadius: BorderRadius.all(Radius.circular(9)),
+                        ),
+                        SizedBox(width: 6),
+                        SkeletonBox(
+                          width: 38,
+                          height: 18,
+                          borderRadius: BorderRadius.all(Radius.circular(9)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: 8),
+              SkeletonBox(
+                width: 36,
+                height: 20,
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Divider(color: AppTheme.background, height: 1),
+          SizedBox(height: 10),
+          SizedBox(
+            height: 40,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SkeletonBox(width: 80, height: 14),
+                Row(
+                  children: [
+                    SkeletonBox(
+                      width: 22,
+                      height: 22,
+                      borderRadius: BorderRadius.all(Radius.circular(11)),
+                    ),
+                    SizedBox(width: 14),
+                    SkeletonBox(
+                      width: 22,
+                      height: 22,
+                      borderRadius: BorderRadius.all(Radius.circular(11)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

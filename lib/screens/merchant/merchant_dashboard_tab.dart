@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/skeleton_box.dart';
 import '../../widgets/update_available_banner.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_catalog_tab.dart';
@@ -240,7 +241,13 @@ class MerchantDashboardTab extends StatelessWidget {
                 const SizedBox(height: 12),
 
                 if (snapshot.connectionState == ConnectionState.waiting)
-                  const Center(child: CircularProgressIndicator())
+                  ...List.generate(
+                    3,
+                    (_) => const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: _LatestWatchSkeleton(),
+                    ),
+                  )
                 else if (latestWatches.isEmpty)
                   Container(
                     width: double.infinity,
@@ -403,12 +410,10 @@ class MerchantDashboardTab extends StatelessWidget {
                               color: AppTheme.gold, size: 22),
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
-                        return const Center(
-                          child: SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
+                        return const SkeletonBox(
+                          width: double.infinity,
+                          height: double.infinity,
+                          borderRadius: BorderRadius.zero,
                         );
                       },
                     )
@@ -482,6 +487,46 @@ class MerchantDashboardTab extends StatelessWidget {
           fontSize: 9,
           fontWeight: FontWeight.bold,
         ),
+      ),
+    );
+  }
+}
+
+/// Placeholder for a row in "My Latest Watches" (see
+/// [MerchantDashboardTab._latestWatchTile]): 44px thumbnail beside brand,
+/// name and status-badge lines, inside the same padded, rounded surface.
+class _LatestWatchSkeleton extends StatelessWidget {
+  const _LatestWatchSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        children: [
+          SkeletonBox(
+            width: 44,
+            height: 44,
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonBox(width: 44, height: 10),
+                SizedBox(height: 4),
+                SkeletonBox(width: 130, height: 13),
+                SizedBox(height: 6),
+                SkeletonBox(width: 70, height: 14),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

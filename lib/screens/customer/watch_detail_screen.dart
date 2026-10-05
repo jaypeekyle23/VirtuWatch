@@ -6,6 +6,7 @@ import '../../services/recommendation_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/match_score_color.dart';
+import '../../widgets/skeleton_box.dart';
 import '../../widgets/watch_chat_sheet.dart';
 import 'ar_try_on_screen.dart';
 
@@ -321,21 +322,10 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  if (_loadingMatch)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 16),
-                      child: SizedBox(
-                        height: 88,
-                        child: Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                      ),
-                    )
-                  else if (_match != null) ...[
+                  if (_loadingMatch) ...[
+                    const _MatchCardSkeleton(),
+                    const SizedBox(height: 16),
+                  ] else if (_match != null) ...[
                     _matchCard(_match!),
                     const SizedBox(height: 16),
                   ],
@@ -728,7 +718,11 @@ class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
                     ),
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
-                      return const Center(child: CircularProgressIndicator());
+                      return const SkeletonBox(
+                        width: double.infinity,
+                        height: double.infinity,
+                        borderRadius: BorderRadius.zero,
+                      );
                     },
                   ),
                 );
@@ -758,6 +752,56 @@ class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
                 }),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder for the "AI Style Match" card while the score loads: same
+/// tinted surface, label / big percentage / subtitle on the left, the
+/// 56px ring on the right, and a couple of detail rows underneath.
+class _MatchCardSkeleton extends StatelessWidget {
+  const _MatchCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.gold.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.gold.withValues(alpha: 0.25)),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonBox(width: 90, height: 11),
+                    SizedBox(height: 8),
+                    SkeletonBox(width: 120, height: 26),
+                    SizedBox(height: 8),
+                    SkeletonBox(width: 180, height: 12),
+                  ],
+                ),
+              ),
+              SizedBox(width: 12),
+              SkeletonBox(
+                width: 56,
+                height: 56,
+                borderRadius: BorderRadius.all(Radius.circular(28)),
+              ),
+            ],
+          ),
+          SizedBox(height: 14),
+          SkeletonBox(width: double.infinity, height: 14),
+          SizedBox(height: 8),
+          SkeletonBox(width: double.infinity, height: 14),
         ],
       ),
     );

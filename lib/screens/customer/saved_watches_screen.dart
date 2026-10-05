@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/skeleton_box.dart';
 import 'watch_detail_screen.dart';
 
 class SavedWatchesScreen extends StatefulWidget {
@@ -29,7 +30,9 @@ class _SavedWatchesScreenState extends State<SavedWatchesScreen> {
         stream: _userService.currentUserStream(),
         builder: (context, userSnapshot) {
           if (userSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            // The saved count isn't known yet, so show a typical
+            // screenful (3 rows of 2 cards).
+            return const _SavedGridSkeleton(count: 6);
           }
 
           final savedIds = (userSnapshot.data?.data()?['savedWatches']
@@ -76,7 +79,11 @@ class _SavedWatchesScreenState extends State<SavedWatchesScreen> {
             ),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                // Matches how many watches are actually saved (capped at
+                // 8 — about a screenful) so the grid keeps its shape.
+                return _SavedGridSkeleton(
+                  count: savedIds.length < 8 ? savedIds.length : 8,
+                );
               }
               if (snapshot.hasError) {
                 return RefreshIndicator(
@@ -181,6 +188,121 @@ class _SavedWatchesScreenState extends State<SavedWatchesScreen> {
   }
 }
 
+/// Placeholder for the saved-watches grid while the user's saved IDs and
+/// the watch documents themselves are loading. Lays out [count] skeleton
+/// cards two per row, in the same padding and spacing as the real grid
+/// below, so nothing shifts when the real cards appear.
+class _SavedGridSkeleton extends StatelessWidget {
+  final int count;
+
+  const _SavedGridSkeleton({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final rowCount = (count / 2).ceil();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: ListView.separated(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 16, top: 12),
+        itemCount: rowCount,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, rowIndex) {
+          final secondIndex = rowIndex * 2 + 1;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(child: _SavedWatchCardSkeleton()),
+              const SizedBox(width: 12),
+              Expanded(
+                child: secondIndex < count
+                    ? const _SavedWatchCardSkeleton()
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Placeholder for [_SavedWatchCard], mirroring its layout (square image
+/// block, then brand / 2-line name / size · style / price rows at the same
+/// fixed heights).
+class _SavedWatchCardSkeleton extends StatelessWidget {
+  const _SavedWatchCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AspectRatio(
+            aspectRatio: 1,
+            child: SkeletonBox(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SizedBox(
+                  height: 12,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 40, height: 9),
+                  ),
+                ),
+                SizedBox(height: 1),
+                SizedBox(
+                  height: 32,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(width: 100, height: 11),
+                      SizedBox(height: 6),
+                      SkeletonBox(width: 64, height: 11),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 2),
+                SizedBox(
+                  height: 13,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 70, height: 9),
+                  ),
+                ),
+                SizedBox(height: 3),
+                SizedBox(
+                  height: 16,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 72, height: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SavedWatchCard extends StatelessWidget {
   final String watchId;
   final Map<String, dynamic> data;
@@ -233,13 +355,10 @@ class _SavedWatchCard extends StatelessWidget {
                           ),
                           loadingBuilder: (context, child, progress) {
                             if (progress == null) return child;
-                            return const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
+                            return const SkeletonBox(
+                              width: double.infinity,
+                              height: double.infinity,
+                              borderRadius: BorderRadius.zero,
                             );
                           },
                         )

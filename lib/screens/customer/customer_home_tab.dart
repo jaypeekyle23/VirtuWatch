@@ -297,9 +297,22 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                             .get(),
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
-                            return const SizedBox(
+                            // Same card shape and row height as the real
+                            // row below, so nothing jumps when it loads.
+                            return SizedBox(
                               height: _kHomeCardRowHeight,
-                              child: Center(child: CircularProgressIndicator()),
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount:
+                                    recentIds.length < 4 ? recentIds.length : 4,
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(width: 12),
+                                itemBuilder: (context, index) => const Align(
+                                  alignment: Alignment.topCenter,
+                                  child: _HomeWatchCardSkeleton(),
+                                ),
+                              ),
                             );
                           }
                           // Firestore's whereIn doesn't preserve the order
@@ -469,9 +482,28 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                 stream: watchService.allListedWatches(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
+                    // Two rows of two cards, matching the (up to) 4-watch
+                    // preview the real grid below shows.
+                    return const Column(
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _BrowseWatchCardSkeleton()),
+                            SizedBox(width: 12),
+                            Expanded(child: _BrowseWatchCardSkeleton()),
+                          ],
+                        ),
+                        SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _BrowseWatchCardSkeleton()),
+                            SizedBox(width: 12),
+                            Expanded(child: _BrowseWatchCardSkeleton()),
+                          ],
+                        ),
+                      ],
                     );
                   }
                   final docs = snapshot.data?.docs ?? [];
@@ -625,13 +657,10 @@ class _HomeWatchCard extends StatelessWidget {
                           ),
                           loadingBuilder: (context, child, progress) {
                             if (progress == null) return child;
-                            return const Center(
-                              child: SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
+                            return const SkeletonBox(
+                              width: double.infinity,
+                              height: double.infinity,
+                              borderRadius: BorderRadius.zero,
                             );
                           },
                         )
@@ -733,6 +762,82 @@ class _HomeWatchCardSkeleton extends StatelessWidget {
   }
 }
 
+/// Placeholder for [_BrowseWatchCard], mirroring its layout (square image
+/// block, then style / 2-line name / size / price rows at the same fixed
+/// heights) so the "Browse Watches" grid keeps its shape while the
+/// catalog stream is still connecting.
+class _BrowseWatchCardSkeleton extends StatelessWidget {
+  const _BrowseWatchCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AspectRatio(
+            aspectRatio: 1,
+            child: SkeletonBox(
+              width: double.infinity,
+              height: double.infinity,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SizedBox(
+                  height: 12,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 40, height: 9),
+                  ),
+                ),
+                SizedBox(height: 1),
+                SizedBox(
+                  height: 32,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(width: 100, height: 11),
+                      SizedBox(height: 6),
+                      SkeletonBox(width: 64, height: 11),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 2),
+                SizedBox(
+                  height: 13,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 34, height: 9),
+                  ),
+                ),
+                SizedBox(height: 4),
+                SizedBox(
+                  height: 16,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(width: 72, height: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BrowseWatchCard extends StatelessWidget {
   final String watchId;
   final Map<String, dynamic> data;
@@ -785,13 +890,10 @@ class _BrowseWatchCard extends StatelessWidget {
                           ),
                           loadingBuilder: (context, child, progress) {
                             if (progress == null) return child;
-                            return const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
+                            return const SkeletonBox(
+                              width: double.infinity,
+                              height: double.infinity,
+                              borderRadius: BorderRadius.zero,
                             );
                           },
                         )

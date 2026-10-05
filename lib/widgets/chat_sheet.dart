@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/chat_history_service.dart';
 import '../services/chat_service.dart';
 import '../theme/app_theme.dart';
+import 'skeleton_box.dart';
 
 /// Opens [ChatSheet] as a scrollable bottom sheet. Both the single-watch
 /// chat (Watch Detail screen) and the recommendations-wide chat
@@ -210,9 +211,7 @@ class _ChatSheetState extends State<ChatSheet> {
               const Divider(color: AppTheme.surface, height: 1),
               Expanded(
                 child: _isInitializing
-                    ? const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const _ChatSkeleton()
                     : (_messages.isEmpty && !_isSending)
                         ? _emptyState()
                         : ListView.builder(
@@ -536,6 +535,48 @@ class _TypingIndicatorState extends State<_TypingIndicator>
           );
         },
       ),
+    );
+  }
+}
+
+/// Placeholder shown while the chat sheet is still loading its context
+/// (profile, saved watches, match score) and any saved conversation —
+/// a few shimmering message bubbles, alternating sides like a real
+/// conversation, instead of a bare spinner.
+class _ChatSkeleton extends StatelessWidget {
+  const _ChatSkeleton();
+
+  Widget _bubble(
+    BuildContext context, {
+    required bool isUser,
+    required double widthFactor,
+    required double height,
+  }) {
+    // Same max width the real bubbles use (see _ChatSheetState._bubble).
+    final maxWidth = MediaQuery.of(context).size.width * 0.75;
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: SkeletonBox(
+          width: maxWidth * widthFactor,
+          height: height,
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        _bubble(context, isUser: false, widthFactor: 0.7, height: 56),
+        _bubble(context, isUser: true, widthFactor: 0.45, height: 38),
+        _bubble(context, isUser: false, widthFactor: 1.0, height: 84),
+      ],
     );
   }
 }

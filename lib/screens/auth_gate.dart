@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/engagement_notification_service.dart';
 import '../services/update_checker_service.dart';
-import '../theme/app_theme.dart';
+import '../widgets/logo_loading_screen.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
 import 'customer/customer_shell.dart';
@@ -70,12 +70,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_hasSeenOnboarding == null) {
-      return const Scaffold(
-        backgroundColor: AppTheme.background,
-        body: Center(
-          child: CircularProgressIndicator(color: AppTheme.gold),
-        ),
-      );
+      return const LogoLoadingScreen();
     }
 
     if (!_hasSeenOnboarding!) {
@@ -88,12 +83,7 @@ class _AuthGateState extends State<AuthGate> {
       future: _profileFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            backgroundColor: AppTheme.background,
-            body: Center(
-              child: CircularProgressIndicator(color: AppTheme.gold),
-            ),
-          );
+          return const LogoLoadingScreen();
         }
 
         final profile = snapshot.data;
