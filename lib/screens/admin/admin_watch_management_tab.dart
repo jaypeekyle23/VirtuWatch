@@ -8,6 +8,7 @@ import '../merchant/merchant_catalog_tab.dart' show missingWatchFields;
 import '../merchant/merchant_edit_watch_screen.dart';
 import '../merchant/merchant_add_watch_screen.dart';
 import '../merchant/merchant_watch_detail_screen.dart';
+import '../../widgets/network_photo.dart';
 
 enum _SortOption {
   newest('Newest'),
@@ -472,6 +473,7 @@ class _AdminWatchTile extends StatelessWidget {
             builder: (_) => MerchantWatchDetailScreen(
               watchId: watchId,
               data: data,
+              heroTag: 'admin-list-photo-$watchId',
             ),
           ),
         );
@@ -498,21 +500,12 @@ class _AdminWatchTile extends StatelessWidget {
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.watch,
-                            color: AppTheme.gold,
-                            size: 36),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const SkeletonBox(
-                            width: double.infinity,
-                            height: double.infinity,
-                            borderRadius: BorderRadius.zero,
-                          );
-                        },
+                    ? Hero(
+                        tag: 'admin-list-photo-$watchId',
+                        child: NetworkPhoto(
+                          url: imageUrl,
+                          errorWidget: const Icon(Icons.watch, color: AppTheme.gold, size: 36),
+                        ),
                       )
                     : const Icon(Icons.watch, color: AppTheme.gold, size: 36),
               ),
@@ -722,6 +715,7 @@ class _AdminWatchGridCard extends StatelessWidget {
             builder: (_) => MerchantWatchDetailScreen(
               watchId: watchId,
               data: data,
+              heroTag: 'admin-grid-photo-$watchId',
             ),
           ),
         );
@@ -742,12 +736,11 @@ class _AdminWatchGridCard extends StatelessWidget {
               child: Container(
                 color: AppTheme.background,
                 child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Center(
-                          child: Icon(Icons.watch, size: 32, color: AppTheme.gold),
+                    ? Hero(
+                        tag: 'admin-grid-photo-$watchId',
+                        child: NetworkPhoto(
+                          url: imageUrl,
+                          errorWidget: const Center(child: Icon(Icons.watch, size: 32, color: AppTheme.gold)),
                         ),
                       )
                     : const Center(
@@ -952,9 +945,9 @@ class _AdminWatchGridCard extends StatelessWidget {
 /// of two [_WatchGridCardSkeleton]s, with the same padding and spacing as
 /// the real grid built in [_AdminWatchManagementTabState.build].
 class _CatalogGridSkeleton extends StatelessWidget {
-  final int rows;
+  static const int rows = 3;
 
-  const _CatalogGridSkeleton({this.rows = 3});
+  const _CatalogGridSkeleton();
 
   @override
   Widget build(BuildContext context) {
@@ -981,9 +974,9 @@ class _CatalogGridSkeleton extends StatelessWidget {
 /// Loading placeholder for the admin watch management list view: [count] rows
 /// shaped like [_AdminWatchTile].
 class _CatalogListSkeleton extends StatelessWidget {
-  final int count;
+  static const int count = 5;
 
-  const _CatalogListSkeleton({this.count = 5});
+  const _CatalogListSkeleton();
 
   @override
   Widget build(BuildContext context) {

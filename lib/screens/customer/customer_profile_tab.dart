@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../constants/app_version.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/profile_skeleton.dart';
 import 'edit_profile_screen.dart';
 import 'saved_watches_screen.dart';
 import 'wrist_measurement_screen.dart';
@@ -14,6 +15,7 @@ import '../update_screen.dart';
 import '../delete_account_screen.dart';
 import '../terms_of_service_screen.dart';
 import '../privacy_policy_screen.dart';
+import '../../widgets/network_photo.dart';
 
 class CustomerProfileTab extends StatelessWidget {
   const CustomerProfileTab({super.key});
@@ -33,7 +35,10 @@ class CustomerProfileTab extends StatelessWidget {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const ProfileSkeleton(
+                    kind: ProfileSkeletonKind.customer,
+                    menuItems: 7,
+                  );
                 }
                 final data = snapshot.data!.data() ?? {};
                 final username = data['username'] as String? ?? 'User';
@@ -62,7 +67,7 @@ class CustomerProfileTab extends StatelessWidget {
                         radius: 36,
                         backgroundColor: AppTheme.gold,
                         backgroundImage: photoUrl.isNotEmpty
-                            ? NetworkImage(photoUrl)
+                            ? NetworkPhoto.provider(photoUrl)
                             : null,
                         child: photoUrl.isEmpty
                             ? Text(
@@ -530,12 +535,10 @@ class _SavedWatchThumbnail extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: imageUrl.isNotEmpty
-          ? Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.watch, color: AppTheme.gold, size: 20),
-            )
+          ? NetworkPhoto(
+            url: imageUrl,
+            errorWidget: const Icon(Icons.watch, color: AppTheme.gold, size: 20),
+          )
           : const Icon(Icons.watch, color: AppTheme.gold, size: 20),
     );
   }

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/animated_icon_loader.dart';
 import 'customer/customer_shell.dart';
 import 'login_screen.dart';
 
@@ -127,18 +128,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.gold, width: 1.5),
-                ),
-                child: const Icon(
-                  Icons.mark_email_unread_outlined,
-                  color: AppTheme.gold,
-                  size: 32,
-                ),
+              // The envelope itself is the "waiting" indicator: it floats
+              // gently while soft rings pulse out from it.
+              const AnimatedIconLoader(
+                icon: Icons.mark_email_unread_outlined,
+                iconSize: 40,
+                motion: IconLoaderMotion.bob,
               ),
               const SizedBox(height: 24),
               Text(
@@ -163,12 +158,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               ),
               const SizedBox(height: 28),
 
-              const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(height: 12),
               Text(
                 'Waiting for verification...',
                 style: TextStyle(

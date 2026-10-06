@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../services/cloudinary_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/network_photo.dart';
 
 class EditAccountNameScreen extends StatefulWidget {
   final String currentUsername;
@@ -95,7 +96,7 @@ class _EditAccountNameScreenState extends State<EditAccountNameScreen> {
 
   ImageProvider? get _avatarImage {
     if (_selectedImage != null) return FileImage(_selectedImage!);
-    if (_existingPhotoUrl.isNotEmpty) return NetworkImage(_existingPhotoUrl);
+    if (_existingPhotoUrl.isNotEmpty) return NetworkPhoto.provider(_existingPhotoUrl);
     return null;
   }
 

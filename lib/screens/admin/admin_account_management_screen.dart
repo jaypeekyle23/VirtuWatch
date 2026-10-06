@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/skeleton_box.dart';
 import 'admin_create_account_screen.dart';
 
 class AdminAccountManagementScreen extends StatefulWidget {
@@ -137,7 +138,15 @@ class _AdminAccountManagementScreenState
                   );
                 }
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return ListView.separated(
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    itemCount: 7,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 10),
+                    itemBuilder: (context, index) =>
+                        const _AccountTileSkeleton(),
+                  );
                 }
 
                 var docs = snapshot.data?.docs ?? [];
@@ -492,5 +501,56 @@ class _AccountTile extends StatelessWidget {
         }
       }
     }
+  }
+}
+
+/// Placeholder for [_AccountTile]: avatar circle, username / email lines and
+/// role + status badges, with the overflow-menu dot column on the right,
+/// inside the same padded, rounded surface as the real row.
+class _AccountTileSkeleton extends StatelessWidget {
+  const _AccountTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    const pill = BorderRadius.all(Radius.circular(6));
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        children: [
+          SkeletonBox(
+            width: 40,
+            height: 40,
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonBox(width: 130, height: 14),
+                SizedBox(height: 6),
+                SkeletonBox(width: 170, height: 11),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    SkeletonBox(width: 56, height: 16, borderRadius: pill),
+                    SizedBox(width: 6),
+                    SkeletonBox(width: 60, height: 16, borderRadius: pill),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 12),
+          SkeletonBox(width: 4, height: 18),
+          SizedBox(width: 18),
+        ],
+      ),
+    );
   }
 }

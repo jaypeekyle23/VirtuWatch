@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../constants/watch_colors.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/skeleton_box.dart';
 import 'merchant_edit_watch_screen.dart';
+import '../../widgets/network_photo.dart';
 
 /// Read-only-ish watch details screen used by both the merchant and admin
 /// catalogs. Same image/specs layout as the customer-facing detail screen,
@@ -14,10 +14,15 @@ class MerchantWatchDetailScreen extends StatelessWidget {
   final String watchId;
   final Map<String, dynamic> data;
 
+  /// Hero tag of the photo tapped on the previous screen, so it can fly
+  /// into this screen's first photo. Null means no animation.
+  final String? heroTag;
+
   const MerchantWatchDetailScreen({
     super.key,
     required this.watchId,
     required this.data,
+    this.heroTag,
   });
 
   @override
@@ -56,7 +61,7 @@ class MerchantWatchDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _WatchPhotoCarousel(imageUrls: photoUrls),
+            _WatchPhotoCarousel(imageUrls: photoUrls, heroTag: heroTag),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -371,8 +376,9 @@ class MerchantWatchDetailScreen extends StatelessWidget {
 /// file at all.
 class _WatchPhotoCarousel extends StatefulWidget {
   final List<String> imageUrls;
+  final String? heroTag;
 
-  const _WatchPhotoCarousel({required this.imageUrls});
+  const _WatchPhotoCarousel({required this.imageUrls, this.heroTag});
 
   @override
   State<_WatchPhotoCarousel> createState() => _WatchPhotoCarouselState();
@@ -410,24 +416,18 @@ class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
               itemCount: photos.length,
               onPageChanged: (index) => setState(() => _currentPage = index),
               itemBuilder: (context, index) {
-                return Container(
+                final photo = Container(
                   color: AppTheme.surface,
-                  child: Image.network(
-                    photos[index],
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Center(
-                      child: Icon(Icons.watch, size: 100, color: AppTheme.gold),
-                    ),
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const SkeletonBox(
-                        width: double.infinity,
-                        height: double.infinity,
-                        borderRadius: BorderRadius.zero,
-                      );
-                    },
+                  child: NetworkPhoto(
+                    url: photos[index],
+                    errorWidget: const Center(child: Icon(Icons.watch, size: 100, color: AppTheme.gold)),
                   ),
                 );
+                // Only the first photo takes part in the Hero flight.
+                if (index == 0 && widget.heroTag != null) {
+                  return Hero(tag: widget.heroTag!, child: photo);
+                }
+                return photo;
               },
             ),
           if (photos.length > 1)

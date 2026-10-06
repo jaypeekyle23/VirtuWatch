@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/color_extraction_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/animated_icon_loader.dart';
 
 class OutfitScanScreen extends StatefulWidget {
   const OutfitScanScreen({super.key});
@@ -379,16 +380,9 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
             Container(
               color: Colors.black.withValues(alpha: 0.55),
               child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: AppTheme.gold),
-                    SizedBox(height: 12),
-                    Text(
-                      'Analyzing colors...',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
+                child: AnimatedIconLoader(
+                  icon: Icons.search,
+                  label: 'Analyzing colors...',
                 ),
               ),
             ),
@@ -417,7 +411,11 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
 
     if (!_cameraReady || _cameraController == null) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.gold),
+        child: AnimatedIconLoader(
+          icon: Icons.photo_camera_outlined,
+          label: 'Starting camera...',
+          motion: IconLoaderMotion.pulse,
+        ),
       );
     }
 

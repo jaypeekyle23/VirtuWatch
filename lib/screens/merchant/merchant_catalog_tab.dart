@@ -7,6 +7,7 @@ import '../../widgets/skeleton_box.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_edit_watch_screen.dart';
 import 'merchant_watch_detail_screen.dart';
+import '../../widgets/network_photo.dart';
 
 /// Which fields this watch is missing that the recommendation engine and
 /// chatbot actually rely on: gender (informational, but customer-facing
@@ -514,6 +515,7 @@ class _WatchListTile extends StatelessWidget {
             builder: (_) => MerchantWatchDetailScreen(
               watchId: watchId,
               data: data,
+              heroTag: 'merchant-list-photo-$watchId',
             ),
           ),
         );
@@ -540,21 +542,12 @@ class _WatchListTile extends StatelessWidget {
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.watch,
-                            color: AppTheme.gold,
-                            size: 36),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const SkeletonBox(
-                            width: double.infinity,
-                            height: double.infinity,
-                            borderRadius: BorderRadius.zero,
-                          );
-                        },
+                    ? Hero(
+                        tag: 'merchant-list-photo-$watchId',
+                        child: NetworkPhoto(
+                          url: imageUrl,
+                          errorWidget: const Icon(Icons.watch, color: AppTheme.gold, size: 36),
+                        ),
                       )
                     : const Icon(Icons.watch, color: AppTheme.gold, size: 36),
               ),
@@ -764,6 +757,7 @@ class _WatchGridCard extends StatelessWidget {
             builder: (_) => MerchantWatchDetailScreen(
               watchId: watchId,
               data: data,
+              heroTag: 'merchant-grid-photo-$watchId',
             ),
           ),
         );
@@ -784,12 +778,11 @@ class _WatchGridCard extends StatelessWidget {
               child: Container(
                 color: AppTheme.background,
                 child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Center(
-                          child: Icon(Icons.watch, size: 32, color: AppTheme.gold),
+                    ? Hero(
+                        tag: 'merchant-grid-photo-$watchId',
+                        child: NetworkPhoto(
+                          url: imageUrl,
+                          errorWidget: const Center(child: Icon(Icons.watch, size: 32, color: AppTheme.gold)),
                         ),
                       )
                     : const Center(
@@ -994,9 +987,9 @@ class _WatchGridCard extends StatelessWidget {
 /// of two [_WatchGridCardSkeleton]s, with the same padding and spacing as
 /// the real grid built in [_MerchantCatalogTabState.build].
 class _CatalogGridSkeleton extends StatelessWidget {
-  final int rows;
+  static const int rows = 3;
 
-  const _CatalogGridSkeleton({this.rows = 3});
+  const _CatalogGridSkeleton();
 
   @override
   Widget build(BuildContext context) {
@@ -1023,9 +1016,9 @@ class _CatalogGridSkeleton extends StatelessWidget {
 /// Loading placeholder for the merchant catalog's list view: [count] rows
 /// shaped like [_WatchListTile].
 class _CatalogListSkeleton extends StatelessWidget {
-  final int count;
+  static const int count = 5;
 
-  const _CatalogListSkeleton({this.count = 5});
+  const _CatalogListSkeleton();
 
   @override
   Widget build(BuildContext context) {

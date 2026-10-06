@@ -10,6 +10,7 @@ import 'merchant_catalog_tab.dart';
 import 'merchant_analytics_tab.dart';
 import 'merchant_edit_watch_screen.dart';
 import 'merchant_profile_tab.dart';
+import '../../widgets/network_photo.dart';
 
 class MerchantDashboardTab extends StatelessWidget {
   final String username;
@@ -94,7 +95,7 @@ class MerchantDashboardTab extends StatelessWidget {
                                       backgroundColor: Colors.greenAccent
                                           .withValues(alpha: 0.2),
                                       backgroundImage: photoUrl.isNotEmpty
-                                          ? NetworkImage(photoUrl)
+                                          ? NetworkPhoto.provider(photoUrl)
                                           : null,
                                       child: photoUrl.isEmpty
                                           ? Text(
@@ -402,21 +403,10 @@ class MerchantDashboardTab extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.watch,
-                              color: AppTheme.gold, size: 22),
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const SkeletonBox(
-                          width: double.infinity,
-                          height: double.infinity,
-                          borderRadius: BorderRadius.zero,
-                        );
-                      },
-                    )
+                  ? NetworkPhoto(
+                    url: imageUrl,
+                    errorWidget: const Icon(Icons.watch, color: AppTheme.gold, size: 22),
+                  )
                   : const Icon(Icons.watch, color: AppTheme.gold, size: 22),
             ),
             const SizedBox(width: 12),

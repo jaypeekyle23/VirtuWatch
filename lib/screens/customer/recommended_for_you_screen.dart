@@ -11,6 +11,7 @@ import '../../widgets/skeleton_box.dart';
 import 'edit_profile_screen.dart';
 import 'outfit_scan_screen.dart';
 import 'watch_detail_screen.dart';
+import '../../widgets/network_photo.dart';
 
 class RecommendedForYouScreen extends StatefulWidget {
   const RecommendedForYouScreen({super.key});
@@ -635,7 +636,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) =>
-                WatchDetailScreen(watchId: rec.watchId, data: data),
+                WatchDetailScreen(watchId: rec.watchId, data: data, heroTag: 'recommended-photo-${rec.watchId}'),
           ),
         );
       },
@@ -654,19 +655,12 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                 height: 48,
                 color: AppTheme.background,
                 child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.watch, color: AppTheme.gold),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const SkeletonBox(
-                            width: double.infinity,
-                            height: double.infinity,
-                            borderRadius: BorderRadius.zero,
-                          );
-                        },
+                    ? Hero(
+                        tag: 'recommended-photo-${rec.watchId}',
+                        child: NetworkPhoto(
+                          url: imageUrl,
+                          errorWidget: const Icon(Icons.watch, color: AppTheme.gold),
+                        ),
                       )
                     : const Icon(Icons.watch, color: AppTheme.gold),
               ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import 'watch_detail_screen.dart';
+import '../../widgets/network_photo.dart';
 
 /// Placeholder for AR Try-On while the real camera + MediaPipe hand
 /// tracking + three_js implementation is being built and tested in a
@@ -219,15 +220,10 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                                     ),
                                     clipBehavior: Clip.antiAlias,
                                     child: imageUrl.isNotEmpty
-                                        ? Image.network(
-                                            imageUrl,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) =>
-                                                const Center(
-                                              child: Icon(Icons.watch,
-                                                  color: AppTheme.gold, size: 32),
-                                            ),
-                                          )
+                                        ? NetworkPhoto(
+                                          url: imageUrl,
+                                          errorWidget: const Center(child: Icon(Icons.watch, color: AppTheme.gold, size: 32)),
+                                        )
                                         : const Center(
                                             child: Icon(Icons.watch,
                                                 color: AppTheme.gold, size: 32),

@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import '../../constants/app_version.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/profile_skeleton.dart';
 import '../change_password_screen.dart';
 import '../about_screen.dart';
 import '../version_info_screen.dart';
 import '../update_screen.dart';
 import '../delete_account_screen.dart';
 import '../edit_account_name_screen.dart';
+import '../../widgets/network_photo.dart';
 
 class MerchantProfileTab extends StatelessWidget {
   const MerchantProfileTab({super.key});
@@ -29,7 +31,10 @@ class MerchantProfileTab extends StatelessWidget {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const ProfileSkeleton(
+                    kind: ProfileSkeletonKind.account,
+                    menuItems: 5,
+                  );
                 }
                 final data = snapshot.data!.data() ?? {};
                 final username = data['username'] as String? ?? 'Merchant';
@@ -52,7 +57,7 @@ class MerchantProfileTab extends StatelessWidget {
                         backgroundColor:
                             Colors.greenAccent.withValues(alpha: 0.2),
                         backgroundImage: photoUrl.isNotEmpty
-                            ? NetworkImage(photoUrl)
+                            ? NetworkPhoto.provider(photoUrl)
                             : null,
                         child: photoUrl.isEmpty
                             ? Text(

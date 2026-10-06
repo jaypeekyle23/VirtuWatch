@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/skeleton_box.dart';
 import '../../widgets/update_available_banner.dart';
 import 'admin_create_account_screen.dart';
 import 'admin_account_management_screen.dart';
@@ -9,6 +10,7 @@ import 'admin_watch_management_tab.dart';
 import 'admin_profile_tab.dart';
 import '../merchant/merchant_add_watch_screen.dart';
 import '../../services/activity_log_service.dart';
+import '../../widgets/network_photo.dart';
 
 class AdminDashboardTab extends StatelessWidget {
   final String username;
@@ -118,7 +120,7 @@ class AdminDashboardTab extends StatelessWidget {
                                             .withValues(alpha: 0.2),
                                         backgroundImage:
                                             livePhotoUrl.isNotEmpty
-                                                ? NetworkImage(livePhotoUrl)
+                                                ? NetworkPhoto.provider(livePhotoUrl)
                                                 : null,
                                         child: livePhotoUrl.isEmpty
                                             ? Text(
@@ -354,7 +356,7 @@ class AdminDashboardTab extends StatelessWidget {
                 stream: ActivityLogService().recentActivity(limit: 8),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const _ActivitySkeleton();
                   }
                   if (snapshot.hasError) {
                     return Container(
@@ -554,6 +556,63 @@ class AdminDashboardTab extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Placeholder for the "Recent Activity" card: same rounded surface, with
+/// [count] rows of icon / message / time and the same divider lines as the
+/// real feed built in [AdminDashboardTab.build].
+class _ActivitySkeleton extends StatelessWidget {
+  static const int count = 5;
+
+  const _ActivitySkeleton();
+
+  // Varied message widths so the placeholder reads like real text lines.
+  static const _messageWidths = [190.0, 150.0, 210.0, 170.0, 130.0];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: List.generate(count, (i) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: i == count - 1
+                  ? null
+                  : const Border(
+                      bottom: BorderSide(color: Color(0x1AFFFFFF)),
+                    ),
+            ),
+            child: Row(
+              children: [
+                const SkeletonBox(
+                  width: 16,
+                  height: 16,
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SkeletonBox(
+                      width: _messageWidths[i % _messageWidths.length],
+                      height: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const SkeletonBox(width: 24, height: 10),
+              ],
+            ),
+          );
+        }),
       ),
     );
   }

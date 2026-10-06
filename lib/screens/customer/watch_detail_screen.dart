@@ -6,18 +6,26 @@ import '../../services/recommendation_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/match_score_color.dart';
+import '../../widgets/save_heart_button.dart';
 import '../../widgets/skeleton_box.dart';
 import '../../widgets/watch_chat_sheet.dart';
 import 'ar_try_on_screen.dart';
+import '../../widgets/network_photo.dart';
 
 class WatchDetailScreen extends StatefulWidget {
   final String watchId;
   final Map<String, dynamic> data;
 
+  /// Hero tag of the photo the user tapped on the previous screen, so it
+  /// can fly into this screen's first photo. Null when opened from
+  /// somewhere without a matching photo (no animation then).
+  final String? heroTag;
+
   const WatchDetailScreen({
     super.key,
     required this.watchId,
     required this.data,
+    this.heroTag,
   });
 
   @override
@@ -127,11 +135,8 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                   [];
               final isSaved = saved.contains(watchId);
 
-              return IconButton(
-                icon: Icon(
-                  isSaved ? Icons.favorite : Icons.favorite_border,
-                  color: isSaved ? Colors.redAccent : null,
-                ),
+              return SaveHeartButton(
+                isSaved: isSaved,
                 onPressed: () async {
                   try {
                     await _userService.toggleSavedWatch(watchId);
@@ -163,7 +168,10 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _WatchPhotoCarousel(imageUrls: photoUrls),
+            _WatchPhotoCarousel(
+                imageUrls: photoUrls,
+                heroTag: widget.heroTag,
+              ),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -443,6 +451,12 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
     final match = rec.matchPercent;
     final matchColor = matchScoreColor(match, signalCount: rec.signalCount);
 
+    // The big number and the ring both run off this same timing, so they
+    // fill and count up together. Skipped if the device has animations off.
+    final fillDuration = MediaQuery.of(context).disableAnimations
+        ? Duration.zero
+        : const Duration(milliseconds: 1100);
+
     final activeSignals = [
       if (rec.fitScore != null) 'fit',
       if (rec.styleScore != null) 'style',
@@ -486,12 +500,17 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          '$match%',
-                          style: TextStyle(
-                            color: matchColor,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0, end: 1),
+                          duration: fillDuration,
+                          curve: Curves.easeOutCubic,
+                          builder: (context, t, _) => Text(
+                            '${(match * t).round()}%',
+                            style: TextStyle(
+                              color: matchColor,
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -530,28 +549,33 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
               SizedBox(
                 width: 56,
                 height: 56,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: CircularProgressIndicator(
-                        value: rec.combinedScore,
-                        strokeWidth: 5,
-                        backgroundColor: matchColor.withValues(alpha: 0.15),
-                        valueColor: AlwaysStoppedAnimation(matchColor),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: 1),
+                  duration: fillDuration,
+                  curve: Curves.easeOutCubic,
+                  builder: (context, t, _) => Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 56,
+                        height: 56,
+                        child: CircularProgressIndicator(
+                          value: rec.combinedScore * t,
+                          strokeWidth: 5,
+                          backgroundColor: matchColor.withValues(alpha: 0.15),
+                          valueColor: AlwaysStoppedAnimation(matchColor),
+                        ),
                       ),
-                    ),
-                    Text(
-                      '$match%',
-                      style: TextStyle(
-                        color: matchColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                      Text(
+                        '${(match * t).round()}%',
+                        style: TextStyle(
+                          color: matchColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -669,8 +693,9 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
 /// the generic watch icon if the watch has no photos on file at all.
 class _WatchPhotoCarousel extends StatefulWidget {
   final List<String> imageUrls;
+  final String? heroTag;
 
-  const _WatchPhotoCarousel({required this.imageUrls});
+  const _WatchPhotoCarousel({required this.imageUrls, this.heroTag});
 
   @override
   State<_WatchPhotoCarousel> createState() => _WatchPhotoCarouselState();
@@ -708,24 +733,18 @@ class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
               itemCount: photos.length,
               onPageChanged: (index) => setState(() => _currentPage = index),
               itemBuilder: (context, index) {
-                return Container(
+                final photo = Container(
                   color: AppTheme.surface,
-                  child: Image.network(
-                    photos[index],
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Center(
-                      child: Icon(Icons.watch, size: 100, color: AppTheme.gold),
-                    ),
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const SkeletonBox(
-                        width: double.infinity,
-                        height: double.infinity,
-                        borderRadius: BorderRadius.zero,
-                      );
-                    },
+                  child: NetworkPhoto(
+                    url: photos[index],
+                    errorWidget: const Center(child: Icon(Icons.watch, size: 100, color: AppTheme.gold)),
                   ),
                 );
+                // Only the first photo takes part in the Hero flight.
+                if (index == 0 && widget.heroTag != null) {
+                  return Hero(tag: widget.heroTag!, child: photo);
+                }
+                return photo;
               },
             ),
           if (photos.length > 1)

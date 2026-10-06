@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/skeleton_box.dart';
 
 class MerchantAnalyticsTab extends StatelessWidget {
   const MerchantAnalyticsTab({super.key});
@@ -16,7 +17,7 @@ class MerchantAnalyticsTab extends StatelessWidget {
         stream: watchService.myWatches(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const _AnalyticsSkeleton();
           }
 
           final docs = snapshot.data?.docs ?? [];
@@ -244,10 +245,7 @@ class MerchantAnalyticsTab extends StatelessWidget {
                   builder: (context, statsSnapshot) {
                     if (statsSnapshot.connectionState ==
                         ConnectionState.waiting) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
+                      return const _EngagementSkeleton();
                     }
 
                     final stats = statsSnapshot.data;
@@ -279,6 +277,20 @@ class MerchantAnalyticsTab extends StatelessWidget {
                     final topName =
                         topDoc.data()['name'] as String? ?? 'Unnamed watch';
                     final topSaves = stats.savedCounts[topDoc.id] ?? 0;
+
+                    // Size each count column to its widest number (about
+                    // 8px per digit at this font size) so the icons line up
+                    // without leaving empty space at the row's right edge.
+                    var maxSaved = 0;
+                    var maxViewed = 0;
+                    for (final d in ranked) {
+                      final sv = stats.savedCounts[d.id] ?? 0;
+                      final vw = stats.viewedCounts[d.id] ?? 0;
+                      if (sv > maxSaved) maxSaved = sv;
+                      if (vw > maxViewed) maxViewed = vw;
+                    }
+                    final savedColWidth = maxSaved.toString().length * 8.0;
+                    final viewedColWidth = maxViewed.toString().length * 8.0;
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,6 +385,8 @@ class MerchantAnalyticsTab extends StatelessWidget {
                                     viewed:
                                         stats.viewedCounts[entry.value.id] ??
                                             0,
+                                    savedWidth: savedColWidth,
+                                    viewedWidth: viewedColWidth,
                                   ),
                                 ),
                             ],
@@ -474,10 +488,26 @@ class MerchantAnalyticsTab extends StatelessWidget {
     );
   }
 
+  /// Left-aligned count in a column of the given [width], so every row's
+  /// icons line up regardless of how many digits the numbers have.
+  Widget _countText(String value, double width) {
+    return SizedBox(
+      width: width,
+      child: Text(
+        value,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+      ),
+    );
+  }
+
   Widget _engagementRow({
     required String name,
     required int saved,
     required int viewed,
+    required double savedWidth,
+    required double viewedWidth,
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -496,14 +526,12 @@ class MerchantAnalyticsTab extends StatelessWidget {
         const SizedBox(width: 12),
         Icon(Icons.favorite, color: Colors.pinkAccent.withValues(alpha: 0.8), size: 13),
         const SizedBox(width: 4),
-        Text('$saved',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-        const SizedBox(width: 12),
+        _countText('$saved', savedWidth),
+        const SizedBox(width: 8),
         Icon(Icons.remove_red_eye_outlined,
             color: AppTheme.textSecondary, size: 13),
         const SizedBox(width: 4),
-        Text('$viewed',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        _countText('$viewed', viewedWidth),
       ],
     );
   }
@@ -526,6 +554,174 @@ class MerchantAnalyticsTab extends StatelessWidget {
               fontSize: 13,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-page placeholder for the analytics screen: the four sections
+/// (overview, pricing, style breakdown, engagement) with the same headings,
+/// card surfaces and spacing as the real page.
+class _AnalyticsSkeleton extends StatelessWidget {
+  const _AnalyticsSkeleton();
+
+  static Widget _card(Widget child) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      );
+
+  static Widget _title() => const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: SkeletonBox(width: 130, height: 15),
+      );
+
+  static Widget _statRow() => const Row(
+        children: [
+          Expanded(child: _StatCardSkeleton()),
+          SizedBox(width: 10),
+          Expanded(child: _StatCardSkeleton()),
+        ],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _title(),
+          _statRow(),
+          const SizedBox(height: 10),
+          _statRow(),
+          const SizedBox(height: 24),
+          _title(),
+          _card(
+            Column(
+              children: List.generate(
+                3,
+                (i) => Padding(
+                  padding: EdgeInsets.only(bottom: i == 2 ? 0 : 10),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      SkeletonBox(width: 90, height: 13),
+                      SkeletonBox(width: 70, height: 13),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _title(),
+          _card(
+            Column(
+              children: List.generate(
+                3,
+                (i) => Padding(
+                  padding: EdgeInsets.only(bottom: i == 2 ? 0 : 14),
+                  child: const Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          SkeletonBox(width: 90, height: 13),
+                          SkeletonBox(width: 50, height: 12),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      SkeletonBox(width: double.infinity, height: 6),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _title(),
+          const _EngagementSkeleton(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder for the "Customer Engagement" content: a pair of stat cards
+/// and a card of per-watch rows. Also used on its own while the engagement
+/// stats load after the rest of the page is already showing.
+class _EngagementSkeleton extends StatelessWidget {
+  const _EngagementSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Row(
+          children: [
+            Expanded(child: _StatCardSkeleton()),
+            SizedBox(width: 10),
+            Expanded(child: _StatCardSkeleton()),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: List.generate(
+              3,
+              (i) => Padding(
+                padding: EdgeInsets.only(bottom: i == 2 ? 0 : 12),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    SkeletonBox(width: 140, height: 13),
+                    SkeletonBox(width: 60, height: 12),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Placeholder for [MerchantAnalyticsTab._statCard]: icon, label and value.
+class _StatCardSkeleton extends StatelessWidget {
+  const _StatCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkeletonBox(
+            width: 18,
+            height: 18,
+            borderRadius: BorderRadius.all(Radius.circular(9)),
+          ),
+          SizedBox(height: 8),
+          SkeletonBox(width: 70, height: 11),
+          SizedBox(height: 4),
+          SkeletonBox(width: 50, height: 16),
         ],
       ),
     );

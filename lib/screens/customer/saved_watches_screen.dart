@@ -4,6 +4,7 @@ import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/skeleton_box.dart';
 import 'watch_detail_screen.dart';
+import '../../widgets/network_photo.dart';
 
 class SavedWatchesScreen extends StatefulWidget {
   const SavedWatchesScreen({super.key});
@@ -322,7 +323,7 @@ class _SavedWatchCard extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => WatchDetailScreen(watchId: watchId, data: data),
+            builder: (_) => WatchDetailScreen(watchId: watchId, data: data, heroTag: 'saved-photo-$watchId'),
           ),
         );
       },
@@ -345,22 +346,12 @@ class _SavedWatchCard extends StatelessWidget {
                 child: Container(
                   color: AppTheme.background,
                   child: imageUrl.isNotEmpty
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Center(
-                            child: Icon(Icons.watch,
-                                size: 40, color: AppTheme.gold),
+                      ? Hero(
+                          tag: 'saved-photo-$watchId',
+                          child: NetworkPhoto(
+                            url: imageUrl,
+                            errorWidget: const Center(child: Icon(Icons.watch, size: 40, color: AppTheme.gold)),
                           ),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const SkeletonBox(
-                              width: double.infinity,
-                              height: double.infinity,
-                              borderRadius: BorderRadius.zero,
-                            );
-                          },
                         )
                       : const Center(
                           child:

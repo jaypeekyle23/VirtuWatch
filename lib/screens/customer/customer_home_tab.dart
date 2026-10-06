@@ -13,6 +13,7 @@ import 'recommended_for_you_screen.dart';
 import 'wrist_measurement_screen.dart';
 import 'outfit_scan_screen.dart';
 import 'customer_profile_tab.dart';
+import '../../widgets/network_photo.dart';
 
 /// Height of the "Recently Viewed" / "Recommended for You" horizontal
 /// card rows. Sized to fit _HomeWatchCard's fixed-height content block
@@ -124,7 +125,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                             radius: 18,
                             backgroundColor: AppTheme.gold,
                             backgroundImage: photoUrl.isNotEmpty
-                                ? NetworkImage(photoUrl)
+                                ? NetworkPhoto.provider(photoUrl)
                                 : null,
                             child: photoUrl.isEmpty
                                 ? Text(
@@ -347,6 +348,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                                   child: _HomeWatchCard(
                                     watchId: doc.id,
                                     data: doc.data(),
+                                    heroScope: 'home-recent',
                                   ),
                                 );
                               },
@@ -439,6 +441,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                           child: _HomeWatchCard(
                             watchId: rec.watchId,
                             data: rec.data,
+                            heroScope: 'home-recommended',
                           ),
                         );
                       },
@@ -612,7 +615,15 @@ class _HomeWatchCard extends StatelessWidget {
   final String watchId;
   final Map<String, dynamic> data;
 
-  const _HomeWatchCard({required this.watchId, required this.data});
+  /// Distinguishes this card's photo Hero from the same watch shown in the
+  /// other row on this screen (Hero tags must be unique per screen).
+  final String heroScope;
+
+  const _HomeWatchCard({
+    required this.watchId,
+    required this.data,
+    required this.heroScope,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -624,7 +635,7 @@ class _HomeWatchCard extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => WatchDetailScreen(watchId: watchId, data: data),
+            builder: (_) => WatchDetailScreen(watchId: watchId, data: data, heroTag: '$heroScope-photo-$watchId'),
           ),
         );
       },
@@ -647,22 +658,12 @@ class _HomeWatchCard extends StatelessWidget {
                 child: Container(
                   color: AppTheme.background,
                   child: imageUrl.isNotEmpty
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Center(
-                            child: Icon(Icons.watch,
-                                size: 30, color: AppTheme.gold),
+                      ? Hero(
+                          tag: '$heroScope-photo-$watchId',
+                          child: NetworkPhoto(
+                            url: imageUrl,
+                            errorWidget: const Center(child: Icon(Icons.watch, size: 30, color: AppTheme.gold)),
                           ),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const SkeletonBox(
-                              width: double.infinity,
-                              height: double.infinity,
-                              borderRadius: BorderRadius.zero,
-                            );
-                          },
                         )
                       : const Center(
                           child:
@@ -857,7 +858,7 @@ class _BrowseWatchCard extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => WatchDetailScreen(watchId: watchId, data: data),
+            builder: (_) => WatchDetailScreen(watchId: watchId, data: data, heroTag: 'home-browse-photo-$watchId'),
           ),
         );
       },
@@ -880,22 +881,12 @@ class _BrowseWatchCard extends StatelessWidget {
                 child: Container(
                   color: AppTheme.background,
                   child: imageUrl.isNotEmpty
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Center(
-                            child: Icon(Icons.watch,
-                                size: 40, color: AppTheme.gold),
+                      ? Hero(
+                          tag: 'home-browse-photo-$watchId',
+                          child: NetworkPhoto(
+                            url: imageUrl,
+                            errorWidget: const Center(child: Icon(Icons.watch, size: 40, color: AppTheme.gold)),
                           ),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const SkeletonBox(
-                              width: double.infinity,
-                              height: double.infinity,
-                              borderRadius: BorderRadius.zero,
-                            );
-                          },
                         )
                       : const Center(
                           child:

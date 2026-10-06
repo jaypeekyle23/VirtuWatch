@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/catalog_filter_sheet.dart';
 import '../../widgets/skeleton_box.dart';
 import 'watch_detail_screen.dart';
+import '../../widgets/network_photo.dart';
 
 enum _SortOption {
   newest('Newest'),
@@ -381,7 +382,7 @@ class _WatchCard extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => WatchDetailScreen(watchId: watchId, data: data),
+            builder: (_) => WatchDetailScreen(watchId: watchId, data: data, heroTag: 'catalog-grid-photo-$watchId'),
           ),
         );
       },
@@ -404,22 +405,12 @@ class _WatchCard extends StatelessWidget {
                 child: Container(
                   color: AppTheme.background,
                   child: imageUrl.isNotEmpty
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Center(
-                            child: Icon(Icons.watch,
-                                size: 40, color: AppTheme.gold),
+                      ? Hero(
+                          tag: 'catalog-grid-photo-$watchId',
+                          child: NetworkPhoto(
+                            url: imageUrl,
+                            errorWidget: const Center(child: Icon(Icons.watch, size: 40, color: AppTheme.gold)),
                           ),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const SkeletonBox(
-                              width: double.infinity,
-                              height: double.infinity,
-                              borderRadius: BorderRadius.zero,
-                            );
-                          },
                         )
                       : const Center(
                           child:
@@ -561,7 +552,7 @@ class _WatchListTile extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => WatchDetailScreen(watchId: watchId, data: data),
+            builder: (_) => WatchDetailScreen(watchId: watchId, data: data, heroTag: 'catalog-list-photo-$watchId'),
           ),
         );
       },
@@ -584,21 +575,12 @@ class _WatchListTile extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.watch,
-                          color: AppTheme.gold,
-                          size: 36),
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const SkeletonBox(
-                          width: double.infinity,
-                          height: double.infinity,
-                          borderRadius: BorderRadius.zero,
-                        );
-                      },
+                  ? Hero(
+                      tag: 'catalog-list-photo-$watchId',
+                      child: NetworkPhoto(
+                        url: imageUrl,
+                        errorWidget: const Icon(Icons.watch, color: AppTheme.gold, size: 36),
+                      ),
                     )
                   : const Icon(Icons.watch, color: AppTheme.gold, size: 36),
             ),
@@ -666,9 +648,9 @@ class _WatchListTile extends StatelessWidget {
 /// [_WatchCardSkeleton]s, with the same padding and spacing as the real
 /// grid built in [_CustomerCatalogTabState.build].
 class _CatalogGridSkeleton extends StatelessWidget {
-  final int rows;
+  static const int rows = 3;
 
-  const _CatalogGridSkeleton({this.rows = 3});
+  const _CatalogGridSkeleton();
 
   @override
   Widget build(BuildContext context) {
@@ -695,9 +677,9 @@ class _CatalogGridSkeleton extends StatelessWidget {
 /// Loading placeholder for the catalog's list view: [count] rows shaped
 /// like [_WatchListTile].
 class _CatalogListSkeleton extends StatelessWidget {
-  final int count;
+  static const int count = 6;
 
-  const _CatalogListSkeleton({this.count = 6});
+  const _CatalogListSkeleton();
 
   @override
   Widget build(BuildContext context) {
