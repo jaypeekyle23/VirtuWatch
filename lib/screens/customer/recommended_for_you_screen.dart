@@ -194,6 +194,13 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
               onPressed: () => showRecommendationsChatSheet(
                 context,
                 result: _result!,
+                // Lets the chat's action buttons (measure wrist, scan
+                // outfit, edit preferences) re-score this screen's list
+                // too, then hand the fresh result back to the chat.
+                onProfileChanged: () async {
+                  await _loadRecommendations();
+                  return _result;
+                },
               ),
               backgroundColor: AppTheme.gold,
               icon: const Icon(Icons.chat_bubble_outline,

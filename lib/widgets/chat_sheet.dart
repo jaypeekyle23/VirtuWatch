@@ -12,6 +12,11 @@ import 'skeleton_box.dart';
 /// (Recommended For You screen) go through this — only [title],
 /// [emptyStateHint], how [createChatService] builds its ChatService, and
 /// [threadKey] (for persisting history) differ between them.
+///
+/// The sheet is a [PageRoute] (see [_ChatSheetRoute]) rather than a
+/// showModalBottomSheet route. Flutter only runs Hero animations between
+/// two PageRoutes, so this is what lets a photo in the chat fly into the
+/// watch detail screen the same way photos do everywhere else in the app.
 Future<void> showChatSheet(
   BuildContext context, {
   required String title,
@@ -19,20 +24,133 @@ Future<void> showChatSheet(
   required Future<ChatService> Function() createChatService,
   required String threadKey,
   List<String> suggestedQuestions = const [],
+  MessageExtrasBuilder? messageExtrasBuilder,
 }) {
-  return showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => ChatSheet(
-      title: title,
-      emptyStateHint: emptyStateHint,
-      createChatService: createChatService,
-      threadKey: threadKey,
-      suggestedQuestions: suggestedQuestions,
+  return Navigator.of(context).push<void>(
+    _ChatSheetRoute<void>(
+      builder: (_) => ChatSheet(
+        title: title,
+        emptyStateHint: emptyStateHint,
+        createChatService: createChatService,
+        threadKey: threadKey,
+        suggestedQuestions: suggestedQuestions,
+        messageExtrasBuilder: messageExtrasBuilder,
+      ),
     ),
   );
 }
+
+/// A bottom sheet that is a [PageRoute], so Hero animations can start from
+/// inside it. It behaves like showModalBottomSheet(isScrollControlled:
+/// true): a dimmed barrier you can tap to close, it slides up from the
+/// bottom, and it can be dragged down to dismiss (the drag is handled by
+/// Flutter's own [BottomSheet] widget, the same one the modal version uses).
+class _ChatSheetRoute<T> extends PageRoute<T> {
+  _ChatSheetRoute({required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  Color? get barrierColor => Colors.black54;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  String? get barrierLabel => 'Close chat';
+
+  // Not opaque: the screen behind stays visible through the dimmed barrier.
+  @override
+  bool get opaque => false;
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 250);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return _ChatSheetSlide(
+      animation: animation,
+      child: BottomSheet(
+        // The route's own controller, so dragging the sheet moves the same
+        // animation that slides it in and out.
+        animationController: controller,
+        onClosing: () {
+          if (isCurrent) navigator?.pop();
+        },
+        backgroundColor: Colors.transparent,
+        builder: builder,
+      ),
+    );
+  }
+}
+
+/// Slides its child up from the bottom as [animation] goes from 0 to 1,
+/// the same way the modal bottom sheet does.
+class _ChatSheetSlide extends StatelessWidget {
+  const _ChatSheetSlide({required this.animation, required this.child});
+
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        return ClipRect(
+          child: CustomSingleChildLayout(
+            delegate: _ChatSheetLayout(
+              Curves.easeOutCubic.transform(animation.value),
+            ),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ChatSheetLayout extends SingleChildLayoutDelegate {
+  _ChatSheetLayout(this.progress);
+
+  final double progress;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    return BoxConstraints(
+      minWidth: constraints.maxWidth,
+      maxWidth: constraints.maxWidth,
+      maxHeight: constraints.maxHeight,
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    return Offset(0.0, size.height - childSize.height * progress);
+  }
+
+  @override
+  bool shouldRelayout(_ChatSheetLayout oldDelegate) =>
+      progress != oldDelegate.progress;
+}
+
+/// Builds extra content (e.g. watch cards) shown right under an assistant
+/// message's text bubble. Return null when there's nothing to show.
+typedef MessageExtrasBuilder = Widget? Function(
+  BuildContext context,
+  ChatMessage message,
+);
 
 class ChatSheet extends StatefulWidget {
   final String title;
@@ -40,6 +158,7 @@ class ChatSheet extends StatefulWidget {
   final Future<ChatService> Function() createChatService;
   final String threadKey;
   final List<String> suggestedQuestions;
+  final MessageExtrasBuilder? messageExtrasBuilder;
 
   const ChatSheet({
     super.key,
@@ -48,6 +167,7 @@ class ChatSheet extends StatefulWidget {
     required this.createChatService,
     required this.threadKey,
     this.suggestedQuestions = const [],
+    this.messageExtrasBuilder,
   });
 
   @override
@@ -123,7 +243,12 @@ class _ChatSheetState extends State<ChatSheet> {
       if (!mounted) return;
       setState(() {
         _isSending = false;
-        _messages.add(ChatMessage(role: 'model', text: reply));
+        _messages.add(ChatMessage(
+          role: 'model',
+          text: reply.text,
+          watchIds: reply.watchIds,
+          actions: reply.actions,
+        ));
       });
       _scrollToBottom();
       // Fire-and-forget: don't block the UI on the persistence write.
@@ -294,6 +419,17 @@ class _ChatSheetState extends State<ChatSheet> {
   }
 
   Widget _bubble(ChatMessage message) {
+    final bubble = _textBubble(message);
+    if (message.watchIds.isEmpty && message.actions.isEmpty) return bubble;
+    final extras = widget.messageExtrasBuilder?.call(context, message);
+    if (extras == null) return bubble;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [bubble, extras],
+    );
+  }
+
+  Widget _textBubble(ChatMessage message) {
     final isUser = message.role == 'user';
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,

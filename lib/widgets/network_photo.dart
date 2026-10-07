@@ -75,8 +75,7 @@ class NetworkPhoto extends StatelessWidget {
           // and let the photo shrink to its own size).
           layoutBuilder: (current, previous) => Stack(
             fit: StackFit.expand,
-            children: [...previous, if (current != null) current],
-          ),
+            children: [...previous, ?current],),
           child: frame == null
               ? const KeyedSubtree(key: ValueKey('loading'), child: _skeleton)
               : KeyedSubtree(key: const ValueKey('photo'), child: child),

@@ -39,3 +39,5 @@ firebase.json
 android/key.properties
 *.jks
 *.keystore
+admin-web/
+admin-web.zip

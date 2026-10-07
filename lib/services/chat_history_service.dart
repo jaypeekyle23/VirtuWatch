@@ -41,6 +41,14 @@ class ChatHistoryService {
           .map((e) => ChatMessage(
                 role: e['role'] as String? ?? 'user',
                 text: e['text'] as String? ?? '',
+                watchIds:
+                    (e['watchIds'] as List?)?.whereType<String>().toList() ??
+                        const [],
+                actions: (e['actions'] as List?)
+                        ?.map(ChatAction.fromJson)
+                        .whereType<ChatAction>()
+                        .toList() ??
+                    const [],
               ))
           .where((m) => m.text.isNotEmpty)
           .toList();
@@ -63,7 +71,15 @@ class ChatHistoryService {
           : messages;
       await doc.set({
         'messages':
-            trimmed.map((m) => {'role': m.role, 'text': m.text}).toList(),
+            trimmed
+                .map((m) => {
+                      'role': m.role,
+                      'text': m.text,
+                      if (m.watchIds.isNotEmpty) 'watchIds': m.watchIds,
+                      if (m.actions.isNotEmpty)
+                        'actions': m.actions.map((a) => a.toJson()).toList(),
+                    })
+                .toList(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
