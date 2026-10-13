@@ -93,6 +93,15 @@ class RecommendationResult {
   });
 }
 
+/// The user profile fields that feed scoring.
+typedef _Profile = ({
+  double? wristWidthMm,
+  List<String> stylePreferences,
+  List<Map<String, dynamic>> outfitColors,
+  double budgetMin,
+  double budgetMax,
+});
+
 /// Ranks the watch catalog against a user's profile.
 ///
 /// Per the capstone documentation (FR-09), the combined score blends
@@ -123,16 +132,14 @@ class RecommendationService {
   /// by [getRecommendations] (scoring the whole catalog) and [scoreWatch]
   /// (scoring a single watch, e.g. for the detail screen) so both stay
   /// consistent with exactly the same profile data.
-  Future<
-      ({
-        double? wristWidthMm,
-        List<String> stylePreferences,
-        List<Map<String, dynamic>> outfitColors,
-        double budgetMin,
-        double budgetMax,
-      })> _loadProfile(String uid) async {
+  Future<_Profile> _loadProfile(String uid) async {
     final userDoc = await _firestore.collection('users').doc(uid).get();
-    final userData = userDoc.data() ?? {};
+    return _profileFromData(userDoc.data() ?? {});
+  }
+
+  /// Pulls the scoring-relevant fields out of a raw user document. Used by
+  /// both the one-time load and the live stream so they always agree.
+  _Profile _profileFromData(Map<String, dynamic> userData) {
     return (
       wristWidthMm: (userData['wristWidthMm'] as num?)?.toDouble(),
       stylePreferences:
@@ -145,6 +152,13 @@ class RecommendationService {
       budgetMax: (userData['budgetMax'] as num?)?.toDouble() ?? 50000,
     );
   }
+
+  /// A short text fingerprint of the fields that affect scoring. The live
+  /// stream compares these so that unrelated changes to the user document
+  /// (like recently viewed watches) don't trigger a pointless re-score.
+  String _profileKey(_Profile p) =>
+      '${p.wristWidthMm}|${p.stylePreferences}|${p.outfitColors}|'
+      '${p.budgetMin}|${p.budgetMax}';
 
   /// Scores a single watch against the current user's profile — used by
   /// [WatchDetailScreen] to show a match percentage without pulling the
@@ -176,26 +190,48 @@ class RecommendationService {
     );
   }
 
+  static const _emptyResult = RecommendationResult(
+    recommendations: [],
+    wristWidthMm: null,
+    stylePreferences: [],
+    outfitColors: [],
+    budgetMin: 0,
+    budgetMax: 50000,
+  );
+
   Future<RecommendationResult> getRecommendations() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      return const RecommendationResult(
-        recommendations: [],
-        wristWidthMm: null,
-        stylePreferences: [],
-        outfitColors: [],
-        budgetMin: 0,
-        budgetMax: 50000,
-      );
-    }
+    if (uid == null) return _emptyResult;
 
     final profile = await _loadProfile(uid);
-    final wristWidthMm = profile.wristWidthMm;
-    final stylePreferences = profile.stylePreferences;
-    final outfitColors = profile.outfitColors;
-    final budgetMin = profile.budgetMin;
-    final budgetMax = profile.budgetMax;
+    return _buildResult(profile);
+  }
 
+  /// Live version of [getRecommendations]. Emits a fresh, ranked result
+  /// right away, then again every time the user's wrist width, style
+  /// preferences, budget, or outfit colors change in Firestore. Screens
+  /// that listen to this no longer need to be told to refresh after the
+  /// user saves something on another screen.
+  ///
+  /// Changes to other fields on the user document are ignored. Note that
+  /// the watch catalog itself is read once per emission, so it is not
+  /// live by itself; it is picked up on the next profile change or manual
+  /// refresh.
+  Stream<RecommendationResult> watchRecommendations() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value(_emptyResult);
+
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((doc) => _profileFromData(doc.data() ?? {}))
+        .distinct((a, b) => _profileKey(a) == _profileKey(b))
+        .asyncMap(_buildResult);
+  }
+
+  /// Scores the whole listed catalog against [profile] and ranks it.
+  Future<RecommendationResult> _buildResult(_Profile profile) async {
     final watchesSnapshot = await _firestore
         .collection('watches')
         .where('listedInCatalog', isEqualTo: true)
@@ -205,20 +241,20 @@ class RecommendationService {
       return _score(
         watchId: doc.id,
         data: doc.data(),
-        wristWidthMm: wristWidthMm,
-        stylePreferences: stylePreferences,
-        outfitColors: outfitColors,
+        wristWidthMm: profile.wristWidthMm,
+        stylePreferences: profile.stylePreferences,
+        outfitColors: profile.outfitColors,
       );
     }).toList()
       ..sort((a, b) => b.combinedScore.compareTo(a.combinedScore));
 
     return RecommendationResult(
       recommendations: scored,
-      wristWidthMm: wristWidthMm,
-      stylePreferences: stylePreferences,
-      outfitColors: outfitColors,
-      budgetMin: budgetMin,
-      budgetMax: budgetMax,
+      wristWidthMm: profile.wristWidthMm,
+      stylePreferences: profile.stylePreferences,
+      outfitColors: profile.outfitColors,
+      budgetMin: profile.budgetMin,
+      budgetMax: profile.budgetMax,
     );
   }
 

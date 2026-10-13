@@ -7,6 +7,16 @@ class AppTheme {
   static const Color gold = Color(0xFFE8BF6A);
   static const Color textPrimary = Color(0xFFF5F1E8);
   static const Color textSecondary = Color(0xFFA9B4C4);
+  static const Color hairline = Color(0x1FFFFFFF);
+
+  /// Serif display style for headings and key figures.
+  static TextStyle serif({
+    double size = 26,
+    Color color = textPrimary,
+    FontWeight weight = FontWeight.w500,
+  }) =>
+      GoogleFonts.cormorantGaramond(
+          fontSize: size, color: color, fontWeight: weight);
 
   static ThemeData get theme {
     final baseTextTheme = GoogleFonts.soraTextTheme(

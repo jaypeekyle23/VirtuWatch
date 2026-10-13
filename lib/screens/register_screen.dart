@@ -1,7 +1,8 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
-import 'package:flutter/gestures.dart';
+import '../widgets/luxe.dart';
 import 'verify_email_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'privacy_policy_screen.dart';
@@ -14,20 +15,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  final _authService = AuthService();
-
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
-  bool _agreedToTerms = false;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  final List<String> _styleOptions = [
+  static const _styleOptions = [
     'Classic',
     'Sport',
     'Luxury',
@@ -35,14 +23,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
     'Minimalist',
     'Dress',
   ];
-  final Set<String> _selectedStyles = {};
+
+  final _formKey = GlobalKey<FormState>();
+  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  final _authService = AuthService();
+  final _selectedStyles = <String>{};
+
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  bool _agreedToTerms = false;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
@@ -50,9 +51,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (!_agreedToTerms) {
-      setState(() {
-        _errorMessage = 'Please agree to the Terms of Service and Privacy Policy.';
-      });
+      setState(() => _errorMessage =
+          'Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
 
@@ -79,221 +79,194 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-      });
+      setState(() => _errorMessage = e.toString());
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  void _open(Widget screen) => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => screen));
+
+  /// Label + underline field. Pass [obscure] and [onToggle] for password
+  /// fields to get the show/hide eye.
+  Widget _field(
+    String label,
+    TextEditingController controller,
+    String hint,
+    String? Function(String?) validator, {
+    TextInputType? keyboardType,
+    bool obscure = false,
+    VoidCallback? onToggle,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(label, style: kLabelStyle),
+            TextFormField(
+              controller: controller,
+              keyboardType: keyboardType,
+              obscureText: obscure,
+              style: const TextStyle(fontSize: 15),
+              decoration: luxeFieldDecoration(
+                hint: hint,
+                suffixIcon: onToggle == null
+                    ? null
+                    : IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          obscure
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: AppTheme.textSecondary,
+                          size: 20,
+                        ),
+                        onPressed: onToggle,
+                      ),
+              ),
+              validator: validator,
+            ),
+          ],
+        ),
+      );
+
+  TextSpan _link(String text, Widget screen) => TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: AppTheme.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+        recognizer: TapGestureRecognizer()..onTap = () => _open(screen),
+      );
+
   @override
   Widget build(BuildContext context) {
+    const small = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Text(
-                    'Create Account',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                ),
+                luxeLogo(),
+                const SizedBox(height: 24),
+                Text('Create account', style: AppTheme.serif(size: 36)),
                 const SizedBox(height: 6),
-                Center(
-                  child: Text(
-                    'Start your virtual try-on experience!',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
+                const Text('Start your virtual try-on experience',
+                    style: small),
                 const SizedBox(height: 32),
 
-                _fieldLabel('USERNAME'),
-                TextFormField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(hintText: 'Enter your username'),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter a username';
-                    }
-                    return null;
-                  },
+                _field(
+                  'USERNAME',
+                  _usernameController,
+                  'Enter your username',
+                  (v) => v == null || v.trim().isEmpty
+                      ? 'Please enter a username'
+                      : null,
                 ),
-                const SizedBox(height: 16),
-
-                _fieldLabel('EMAIL ADDRESS'),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(hintText: 'Enter your email'),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
+                _field(
+                  'EMAIL ADDRESS',
+                  _emailController,
+                  'Enter your email',
+                  (v) {
+                    if (v == null || v.trim().isEmpty) {
                       return 'Please enter an email';
                     }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
+                    return v.contains('@') ? null : 'Please enter a valid email';
                   },
+                  keyboardType: TextInputType.emailAddress,
                 ),
-                const SizedBox(height: 16),
-
-                _fieldLabel('PASSWORD'),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    hintText: 'Create a password',
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                        color: AppTheme.textSecondary,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
-                    return null;
-                  },
+                _field(
+                  'PASSWORD',
+                  _passwordController,
+                  'Create a password',
+                  (v) => v == null || v.length < 6
+                      ? 'Password must be at least 6 characters'
+                      : null,
+                  obscure: _obscurePassword,
+                  onToggle: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
-                const SizedBox(height: 16),
-
-                _fieldLabel('CONFIRM PASSWORD'),
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  obscureText: _obscureConfirmPassword,
-                  decoration: InputDecoration(
-                    hintText: 'Re-enter your password',
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
-                        color: AppTheme.textSecondary,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
-                      },
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value != _passwordController.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
+                _field(
+                  'CONFIRM PASSWORD',
+                  _confirmController,
+                  'Re-enter your password',
+                  (v) => v != _passwordController.text
+                      ? 'Passwords do not match'
+                      : null,
+                  obscure: _obscureConfirm,
+                  onToggle: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
-                const SizedBox(height: 20),
 
-                _fieldLabel('STYLE PREFERENCE (OPTIONAL)'),
-                const SizedBox(height: 8),
+                const Text('STYLE PREFERENCE (OPTIONAL)', style: kLabelStyle),
+                const SizedBox(height: 12),
                 Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _styleOptions.map((style) {
-                    final isSelected = _selectedStyles.contains(style);
-                    return ChoiceChip(
-                      label: Text(style),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final style in _styleOptions)
+                      luxePill(
+                        style,
+                        selected: _selectedStyles.contains(style),
+                        onTap: () => setState(() {
+                          if (!_selectedStyles.remove(style)) {
                             _selectedStyles.add(style);
-                          } else {
-                            _selectedStyles.remove(style);
                           }
-                        });
-                      },
-                      backgroundColor: AppTheme.surface,
-                      selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                      labelStyle: TextStyle(
-                        color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
+                        }),
                       ),
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.gold : Colors.transparent,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    );
-                  }).toList(),
+                  ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Checkbox(
-                      value: _agreedToTerms,
-                      activeColor: AppTheme.gold,
-                      onChanged: (value) {
-                        setState(() => _agreedToTerms = value ?? false);
-                      },
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: _agreedToTerms,
+                        activeColor: AppTheme.textPrimary,
+                        checkColor: AppTheme.background,
+                        side: const BorderSide(color: Colors.white38),
+                        onChanged: (v) =>
+                            setState(() => _agreedToTerms = v ?? false),
+                      ),
                     ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: RichText(
-                          text: TextSpan(
-                            style: Theme.of(context).textTheme.bodyMedium,
-                            children: [
-                              const TextSpan(text: 'I agree to the '),
-                              TextSpan(
-                                text: 'Terms of Service',
-                                style: const TextStyle(color: AppTheme.gold),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const TermsOfServiceScreen(),
-                                      ),
-                                    );
-                                  },
-                              ),
-                              const TextSpan(text: ' and '),
-                              TextSpan(
-                                text: 'Privacy Policy',
-                                style: const TextStyle(color: AppTheme.gold),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const PrivacyPolicyScreen(),
-                                      ),
-                                    );
-                                  },
-                              ),
-                            ],
-                          ),
+                      child: Text.rich(
+                        TextSpan(
+                          style: small,
+                          children: [
+                            const TextSpan(text: 'I agree to the '),
+                            _link('Terms of Service',
+                                const TermsOfServiceScreen()),
+                            const TextSpan(text: ' and '),
+                            _link('Privacy Policy',
+                                const PrivacyPolicyScreen()),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
 
                 if (_errorMessage != null)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(color: Colors.redAccent),
+                      style: const TextStyle(
+                          color: Colors.redAccent, fontSize: 13),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -308,45 +281,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         )
                       : const Text('Create Account'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
 
-                Center(
-                  child: RichText(
-                    text: TextSpan(
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      children: [
-                        const TextSpan(text: 'Already have an account? '),
-                        TextSpan(
-                          text: 'Log in',
-                          style: const TextStyle(
-                            color: AppTheme.gold,
-                            fontWeight: FontWeight.bold,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Already have an account?  ', style: small),
+                    InkWell(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'Log In',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
                           ),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () => Navigator.of(context).pop(),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _fieldLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textSecondary,
-          letterSpacing: 0.5,
         ),
       ),
     );

@@ -88,9 +88,9 @@ class _OffsetStepperControlState extends State<OffsetStepperControl> {
           decoration: BoxDecoration(
             color: AppTheme.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.gold.withValues(alpha: 0.6)),
+            border: Border.all(color: Colors.white24),
           ),
-          child: Icon(icon, color: AppTheme.gold, size: 22),
+          child: Icon(icon, color: AppTheme.textPrimary, size: 22),
         ),
       ),
     );

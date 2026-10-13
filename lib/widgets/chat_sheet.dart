@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../services/chat_history_service.dart';
 import '../services/chat_service.dart';
 import '../theme/app_theme.dart';
+import 'luxe.dart';
 import 'skeleton_box.dart';
 
 /// Opens [ChatSheet] as a scrollable bottom sheet. Both the single-watch
@@ -299,41 +299,36 @@ class _ChatSheetState extends State<ChatSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                  color: Colors.white24,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
                 child: Row(
                   children: [
-                    const Icon(Icons.chat_bubble_outline,
-                        color: AppTheme.gold, size: 18),
-                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         widget.title,
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
+                        style: AppTheme.serif(size: 22),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     if (_messages.isNotEmpty)
-                      IconButton(
-                        onPressed: _clearHistory,
-                        icon: const Icon(Icons.delete_outline,
-                            color: AppTheme.textSecondary, size: 20),
-                        tooltip: 'Clear chat',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                      InkWell(
+                        onTap: _clearHistory,
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Text('CLEAR',
+                              style: kLabelStyle.copyWith(
+                                  color: AppTheme.textPrimary)),
+                        ),
                       ),
                   ],
                 ),
               ),
-              const Divider(color: AppTheme.surface, height: 1),
+              const Divider(color: AppTheme.hairline, height: 1),
               Expanded(
                 child: _isInitializing
                     ? const _ChatSkeleton()
@@ -341,12 +336,12 @@ class _ChatSheetState extends State<ChatSheet> {
                         ? _emptyState()
                         : ListView.builder(
                             controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
                             itemCount:
                                 _messages.length + (_isSending ? 1 : 0),
                             itemBuilder: (context, index) {
                               if (index == _messages.length) {
-                                // Trailing "typing" bubble while waiting
+                                // Trailing "typing" indicator while waiting
                                 // for a reply.
                                 return const _AnimatedBubbleEntrance(
                                   key: ValueKey('typing_indicator'),
@@ -365,11 +360,11 @@ class _ChatSheetState extends State<ChatSheet> {
               ),
               if (_error != null)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
                     _error!,
                     style: const TextStyle(
-                        color: Colors.orangeAccent, fontSize: 12),
+                        color: Colors.redAccent, fontSize: 12),
                   ),
                 ),
               _inputBar(),
@@ -391,25 +386,20 @@ class _ChatSheetState extends State<ChatSheet> {
             Text(
               widget.emptyStateHint,
               textAlign: TextAlign.center,
-              style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              style: const TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
             ),
             if (widget.suggestedQuestions.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 8,
                 runSpacing: 8,
-                children: widget.suggestedQuestions.map((q) {
-                  return ActionChip(
-                    label: Text(q, style: const TextStyle(fontSize: 12)),
-                    backgroundColor: AppTheme.surface,
-                    side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.3)),
-                    labelStyle: const TextStyle(color: AppTheme.textPrimary),
-                    onPressed:
-                        (_isSending || _isInitializing) ? null : () => _send(overrideText: q),
-                  );
-                }).toList(),
+                children: [
+                  for (final q in widget.suggestedQuestions)
+                    luxePill(q,
+                        selected: false, onTap: () => _send(overrideText: q)),
+                ],
               ),
             ],
           ],
@@ -440,13 +430,10 @@ class _ChatSheetState extends State<ChatSheet> {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: isUser ? AppTheme.gold : AppTheme.surface,
+          color: isUser ? Colors.white.withValues(alpha: 0.1) : AppTheme.surface,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: _formattedMessageText(
-          message.text,
-          color: isUser ? const Color(0xFF0E1A2B) : AppTheme.textPrimary,
-        ),
+        child: _formattedMessageText(message.text),
       ),
     );
   }
@@ -459,12 +446,13 @@ class _ChatSheetState extends State<ChatSheet> {
   /// bold/italic + bullets are handled (not links, headers, etc.) since
   /// that covers everything the chat prompts' reply style actually
   /// produces.
-  Widget _formattedMessageText(String text, {required Color color}) {
-    final baseStyle = GoogleFonts.inter(color: color, fontSize: 13, height: 1.4);
+  Widget _formattedMessageText(String text) {
+    const baseStyle =
+        TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.5);
     final lines = text.split('\n');
 
-    return RichText(
-      text: TextSpan(
+    return Text.rich(
+      TextSpan(
         style: baseStyle,
         children: [
           for (var i = 0; i < lines.length; i++) ...[
@@ -521,27 +509,25 @@ class _ChatSheetState extends State<ChatSheet> {
   }
 
   Widget _inputBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+    final disabled = _isSending || _isInitializing;
+    return Container(
+      decoration: kTopRule,
+      padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: _inputController,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: const TextStyle(fontSize: 15),
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _send(),
-              decoration: const InputDecoration(
-                hintText: 'Ask a question…',
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
+              decoration: luxeFieldDecoration(hint: 'Ask a question…'),
             ),
           ),
-          const SizedBox(width: 8),
           IconButton(
-            onPressed: (_isSending || _isInitializing) ? null : _send,
-            icon: const Icon(Icons.send, color: AppTheme.gold),
+            onPressed: disabled ? null : _send,
+            icon: Icon(Icons.arrow_upward,
+                color: disabled ? AppTheme.textSecondary : AppTheme.textPrimary),
           ),
         ],
       ),
@@ -661,7 +647,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                     width: 7,
                     height: 7,
                     decoration: BoxDecoration(
-                      color: AppTheme.gold,
+                      color: AppTheme.textSecondary,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),

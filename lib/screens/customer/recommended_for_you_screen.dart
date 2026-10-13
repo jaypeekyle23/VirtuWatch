@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -5,13 +7,14 @@ import '../../constants/watch_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
 import '../../utils/match_score_color.dart';
+import '../../widgets/network_photo.dart';
 import '../../widgets/recommendations_chat_sheet.dart';
 import '../../widgets/skeleton_box.dart';
 import 'edit_profile_screen.dart';
 import 'outfit_scan_screen.dart';
 import 'watch_detail_screen.dart';
-import '../../widgets/network_photo.dart';
 
 class RecommendedForYouScreen extends StatefulWidget {
   const RecommendedForYouScreen({super.key});
@@ -22,27 +25,64 @@ class RecommendedForYouScreen extends StatefulWidget {
 }
 
 class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
-  String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'Best Fit', 'Newest', 'Your Style'];
+  static const _filters = ['All', 'Best Fit', 'Newest', 'Your Style'];
+  static const _rowDivider =
+      BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.hairline)));
 
   final _recommendationService = RecommendationService();
   final _authService = AuthService();
+  String _selectedFilter = 'All';
   RecommendationResult? _result;
-  bool _isLoadingRecommendations = true;
-  String? _loadError;
-
+  bool _isLoading = true;
   bool _isLoadingPreferences = false;
-  bool _isClearingOutfitColors = false;
+  bool _isClearingOutfit = false;
+  String? _loadError;
+  StreamSubscription<RecommendationResult>? _recommendationSub;
 
   @override
   void initState() {
     super.initState();
-    _loadRecommendations();
+    // Live listener: re-scores by itself whenever wrist width, outfit
+    // colors, style or budget change, from any screen.
+    _recommendationSub =
+        _recommendationService.watchRecommendations().listen(
+      (result) {
+        if (!mounted) return;
+        setState(() {
+          _result = result;
+          _isLoading = false;
+          _loadError = null;
+        });
+      },
+      onError: (_) {
+        if (!mounted) return;
+        // Keep showing the last good result if there is one.
+        if (_result == null) {
+          setState(() {
+            _loadError = 'Could not load recommendations. Please try again.';
+            _isLoading = false;
+          });
+        }
+      },
+    );
   }
 
+  @override
+  void dispose() {
+    _recommendationSub?.cancel();
+    super.dispose();
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Manual one-time reload, used by pull to refresh, the retry button, and
+  /// the chat sheet as a backup to the live listener.
   Future<void> _loadRecommendations() async {
     setState(() {
-      _isLoadingRecommendations = true;
+      _isLoading = true;
       _loadError = null;
     });
     try {
@@ -50,13 +90,13 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
       if (!mounted) return;
       setState(() {
         _result = result;
-        _isLoadingRecommendations = false;
+        _isLoading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loadError = 'Could not load recommendations. Please try again.';
-        _isLoadingRecommendations = false;
+        _isLoading = false;
       });
     }
   }
@@ -64,40 +104,33 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
   List<WatchRecommendation> _filtered(List<WatchRecommendation> all) {
     switch (_selectedFilter) {
       case 'Best Fit':
-        final withFit = all.where((r) => r.fitScore != null).toList()
+        return all.where((r) => r.fitScore != null).toList()
           ..sort((a, b) => b.fitScore!.compareTo(a.fitScore!));
-        return withFit;
       case 'Newest':
-        final sorted = [...all];
-        sorted.sort((a, b) {
-          final aTime = a.data['createdAt'];
-          final bTime = b.data['createdAt'];
-          if (aTime is Timestamp && bTime is Timestamp) {
-            return bTime.compareTo(aTime);
-          }
-          return 0;
-        });
-        return sorted;
+        return [...all]..sort((a, b) {
+            final x = a.data['createdAt'], y = b.data['createdAt'];
+            return x is Timestamp && y is Timestamp ? y.compareTo(x) : 0;
+          });
       case 'Your Style':
         return all.where((r) => r.styleScore == 1.0).toList();
-      case 'All':
       default:
         return all;
     }
   }
 
+  Future<void> _scanOutfit() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const OutfitScanScreen()));
+  }
+
   Future<void> _openUpdatePreferences() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-
     setState(() => _isLoadingPreferences = true);
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = doc.data() ?? {};
-
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -115,16 +148,8 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
           ),
         ),
       );
-      // Preferences may have changed — re-score the catalog against them.
-      _loadRecommendations();
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not load your preferences. Please try again.'),
-          ),
-        );
-      }
+      _snack('Could not load your preferences. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoadingPreferences = false);
     }
@@ -135,12 +160,11 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: const Text('Remove Outfit Colors?',
-            style: TextStyle(color: AppTheme.textPrimary)),
+        title: Text('Remove outfit colors?', style: AppTheme.serif(size: 22)),
         content: const Text(
-          'Recommendations will stop factoring in outfit color match '
-          'until you scan an outfit again.',
-          style: TextStyle(color: AppTheme.textSecondary),
+          'Recommendations will stop factoring in outfit color until you '
+          'scan an outfit again.',
+          style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
         ),
         actions: [
           TextButton(
@@ -149,645 +173,340 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove', style: TextStyle(color: Colors.redAccent)),
+            child: const Text('Remove'),
           ),
         ],
       ),
     );
-
     if (confirmed != true) return;
 
-    setState(() => _isClearingOutfitColors = true);
+    setState(() => _isClearingOutfit = true);
     try {
       await _authService.clearOutfitColors();
-      // Outfit color no longer contributes to any watch's match score —
-      // re-score the catalog without it.
-      await _loadRecommendations();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Outfit colors removed.')),
-        );
-      }
+      _snack('Outfit colors removed.');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not remove outfit colors: $e')),
-        );
-      }
+      _snack('Could not remove outfit colors: $e');
     } finally {
-      if (mounted) setState(() => _isClearingOutfitColors = false);
+      if (mounted) setState(() => _isClearingOutfit = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final wristWidthMm = _result?.wristWidthMm;
-    final stylePreferences = _result?.stylePreferences ?? [];
-    final outfitColors = _result?.outfitColors ?? [];
-    final filtered = _filtered(_result?.recommendations ?? []);
+  void _openChat() => showRecommendationsChatSheet(
+        context,
+        result: _result!,
+        // Lets the chat's action buttons re-score this list too, then hand
+        // the fresh result back to the chat.
+        onProfileChanged: () async {
+          await _loadRecommendations();
+          return _result;
+        },
+      );
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('For You')),
-      floatingActionButton: _result == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => showRecommendationsChatSheet(
-                context,
-                result: _result!,
-                // Lets the chat's action buttons (measure wrist, scan
-                // outfit, edit preferences) re-score this screen's list
-                // too, then hand the fresh result back to the chat.
-                onProfileChanged: () async {
-                  await _loadRecommendations();
-                  return _result;
-                },
-              ),
-              backgroundColor: AppTheme.gold,
-              icon: const Icon(Icons.chat_bubble_outline,
-                  color: Color(0xFF0E1A2B)),
-              label: const Text(
-                'Ask VirtuWatch AI',
-                style: TextStyle(
-                  color: Color(0xFF0E1A2B),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-      body: RefreshIndicator(
-        onRefresh: _loadRecommendations,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'BASED ON',
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () => _showBasedOnInfo(context),
-                          borderRadius: BorderRadius.circular(20),
-                          child: const Padding(
-                            padding: EdgeInsets.all(4),
-                            child: Icon(Icons.info_outline,
-                                color: AppTheme.textSecondary, size: 16),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _basisChip(
-                          wristWidthMm != null
-                              ? 'WRIST: ${wristWidthMm.toStringAsFixed(1)}MM'
-                              : 'WRIST: NOT SET',
-                          AppTheme.gold,
-                        ),
-                        if (stylePreferences.isEmpty)
-                          _basisChip('NO STYLE PREFS SET', Colors.blueAccent)
-                        else
-                          for (final style in stylePreferences)
-                            _basisChip(style.toUpperCase(), Colors.blueAccent),
-                        if (outfitColors.isEmpty)
-                          _basisChip('NO OUTFIT SCANNED', Colors.purpleAccent)
-                        else
-                          _outfitColorChip(
-                            outfitColors,
-                            onClear: _isClearingOutfitColors
-                                ? null
-                                : _confirmClearOutfitColors,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextButton(
-                      onPressed:
-                          _isLoadingPreferences ? null : _openUpdatePreferences,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 0),
-                      ),
-                      child: _isLoadingPreferences
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTheme.gold,
-                              ),
-                            )
-                          : const Text('Update Preferences →',
-                              style: TextStyle(
-                                  color: AppTheme.gold, fontSize: 12)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              InkWell(
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const OutfitScanScreen(),
-                    ),
-                  );
-                  // A new scan may have changed the user's outfit colors —
-                  // re-score the catalog against them.
-                  _loadRecommendations();
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.gold.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border:
-                        Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.photo_camera_outlined,
-                          color: AppTheme.gold),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Scan Today\'s Outfit',
-                              style: TextStyle(
-                                color: AppTheme.gold,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const Text(
-                              'Get color-matched recommendations via AI',
-                              style: TextStyle(
-                                  color: AppTheme.textSecondary, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right, color: AppTheme.gold),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              SizedBox(
-                height: 36,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _filters.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final filter = _filters[index];
-                    final isSelected = _selectedFilter == filter;
-                    return ChoiceChip(
-                      label: Text(filter),
-                      selected: isSelected,
-                      onSelected: (_) =>
-                          setState(() => _selectedFilter = filter),
-                      backgroundColor: AppTheme.surface,
-                      selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                      labelStyle: TextStyle(
-                        color:
-                            isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                        fontSize: 13,
-                      ),
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.gold : Colors.transparent,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              if (_isLoadingRecommendations)
-                Column(
-                  children: List.generate(
-                    4,
-                    (index) => const Padding(
-                      padding: EdgeInsets.only(bottom: 10),
-                      child: _RecommendationTileSkeleton(),
-                    ),
-                  ),
-                )
-              else if (_loadError != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Column(
-                    children: [
-                      Text(_loadError!,
-                          style: const TextStyle(color: Colors.redAccent),
-                          textAlign: TextAlign.center),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: _loadRecommendations,
-                        child: const Text('Retry',
-                            style: TextStyle(color: AppTheme.gold)),
-                      ),
-                    ],
-                  ),
-                )
-              else if (filtered.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text(
-                    _selectedFilter == 'Your Style'
-                        ? 'No watches match your style preferences yet.'
-                        : 'No watches in the catalog yet.',
-                    style: const TextStyle(color: AppTheme.textSecondary),
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              else
-                ...filtered.map((rec) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _recommendationTile(
-                        rec,
-                        budgetMin: _result?.budgetMin ?? 0,
-                        budgetMax: _result?.budgetMax ?? 50000,
-                      ),
-                    )),
-
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: AppTheme.textSecondary, size: 16),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Recommendations are ranked by wrist fit, outfit '
-                        'color, and style match.',
-                        style:
-                            TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Extra bottom space so this last card can scroll clear of
-              // the floating "Ask VirtuWatch AI" button instead of ending
-              // up hidden behind it.
-              const SizedBox(height: 88),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showBasedOnInfo(BuildContext context) {
+  void _showHowItWorks() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'How Your Matches Are Scored',
-          style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _InfoRow(
-              icon: Icons.straighten_outlined,
-              title: 'Wrist Fit',
-              body:
-                  'Compares your measured wrist width against each watch\'s '
-                  'lug-to-lug size to estimate how it will sit on your wrist.',
-            ),
-            SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.checkroom_outlined,
-              title: 'Outfit Color',
-              body:
-                  'Matches the colors from your most recent outfit scan '
-                  'against each watch\'s color.',
-            ),
-            SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.style_outlined,
-              title: 'Style Preference',
-              body:
-                  'Matches your saved style preferences against each '
-                  'watch\'s style category.',
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Missing a signal (e.g. no wrist measurement yet) just means '
-              'that part is skipped — your match % is calculated from '
-              'whichever signals you do have.',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-            ),
-          ],
+        title: Text('How matches are scored', style: AppTheme.serif(size: 22)),
+        content: const Text(
+          'Fit compares your wrist width with each watch\'s lug-to-lug size.\n\n'
+          'Style checks your saved preferences against the watch\'s category.\n\n'
+          'Color compares your latest outfit scan with the watch\'s colors.\n\n'
+          'Anything missing is skipped, so a match is built from the signals '
+          'you have. Matches with limited data are shown in gray.',
+          style:
+              TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it', style: TextStyle(color: AppTheme.gold)),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
   }
 
-  Widget _basisChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
+  @override
+  Widget build(BuildContext context) {
+    final list = _filtered(_result?.recommendations ?? []);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('For You', style: AppTheme.serif(size: 28)),
+        actions: [
+          if (_result != null)
+            TextButton.icon(
+              onPressed: _openChat,
+              icon: const Icon(Icons.auto_awesome_outlined, size: 16),
+              label: const Text('Ask AI'),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.gold),
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+      body: RefreshIndicator(
+        onRefresh: _loadRecommendations,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+          children: [
+            _summary(),
+            const SizedBox(height: 24),
+            _filterTabs(),
+            const Divider(height: 1, color: AppTheme.hairline),
+            if (_isLoading)
+              ...List.generate(4, (_) => const _RowSkeleton())
+            else if (_loadError != null)
+              _message(_loadError!, retry: true)
+            else if (list.isEmpty)
+              _message(_selectedFilter == 'Your Style'
+                  ? 'No watches match your style preferences yet.'
+                  : 'No watches in the catalog yet.')
+            else
+              for (final rec in list) _row(rec),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _outfitColorChip(
-    List<Map<String, dynamic>> colors, {
-    required VoidCallback? onClear,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.purpleAccent.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'OUTFIT:',
-            style: TextStyle(
-              color: Colors.purpleAccent,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(width: 6),
-          for (final entry in colors.take(4))
-            Padding(
-              padding: const EdgeInsets.only(right: 3),
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: hexToColor(entry['hex'] as String? ?? '#808080'),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white24, width: 1),
+  Widget _summary() {
+    final wrist = _result?.wristWidthMm;
+    final styles = _result?.stylePreferences ?? [];
+    final colors = _result?.outfitColors ?? [];
+    final line = [
+      wrist != null
+          ? 'Tailored to your ${wrist.toStringAsFixed(1)}mm wrist'
+          : 'Add your wrist size for better fit',
+      if (styles.isNotEmpty) styles.join(', '),
+    ].join('  ·  ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(line,
+            style: const TextStyle(
+                color: AppTheme.textSecondary, fontSize: 13, height: 1.5)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _link('PREFERENCES',
+                _isLoadingPreferences ? null : _openUpdatePreferences),
+            const SizedBox(width: 20),
+            _link('OUTFIT', _scanOutfit),
+            if (colors.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              for (final c in colors.take(4))
+                Container(
+                  width: 10,
+                  height: 10,
+                  margin: const EdgeInsets.only(right: 3),
+                  decoration: BoxDecoration(
+                    color: hexToColor(c['hex'] as String? ?? '#808080'),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              InkWell(
+                onTap: _isClearingOutfit ? null : _confirmClearOutfitColors,
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close,
+                      size: 14, color: AppTheme.textSecondary),
                 ),
               ),
+            ],
+            const Spacer(),
+            InkWell(
+              onTap: _showHowItWorks,
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.info_outline,
+                    size: 16, color: AppTheme.textSecondary),
+              ),
             ),
-          const SizedBox(width: 2),
-          GestureDetector(
-            onTap: onClear,
-            child: Icon(
-              Icons.close,
-              size: 14,
-              color: onClear == null
-                  ? Colors.purpleAccent.withValues(alpha: 0.4)
-                  : Colors.purpleAccent,
-            ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _recommendationTile(
-    WatchRecommendation rec, {
-    required double budgetMin,
-    required double budgetMax,
-  }) {
-    final match = rec.matchPercent;
-    final matchColor = matchScoreColor(match, signalCount: rec.signalCount);
+  Widget _link(String label, VoidCallback? onTap) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: onTap == null
+                  ? AppTheme.textSecondary
+                  : AppTheme.textPrimary,
+              fontSize: 11,
+              letterSpacing: 1.4,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      );
 
-    final data = rec.data;
-    final brand = (data['brand'] as String? ?? '').toUpperCase();
-    final name = data['name'] as String? ?? 'Unnamed Watch';
-    final price = (data['price'] as num?)?.toDouble();
-    final priceLabel = price != null ? 'PHP $price' : '';
-    final caseDiameter = data['caseDiameterMm'];
-    final styleCategory = data['styleCategory'] as String? ?? '';
-    final imageUrl = data['imageUrl'] as String? ?? '';
-    final tag = [
-      if (caseDiameter != null) '${caseDiameter}mm',
-      if (styleCategory.isNotEmpty) styleCategory,
-    ].join(' · ');
-    final noteLine = [
-      rec.fitNote,
-      if (rec.colorNote != null) rec.colorNote!,
-      if (tag.isNotEmpty) tag,
-    ].join(' · ');
+  Widget _filterTabs() => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final f in _filters)
+              InkWell(
+                onTap: () => setState(() => _selectedFilter = f),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 24),
+                  padding: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: f == _selectedFilter
+                            ? AppTheme.gold
+                            : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    f,
+                    style: TextStyle(
+                      color: f == _selectedFilter
+                          ? AppTheme.textPrimary
+                          : AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
 
-    String? budgetLabel;
-    Color budgetColor = AppTheme.textSecondary;
-    if (price != null) {
-      if (price > budgetMax) {
-        budgetLabel = 'PHP ${(price - budgetMax).toStringAsFixed(0)} over budget';
-        budgetColor = Colors.orangeAccent;
-      } else if (price < budgetMin) {
-        budgetLabel = 'Below your budget range';
-        budgetColor = AppTheme.textSecondary;
-      } else {
-        budgetLabel = 'Within budget';
-        budgetColor = Colors.greenAccent;
-      }
-    }
+  Widget _message(String text, {bool retry = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(
+          children: [
+            Text(text,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppTheme.textSecondary)),
+            if (retry)
+              TextButton(
+                onPressed: _loadRecommendations,
+                child: const Text('Retry'),
+              ),
+          ],
+        ),
+      );
+
+  Widget _row(WatchRecommendation rec) {
+    final d = rec.data;
+    final brand = (d['brand'] as String? ?? '').toUpperCase();
+    final price = (d['price'] as num?)?.toDouble();
+    final imageUrl = d['imageUrl'] as String? ?? '';
+    final style = d['styleCategory'] as String? ?? '';
+    final sub = [
+      if (d['caseDiameterMm'] != null) '${d['caseDiameterMm']}mm',
+      if (style.isNotEmpty) style,
+    ].join(' · ');
+    final over = price != null ? price - (_result?.budgetMax ?? 50000) : 0;
+    final fullData = rec.signalCount == 3;
+    final heroTag =
+        'recommended-${identityHashCode(ModalRoute.of(context))}-photo-${rec.watchId}';
+    const fallback = Icon(Icons.watch, color: AppTheme.textSecondary);
 
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) =>
-                WatchDetailScreen(watchId: rec.watchId, data: data, heroTag: 'recommended-photo-${rec.watchId}'),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WatchDetailScreen(
+              watchId: rec.watchId, data: d, heroTag: heroTag),
         ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: _rowDivider,
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                width: 48,
-                height: 48,
-                color: AppTheme.background,
-                child: imageUrl.isNotEmpty
-                    ? Hero(
-                        tag: 'recommended-photo-${rec.watchId}',
-                        child: NetworkPhoto(
-                          url: imageUrl,
-                          errorWidget: const Icon(Icons.watch, color: AppTheme.gold),
+              borderRadius: BorderRadius.circular(4),
+              child: SizedBox(
+                width: 72,
+                height: 72,
+                child: ColoredBox(
+                  color: AppTheme.surface,
+                  child: imageUrl.isEmpty
+                      ? fallback
+                      : Hero(
+                          tag: heroTag,
+                          child: NetworkPhoto(
+                              url: imageUrl, errorWidget: fallback),
                         ),
-                      )
-                    : const Icon(Icons.watch, color: AppTheme.gold),
+                ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (brand.isNotEmpty)
-                    Text(
-                      brand,
-                      style: TextStyle(
-                        color: AppTheme.gold,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    noteLine,
-                    style: const TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 10,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (priceLabel.isNotEmpty)
-                    Row(
-                      children: [
-                        Text(
-                          priceLabel,
-                          style: const TextStyle(
-                            color: AppTheme.gold,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                        if (budgetLabel != null) ...[
-                          const SizedBox(width: 6),
-                          // Flexible + ellipsis: "Below your budget" is
-                          // long enough that priceLabel + this combined
-                          // can exceed the row's available width (e.g.
-                          // on a brand-new account with no fit/style
-                          // data shortening everything else above this
-                          // row) — without this it throws a RenderFlex
-                          // overflow instead of just truncating.
-                          Flexible(
-                            child: Text(
-                              '· $budgetLabel',
-                              style: TextStyle(
-                                color: budgetColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: matchColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '$match%',
-                    style: TextStyle(
-                      color: matchColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  matchVerdictLabel(match, signalCount: rec.signalCount),
-                  style: TextStyle(
-                    color: matchColor,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (rec.confidenceNote != null) ...[
-                  const SizedBox(height: 3),
-                  SizedBox(
-                    width: 90,
-                    child: Text(
-                      rec.confidenceNote!,
-                      textAlign: TextAlign.right,
+                    Text(brand,
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 10,
+                            letterSpacing: 1.4)),
+                  const SizedBox(height: 2),
+                  Text(d['name'] as String? ?? 'Unnamed Watch',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 9,
-                        fontStyle: FontStyle.italic,
-                      ),
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500)),
+                  if (sub.isNotEmpty)
+                    Text(sub,
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 12)),
+                  if (price != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(formatPeso(price),
+                            style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                        if (over > 0)
+                          Flexible(
+                            child: Text(
+                              '  ·  ${formatPeso(over)} over budget',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 11),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
+                  ],
                 ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('${rec.matchPercent}%',
+                    style: AppTheme.serif(
+                        size: 24,
+                        color: fullData &&
+                                rec.matchPercent >= goodMatchThreshold
+                            ? AppTheme.gold
+                            : AppTheme.textSecondary)),
+                if (!fullData)
+                  const Text('limited data',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 9)),
               ],
             ),
           ],
@@ -797,95 +516,33 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
   }
 }
 
-/// A single icon + title + body row used inside the "How Your Matches
-/// Are Scored" info dialog.
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String body;
-
-  const _InfoRow({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: AppTheme.gold, size: 18),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                body,
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-/// Placeholder for `_recommendationTile`'s row shape (48x48 thumbnail,
-/// brand/name/note lines, trailing match badge), shown while
-/// `_isLoadingRecommendations` is true so the list doesn't jump when
-/// the real rows come in.
-class _RecommendationTileSkeleton extends StatelessWidget {
-  const _RecommendationTileSkeleton();
+/// Loading placeholder matching the shape of a list row.
+class _RowSkeleton extends StatelessWidget {
+  const _RowSkeleton();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: _RecommendedForYouScreenState._rowDivider,
+      child: const Row(
         children: [
-          const SkeletonBox(
-            width: 48,
-            height: 48,
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-          ),
-          const SizedBox(width: 12),
+          SkeletonBox(
+              width: 72,
+              height: 72,
+              borderRadius: BorderRadius.all(Radius.circular(4))),
+          SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                SkeletonBox(width: 40, height: 8),
-                SizedBox(height: 6),
-                SkeletonBox(width: 120, height: 12),
-                SizedBox(height: 6),
-                SkeletonBox(width: 160, height: 9),
-                SizedBox(height: 6),
-                SkeletonBox(width: 70, height: 11),
+              children: [
+                SkeletonBox(width: 50, height: 8),
+                SizedBox(height: 8),
+                SkeletonBox(width: 150, height: 13),
+                SizedBox(height: 8),
+                SkeletonBox(width: 90, height: 10),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          const SkeletonBox(
-            width: 40,
-            height: 20,
-            borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
         ],
       ),

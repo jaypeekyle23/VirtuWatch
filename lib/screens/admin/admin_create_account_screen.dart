@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/luxe.dart';
 
 class AdminCreateAccountScreen extends StatefulWidget {
   const AdminCreateAccountScreen({super.key});
@@ -19,6 +20,7 @@ class _AdminCreateAccountScreenState extends State<AdminCreateAccountScreen> {
 
   String _selectedRole = 'customer';
   bool _isLoading = false;
+  bool _obscure = true;
   String? _errorMessage;
 
   final List<String> _styleOptions = [
@@ -75,165 +77,160 @@ class _AdminCreateAccountScreenState extends State<AdminCreateAccountScreen> {
     }
   }
 
+  static const _roles = [
+    ('customer', 'Regular user',
+        'Browse, measure wrist, scan outfit and use AR try-on.'),
+    ('merchant', 'Merchant', 'Manage their own watch catalog and 3D assets.'),
+    ('admin', 'Admin', 'Full system access. Use with caution.'),
+  ];
+
+  /// Label + underline field.
+  Widget _field(
+    String label,
+    TextEditingController controller,
+    String hint,
+    String? Function(String?) validator, {
+    TextInputType? keyboardType,
+    bool password = false,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(label, style: kLabelStyle),
+            TextFormField(
+              controller: controller,
+              keyboardType: keyboardType,
+              obscureText: password && _obscure,
+              style: const TextStyle(fontSize: 15),
+              decoration: luxeFieldDecoration(
+                hint: hint,
+                suffixIcon: password
+                    ? IconButton(
+                        icon: Icon(
+                            _obscure ? Icons.visibility_off : Icons.visibility,
+                            size: 18),
+                        color: AppTheme.textSecondary,
+                        padding: EdgeInsets.zero,
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      )
+                    : null,
+              ),
+              validator: validator,
+            ),
+          ],
+        ),
+      );
+
+  Widget _roleRow(String value, String title, String description) {
+    final selected = _selectedRole == value;
+    return InkWell(
+      onTap: () => setState(() => _selectedRole = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: kTopRule,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          color: selected
+                              ? AppTheme.textPrimary
+                              : AppTheme.textSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(description,
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check, size: 18, color: AppTheme.gold),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Account'),
-        actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _handleCreate,
-            child: Text(
-              'Save',
-              style: TextStyle(
-                color: _isLoading ? AppTheme.textSecondary : AppTheme.gold,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
+        title: Text('Add account', style: AppTheme.serif(size: 28)),
+        centerTitle: true,
+        scrolledUnderElevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _fieldLabel('FULL NAME *'),
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(hintText: 'Enter full name'),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a name';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              _fieldLabel('EMAIL ADDRESS *'),
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(hintText: 'Enter email'),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter an email';
-                  }
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              _fieldLabel('TEMPORARY PASSWORD'),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration:
-                    const InputDecoration(hintText: 'Set a temporary password'),
-                validator: (value) {
-                  if (value == null || value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-                  return null;
-                },
-              ),
+              _field('FULL NAME', _nameController, 'Enter full name',
+                  (v) => v == null || v.trim().isEmpty
+                      ? 'Please enter a name'
+                      : null),
+              _field('EMAIL ADDRESS', _emailController, 'Enter email', (v) {
+                if (v == null || v.trim().isEmpty) return 'Please enter an email';
+                return v.contains('@') ? null : 'Please enter a valid email';
+              }, keyboardType: TextInputType.emailAddress),
+              _field('TEMPORARY PASSWORD', _passwordController,
+                  'Set a temporary password',
+                  (v) => v == null || v.length < 6
+                      ? 'Password must be at least 6 characters'
+                      : null,
+                  password: true),
+              const Text('They will be asked to change this on first login.',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              const SizedBox(height: 28),
+              const Text('ACCOUNT ROLE', style: kLabelStyle),
               const SizedBox(height: 8),
-              Text(
-                '⚠ User will be prompted to change this on first login',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(fontSize: 12),
-              ),
-              const SizedBox(height: 24),
-
-              _fieldLabel('ACCOUNT ROLE'),
-              const SizedBox(height: 8),
-              RadioGroup<String>(
-                groupValue: _selectedRole,
-                onChanged: (value) => setState(() => _selectedRole = value!),
-                child: Column(
+              for (final (value, title, description) in _roles)
+                _roleRow(value, title, description),
+              Container(decoration: kTopRule, height: 1),
+              if (_selectedRole == 'admin')
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text('Admin accounts can manage every account and watch.',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                ),
+              if (_selectedRole == 'customer') ...[
+                const SizedBox(height: 28),
+                const Text('STYLE PREFERENCES', style: kLabelStyle),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    _roleCard(
-                      value: 'customer',
-                      title: 'Regular User',
-                      description:
-                          'Can browse, measure wrist, scan outfit, and use AR try-on',
-                      color: AppTheme.gold,
-                    ),
-                    const SizedBox(height: 10),
-                    _roleCard(
-                      value: 'merchant',
-                      title: 'Merchant',
-                      description:
-                          'Can manage their own watch catalog and 3D assets',
-                      color: Colors.greenAccent,
-                    ),
-                    const SizedBox(height: 10),
-                    _roleCard(
-                      value: 'admin',
-                      title: 'Admin',
-                      description: 'Full system access — use with caution',
-                      color: Colors.redAccent,
-                      warning: 'Admin accounts have full system access.',
-                    ),
+                    for (final style in _styleOptions)
+                      luxePill(
+                        style,
+                        selected: _selectedStyles.contains(style),
+                        onTap: () => setState(() {
+                          if (!_selectedStyles.remove(style)) {
+                            _selectedStyles.add(style);
+                          }
+                        }),
+                      ),
                   ],
                 ),
-              ),
-
-              if (_selectedRole == 'customer') ...[
-                const SizedBox(height: 24),
-                _fieldLabel('STYLE PREFERENCES (USER)'),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _styleOptions.map((style) {
-                    final isSelected = _selectedStyles.contains(style);
-                    return ChoiceChip(
-                      label: Text(style),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedStyles.add(style);
-                          } else {
-                            _selectedStyles.remove(style);
-                          }
-                        });
-                      },
-                      backgroundColor: AppTheme.surface,
-                      selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                      labelStyle: TextStyle(
-                        color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                      ),
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.gold : Colors.transparent,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    );
-                  }).toList(),
-                ),
               ],
-
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               if (_errorMessage != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.redAccent),
-                  ),
+                  child: Text(_errorMessage!,
+                      style: const TextStyle(
+                          color: Colors.redAccent, fontSize: 13),
+                      textAlign: TextAlign.center),
                 ),
-
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleCreate,
                 child: _isLoading
@@ -246,88 +243,6 @@ class _AdminCreateAccountScreenState extends State<AdminCreateAccountScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _roleCard({
-    required String value,
-    required String title,
-    required String description,
-    required Color color,
-    String? warning,
-  }) {
-    final isSelected = _selectedRole == value;
-    return InkWell(
-      onTap: () => setState(() => _selectedRole = value),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? color : Colors.transparent,
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Radio<String>(
-              value: value,
-              activeColor: color,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: const TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (warning != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      '⚠ $warning',
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _fieldLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textSecondary,
-          letterSpacing: 0.5,
         ),
       ),
     );

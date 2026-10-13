@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../constants/watch_colors.dart';
 import '../theme/app_theme.dart';
+import 'luxe.dart';
 
 /// Freeform color entry for a watch's primary color: an HSV wheel (hue
 /// by angle, saturation by distance from center) plus a brightness
@@ -128,15 +129,12 @@ class _WatchColorWheelPickerState extends State<WatchColorWheelPicker> {
           ),
         ),
         const SizedBox(height: 16),
-        Text(
-          'BRIGHTNESS',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
-        ),
+        const Text('BRIGHTNESS', style: kLabelStyle),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            activeTrackColor: AppTheme.gold,
-            thumbColor: AppTheme.gold,
-            inactiveTrackColor: AppTheme.surface,
+            activeTrackColor: AppTheme.textPrimary,
+            thumbColor: AppTheme.textPrimary,
+            inactiveTrackColor: Colors.white24,
           ),
           child: Slider(
             value: _hsv.value,
@@ -152,7 +150,7 @@ class _WatchColorWheelPickerState extends State<WatchColorWheelPicker> {
                 color: _hsv.toColor(),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: AppTheme.gold.withValues(alpha: 0.4),
+                  color: Colors.white24,
                   width: 2,
                 ),
               ),
@@ -167,11 +165,12 @@ class _WatchColorWheelPickerState extends State<WatchColorWheelPicker> {
                   FilteringTextInputFormatter.allow(RegExp('[0-9a-fA-F]')),
                 ],
                 style: TextStyle(color: AppTheme.textPrimary),
-                decoration: InputDecoration(
+                decoration: luxeFieldDecoration().copyWith(
                   prefixText: '#',
-                  prefixStyle: TextStyle(color: AppTheme.textSecondary),
-                  labelText: 'HEX CODE',
-                  labelStyle: TextStyle(color: AppTheme.textSecondary),
+                  prefixStyle: const TextStyle(color: AppTheme.textSecondary),
+                  labelText: 'Hex code',
+                  labelStyle: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13),
                   counterText: '',
                 ),
                 onChanged: _handleHexInput,

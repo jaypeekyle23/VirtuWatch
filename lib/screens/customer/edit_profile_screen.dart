@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/auth_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
+import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -149,199 +151,124 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return null;
   }
 
+  /// Pill toggles for a multi-select option list.
+  Widget _choices(List<String> options, Set<String> selected) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final option in options)
+          luxePill(
+            option,
+            selected: selected.contains(option),
+            onTap: () => setState(() {
+              if (!selected.remove(option)) selected.add(option);
+            }),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final name = _nameController.text.trim();
+    final avatar = _avatarImage;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Profile'),
-        actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _handleSave,
-            child: Text(
-              'Save',
-              style: TextStyle(
-                color: _isLoading ? AppTheme.textSecondary : AppTheme.gold,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
+        title: Text('Edit Profile', style: AppTheme.serif(size: 28)),
+        centerTitle: true,
+        scrolledUnderElevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
-              child: GestureDetector(
-                onTap: _isUploadingImage ? null : _pickImage,
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: AppTheme.gold,
-                      backgroundImage: _avatarImage,
-                      child: _isUploadingImage
-                          ? const CircularProgressIndicator(
-                              color: Color(0xFF0E1A2B),
-                            )
-                          : (_selectedImage == null &&
-                                  _existingPhotoUrl.isEmpty)
-                              ? Text(
-                                  _nameController.text.isNotEmpty
-                                      ? _nameController.text.trim()[0]
-                                          .toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                    color: Color(0xFF0E1A2B),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 24,
-                                  ),
-                                )
-                              : null,
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.gold,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.camera_alt,
-                            size: 14, color: Color(0xFF0E1A2B)),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: AppTheme.surface,
+                    backgroundImage: avatar,
+                    child: _isUploadingImage
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : (avatar == null
+                            ? Text(name.isEmpty ? '?' : name[0].toUpperCase(),
+                                style: AppTheme.serif(size: 28))
+                            : null),
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: _isUploadingImage ? null : _pickImage,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        'CHANGE PHOTO',
+                        style:
+                            kLabelStyle.copyWith(color: AppTheme.textPrimary),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 24),
-
-            _fieldLabel('FULL NAME'),
-            TextField(
-              controller: _nameController,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(hintText: 'Enter full name'),
             ),
             const SizedBox(height: 16),
-
-            _fieldLabel('EMAIL ADDRESS'),
-            TextField(
-              enabled: false,
-              controller: TextEditingController(text: widget.currentEmail),
-              decoration: const InputDecoration(),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Email cannot be changed here.',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-            ),
-            const SizedBox(height: 24),
-
-            _fieldLabel('STYLE PREFERENCES'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _styleOptions.map((style) {
-                final isSelected = _selectedStyles.contains(style);
-                return ChoiceChip(
-                  label: Text(style),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedStyles.add(style);
-                      } else {
-                        _selectedStyles.remove(style);
-                      }
-                    });
-                  },
-                  backgroundColor: AppTheme.surface,
-                  selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                  labelStyle: TextStyle(
-                    color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                  ),
-                  side: BorderSide(
-                    color: isSelected ? AppTheme.gold : Colors.transparent,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            _fieldLabel('PREFERRED BRANDS'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _brandOptions.map((brand) {
-                final isSelected = _selectedBrands.contains(brand);
-                return ChoiceChip(
-                  label: Text(brand),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        _selectedBrands.add(brand);
-                      } else {
-                        _selectedBrands.remove(brand);
-                      }
-                    });
-                  },
-                  backgroundColor: AppTheme.surface,
-                  selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-                  labelStyle: TextStyle(
-                    color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-                  ),
-                  side: BorderSide(
-                    color: isSelected ? AppTheme.gold : Colors.transparent,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            _fieldLabel('BUDGET RANGE (PHP)'),
-            const SizedBox(height: 8),
-            RangeSlider(
-              values: _budgetRange,
-              min: 0,
-              max: 500000,
-              divisions: 100,
-              activeColor: AppTheme.gold,
-              inactiveColor: AppTheme.surface,
-              labels: RangeLabels(
-                '₱${_budgetRange.start.round()}',
-                '₱${_budgetRange.end.round()}',
+            luxeSection(
+              'NAME',
+              TextField(
+                controller: _nameController,
+                onChanged: (_) => setState(() {}),
+                style: const TextStyle(fontSize: 15),
+                decoration: luxeFieldDecoration(hint: 'Enter full name'),
               ),
-              onChanged: (values) {
-                setState(() => _budgetRange = values);
-              },
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '₱${_budgetRange.start.round()}',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                ),
-                Text(
-                  '₱${_budgetRange.end.round()}',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                ),
-              ],
+            luxeSection(
+              'EMAIL',
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.currentEmail,
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary, fontSize: 15)),
+                  const SizedBox(height: 4),
+                  const Text('Email cannot be changed here.',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11)),
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
-
+            luxeSection('STYLE', _choices(_styleOptions, _selectedStyles)),
+            luxeSection(
+                'PREFERRED BRANDS', _choices(_brandOptions, _selectedBrands)),
+            luxeSection(
+              'BUDGET',
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${formatPeso(_budgetRange.start)}  to  '
+                    '${formatPeso(_budgetRange.end)}',
+                    style: AppTheme.serif(size: 22),
+                  ),
+                  RangeSlider(
+                    values: _budgetRange,
+                    min: 0,
+                    max: 500000,
+                    divisions: 100,
+                    activeColor: AppTheme.textPrimary,
+                    inactiveColor: Colors.white24,
+                    labels: RangeLabels(
+                      formatPeso(_budgetRange.start),
+                      formatPeso(_budgetRange.end),
+                    ),
+                    onChanged: (values) =>
+                        setState(() => _budgetRange = values),
+                  ),
+                ],
+              ),
+            ),
             if (_errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -351,7 +278,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-
             ElevatedButton(
               onPressed: _isLoading ? null : _handleSave,
               child: _isLoading
@@ -364,18 +290,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _fieldLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        color: AppTheme.textSecondary,
-        letterSpacing: 0.5,
       ),
     );
   }

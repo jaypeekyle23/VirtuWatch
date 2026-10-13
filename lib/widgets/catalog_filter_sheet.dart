@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import 'luxe.dart';
 
 /// Immutable snapshot of every filter a catalog screen (customer,
 /// merchant, or admin) can apply. Deliberately shared across all three
@@ -32,6 +35,31 @@ class CatalogFilters {
     this.priceRange,
     this.listingStatus = 'All',
   });
+
+  /// Whether a watch's [data] passes every filter here. Search text is not
+  /// part of the model, so callers apply it themselves.
+  bool matches(Map<String, dynamic> data) {
+    if (style != 'All' && data['styleCategory'] != style) return false;
+    if (brand != 'All' && data['brand'] != brand) return false;
+    // A watch with no targetGender never shows under a specific gender, and
+    // is never guessed into a bucket. It still shows under "All".
+    if (gender != 'All' && data['targetGender'] != gender) return false;
+    if (arOnly && data['has3DModel'] != true) return false;
+    if (listingStatus != 'All' &&
+        (data['listedInCatalog'] == true) != (listingStatus == 'Active')) {
+      return false;
+    }
+    final range = priceRange;
+    if (range != null) {
+      // No price at all: excluded once a range is applied, since there is
+      // no way to know whether it belongs in range.
+      final price = (data['price'] as num?)?.toDouble();
+      if (price == null || price < range.start || price > range.end) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   CatalogFilters copyWith({
     String? style,
@@ -172,6 +200,33 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
     Navigator.of(context).pop(result);
   }
 
+  /// A label and a row of single-select pills.
+  Widget _group(String label, List<String> options, String selected,
+      ValueChanged<String> onSelected) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: kLabelStyle),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final option in options)
+                luxePill(
+                  option,
+                  selected: option == selected,
+                  onTap: () => setState(() => onSelected(option)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -188,115 +243,70 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Filters',
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text('Filters', style: AppTheme.serif(size: 26)),
+                  const Spacer(),
                   TextButton(
-                    onPressed: _draft.isDefault && _priceIsFullRange
-                        ? null
-                        : _reset,
+                    onPressed:
+                        _draft.isDefault && _priceIsFullRange ? null : _reset,
+                    style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.textSecondary),
                     child: const Text('Reset'),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              _sectionLabel('STYLE'),
-              _chipWrap(
-                options: ['All', ...widget.styleOptions],
-                selected: _draft.style,
-                onSelected: (value) =>
-                    setState(() => _draft = _draft.copyWith(style: value)),
-              ),
-              if (widget.brandOptions.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _sectionLabel('BRAND'),
-                _chipWrap(
-                  options: ['All', ...widget.brandOptions],
-                  selected: _draft.brand,
-                  onSelected: (value) =>
-                      setState(() => _draft = _draft.copyWith(brand: value)),
-                ),
-              ],
-              if (widget.showGenderFilter) ...[
-                const SizedBox(height: 16),
-                _sectionLabel('GENDER'),
-                _chipWrap(
-                  options: _genderOptions,
-                  selected: _draft.gender,
-                  onSelected: (value) =>
-                      setState(() => _draft = _draft.copyWith(gender: value)),
-                ),
-              ],
-              if (widget.showListingStatusFilter) ...[
-                const SizedBox(height: 16),
-                _sectionLabel('LISTING STATUS'),
-                _chipWrap(
-                  options: _listingStatusOptions,
-                  selected: _draft.listingStatus,
-                  onSelected: (value) => setState(
-                      () => _draft = _draft.copyWith(listingStatus: value)),
-                ),
-              ],
+              const SizedBox(height: 8),
+              _group('STYLE', ['All', ...widget.styleOptions], _draft.style,
+                  (v) => _draft = _draft.copyWith(style: v)),
+              if (widget.brandOptions.isNotEmpty)
+                _group('BRAND', ['All', ...widget.brandOptions], _draft.brand,
+                    (v) => _draft = _draft.copyWith(brand: v)),
+              if (widget.showGenderFilter)
+                _group('GENDER', _genderOptions, _draft.gender,
+                    (v) => _draft = _draft.copyWith(gender: v)),
+              if (widget.showListingStatusFilter)
+                _group('LISTING STATUS', _listingStatusOptions,
+                    _draft.listingStatus,
+                    (v) => _draft = _draft.copyWith(listingStatus: v)),
               if (widget.showArFilter) ...[
-                const SizedBox(height: 16),
-                _sectionLabel('AR TRY-ON'),
+                const Text('AR TRY-ON', style: kLabelStyle),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: _draft.arOnly,
                   onChanged: (value) =>
                       setState(() => _draft = _draft.copyWith(arOnly: value)),
-                  activeThumbColor: AppTheme.gold,
+                  activeThumbColor: AppTheme.textPrimary,
+                  activeTrackColor: Colors.white30,
                   title: const Text(
                     'Only show watches with AR try-on',
                     style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                   ),
                 ),
+                const SizedBox(height: 12),
               ],
-              const SizedBox(height: 16),
-              _sectionLabel('PRICE RANGE (PHP)'),
+              const Text('PRICE RANGE', style: kLabelStyle),
+              const SizedBox(height: 10),
               if (widget.priceCeiling > widget.priceFloor) ...[
+                Text(
+                  '${formatPeso(_priceDraft.start)}  to  '
+                  '${formatPeso(_priceDraft.end)}',
+                  style: AppTheme.serif(size: 20),
+                ),
                 RangeSlider(
                   values: _priceDraft,
                   min: widget.priceFloor,
                   max: widget.priceCeiling,
-                  activeColor: AppTheme.gold,
-                  inactiveColor: AppTheme.surface,
+                  activeColor: AppTheme.textPrimary,
+                  inactiveColor: Colors.white24,
                   labels: RangeLabels(
-                    _priceDraft.start.round().toString(),
-                    _priceDraft.end.round().toString(),
+                    formatPeso(_priceDraft.start),
+                    formatPeso(_priceDraft.end),
                   ),
                   onChanged: (values) => setState(() => _priceDraft = values),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'PHP ${_priceDraft.start.round()}',
-                        style: const TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 12),
-                      ),
-                      Text(
-                        'PHP ${_priceDraft.end.round()}',
-                        style: const TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
               ] else
-                // Every watch shares the same price (or there's only one) —
-                // a slider with equal min/max is meaningless/disabled-looking
-                // in Flutter, so just say so instead of showing a broken
-                // control.
+                // Every watch shares the same price (or there is only one).
+                // A slider with equal min and max looks broken, so say so.
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text(
@@ -304,23 +314,12 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                     style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                   ),
                 ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _apply,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.gold,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Apply Filters',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  child: const Text('Apply Filters'),
                 ),
               ),
             ],
@@ -329,62 +328,10 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
       ),
     );
   }
-
-  Widget _sectionLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: AppTheme.textSecondary,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _chipWrap({
-    required List<String> options,
-    required String selected,
-    required ValueChanged<String> onSelected,
-  }) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: options.map((option) {
-        final isSelected = selected == option;
-        return ChoiceChip(
-          label: Text(option),
-          selected: isSelected,
-          // The gold border + gold text already mark the selected chip —
-          // the default checkmark on top of that was the main source of
-          // clutter in the old inline filter rows, so it's off everywhere
-          // in this sheet.
-          showCheckmark: false,
-          onSelected: (_) => onSelected(option),
-          backgroundColor: AppTheme.background,
-          selectedColor: AppTheme.gold.withValues(alpha: 0.2),
-          labelStyle: TextStyle(
-            color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
-            fontSize: 13,
-          ),
-          side: BorderSide(
-            color: isSelected ? AppTheme.gold : Colors.transparent,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        );
-      }).toList(),
-    );
-  }
 }
 
 /// App-bar filter icon with a small badge showing how many filters are
-/// active — the single indicator that replaces the old always-visible
-/// chip rows. Identical on all three catalog screens by design.
+/// active. Identical on all three catalog screens by design.
 class CatalogFilterButton extends StatelessWidget {
   final int activeCount;
   final VoidCallback onPressed;
@@ -403,9 +350,135 @@ class CatalogFilterButton extends StatelessWidget {
       icon: Badge(
         label: Text('$activeCount'),
         isLabelVisible: activeCount > 0,
-        backgroundColor: AppTheme.gold,
-        textColor: Colors.black,
+        backgroundColor: AppTheme.textPrimary,
+        textColor: AppTheme.background,
         child: const Icon(Icons.filter_list),
+      ),
+    );
+  }
+}
+
+typedef WatchDoc = QueryDocumentSnapshot<Map<String, dynamic>>;
+
+enum CatalogSort {
+  newest('Newest'),
+  priceLowToHigh('Price: Low to High'),
+  priceHighToLow('Price: High to Low'),
+  nameAToZ('Name: A to Z');
+
+  final String label;
+  const CatalogSort(this.label);
+}
+
+List<WatchDoc> sortWatchDocs(List<WatchDoc> docs, CatalogSort sort) {
+  num price(WatchDoc d) => (d.data()['price'] as num?) ?? 0;
+  String name(WatchDoc d) => (d.data()['name'] as String? ?? '').toLowerCase();
+
+  final sorted = [...docs];
+  switch (sort) {
+    case CatalogSort.priceLowToHigh:
+      sorted.sort((a, b) => price(a).compareTo(price(b)));
+    case CatalogSort.priceHighToLow:
+      sorted.sort((a, b) => price(b).compareTo(price(a)));
+    case CatalogSort.nameAToZ:
+      sorted.sort((a, b) => name(a).compareTo(name(b)));
+    case CatalogSort.newest:
+      sorted.sort((a, b) {
+        final createdA = a.data()['createdAt'] as Timestamp?;
+        final createdB = b.data()['createdAt'] as Timestamp?;
+        if (createdA == null && createdB == null) return 0;
+        if (createdA == null) return 1;
+        if (createdB == null) return -1;
+        return createdB.compareTo(createdA);
+      });
+  }
+  return sorted;
+}
+
+/// App bar sort menu with a check beside the current choice.
+class CatalogSortButton extends StatelessWidget {
+  final CatalogSort selected;
+  final ValueChanged<CatalogSort> onSelected;
+
+  const CatalogSortButton({
+    super.key,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<CatalogSort>(
+      icon: const Icon(Icons.sort),
+      color: AppTheme.surface,
+      initialValue: selected,
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final option in CatalogSort.values)
+          PopupMenuItem(
+            value: option,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check,
+                  size: 18,
+                  color: option == selected
+                      ? AppTheme.textPrimary
+                      : Colors.transparent,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  option.label,
+                  style: TextStyle(
+                    color: option == selected
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Underline search field shown above a catalog. The caller keeps the query
+/// in state and rebuilds on [onChanged], which also updates the clear button.
+class CatalogSearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  const CatalogSearchField({
+    super.key,
+    required this.controller,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(fontSize: 15),
+        decoration: luxeFieldDecoration(
+          hint: 'Search by name, brand, or style',
+          prefixIcon: const Icon(Icons.search,
+              size: 20, color: AppTheme.textSecondary),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  color: AppTheme.textSecondary,
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                ),
+        ),
+        onChanged: onChanged,
       ),
     );
   }

@@ -42,7 +42,7 @@ class WatchColorPicker extends StatelessWidget {
                     color: swatchColor,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: isSelected ? AppTheme.gold : Colors.transparent,
+                      color: isSelected ? AppTheme.textPrimary : Colors.transparent,
                       width: 3,
                     ),
                   ),
@@ -61,7 +61,7 @@ class WatchColorPicker extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: isSelected ? AppTheme.gold : AppTheme.textSecondary,
+                    color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
                     fontSize: 10,
                   ),
                 ),

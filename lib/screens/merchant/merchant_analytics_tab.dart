@@ -1,727 +1,314 @@
+import 'dart:math' show max, min;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
+import '../../widgets/luxe.dart';
 import '../../widgets/skeleton_box.dart';
 
-class MerchantAnalyticsTab extends StatelessWidget {
+const _muted = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+
+/// Serif figures side by side, each with a small label under it. With
+/// [band], they are centered in ruled cells, like the dashboard stats.
+Widget _figures(List<(String, String)> items, {bool band = false}) {
+  final cells = [
+    for (final (label, value) in items)
+      Column(
+        crossAxisAlignment:
+            band ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+        children: [
+          Text(value, style: AppTheme.serif(size: 28)),
+          const SizedBox(height: 2),
+          Text(label,
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        ],
+      ),
+  ];
+  return band
+      ? luxeBand([
+          for (final c in cells)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: c),
+        ])
+      : Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [for (final c in cells) Expanded(child: c)],
+        );
+}
+
+class MerchantAnalyticsTab extends StatefulWidget {
   const MerchantAnalyticsTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final watchService = WatchService();
+  State<MerchantAnalyticsTab> createState() => _MerchantAnalyticsTabState();
+}
 
+class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
+  // Created once so tab switches don't re-subscribe and flash the skeleton.
+  late final _watches = WatchService().myWatches();
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Analytics')),
+      appBar: AppBar(title: Text('Analytics', style: AppTheme.serif(size: 28))),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: watchService.myWatches(),
+        stream: _watches,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const _AnalyticsSkeleton();
           }
-
           final docs = snapshot.data?.docs ?? [];
-
           if (docs.isEmpty) {
-            return Center(
+            return const Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.bar_chart_outlined,
-                        size: 48, color: AppTheme.textSecondary),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No analytics yet. Add a watch to your catalog to see stats here.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+                padding: EdgeInsets.all(32),
+                child: Text(
+                  'No analytics yet. Add a watch to your catalog to see stats here.',
+                  textAlign: TextAlign.center,
+                  style: _muted,
                 ),
               ),
             );
           }
-
-          final total = docs.length;
-          final listed =
-              docs.where((d) => d.data()['listedInCatalog'] as bool? ?? false).length;
-          final draft = total - listed;
-          final arReady =
-              docs.where((d) => d.data()['has3DModel'] as bool? ?? false).length;
-
-          final prices = docs
-              .map((d) => (d.data()['price'] as num?)?.toDouble())
-              .whereType<double>()
-              .toList();
-          final avgPrice = prices.isEmpty
-              ? null
-              : prices.reduce((a, b) => a + b) / prices.length;
-          final totalValue =
-              prices.isEmpty ? null : prices.reduce((a, b) => a + b);
-          final minPrice = prices.isEmpty ? null : prices.reduce((a, b) => a < b ? a : b);
-          final maxPrice = prices.isEmpty ? null : prices.reduce((a, b) => a > b ? a : b);
-
-          final styleCounts = <String, int>{};
-          for (final doc in docs) {
-            final style = doc.data()['styleCategory'] as String? ?? 'Unspecified';
-            styleCounts[style] = (styleCounts[style] ?? 0) + 1;
-          }
-          final sortedStyles = styleCounts.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value));
-
-          String currencyFormat(double value) =>
-              'PHP ${value.toStringAsFixed(0).replaceAllMapped(
-                    RegExp(r'\B(?=(\d{3})+(?!\d))'),
-                    (m) => ',',
-                  )}';
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Catalog Overview',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _statCard(
-                        label: 'Total Watches',
-                        value: '$total',
-                        color: AppTheme.gold,
-                        icon: Icons.watch_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _statCard(
-                        label: 'Listed / Draft',
-                        value: '$listed / $draft',
-                        color: Colors.greenAccent,
-                        icon: Icons.visibility_outlined,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _statCard(
-                        label: 'AR Ready',
-                        value: '$arReady',
-                        color: AppTheme.gold,
-                        icon: Icons.view_in_ar_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _statCard(
-                        label: 'Total Inventory Value',
-                        value: totalValue != null
-                            ? currencyFormat(totalValue)
-                            : '—',
-                        color: Colors.purpleAccent,
-                        icon: Icons.payments_outlined,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Pricing',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      _priceRow('Average Price',
-                          avgPrice != null ? currencyFormat(avgPrice) : '—'),
-                      _priceRow('Lowest Price',
-                          minPrice != null ? currencyFormat(minPrice) : '—'),
-                      _priceRow('Highest Price',
-                          maxPrice != null ? currencyFormat(maxPrice) : '—',
-                          isLast: true),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Style Breakdown',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: sortedStyles.asMap().entries.map((entry) {
-                      final isLast = entry.key == sortedStyles.length - 1;
-                      final style = entry.value.key;
-                      final count = entry.value.value;
-                      final fraction = count / total;
-                      return Padding(
-                        padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  style,
-                                  style: const TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  '$count (${(fraction * 100).toStringAsFixed(0)}%)',
-                                  style: const TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: fraction,
-                                minHeight: 6,
-                                backgroundColor: AppTheme.background,
-                                valueColor: const AlwaysStoppedAnimation(AppTheme.gold),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Customer Engagement',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                FutureBuilder<EngagementStats>(
-                  future: watchService
-                      .fetchEngagementStats(docs.map((d) => d.id).toList()),
-                  builder: (context, statsSnapshot) {
-                    if (statsSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const _EngagementSkeleton();
-                    }
-
-                    final stats = statsSnapshot.data;
-                    if (stats == null) {
-                      return _engagementInfoCard(
-                        icon: Icons.error_outline,
-                        title: 'Could not load engagement data',
-                        body: 'Pull to refresh or try again in a moment.',
-                      );
-                    }
-
-                    if (stats.totalSaves == 0) {
-                      return _engagementInfoCard(
-                        icon: Icons.info_outline,
-                        title: 'No customer activity yet',
-                        body:
-                            'Saved-watch and recently-viewed counts will '
-                            'appear here once customers start engaging '
-                            'with your catalog.',
-                      );
-                    }
-
-                    // Rank the merchant's own watches by saves, most first,
-                    // for both the highlight and the breakdown list below.
-                    final ranked = [...docs]..sort((a, b) =>
-                        (stats.savedCounts[b.id] ?? 0)
-                            .compareTo(stats.savedCounts[a.id] ?? 0));
-                    final topDoc = ranked.first;
-                    final topName =
-                        topDoc.data()['name'] as String? ?? 'Unnamed watch';
-                    final topSaves = stats.savedCounts[topDoc.id] ?? 0;
-
-                    // Size each count column to its widest number (about
-                    // 8px per digit at this font size) so the icons line up
-                    // without leaving empty space at the row's right edge.
-                    var maxSaved = 0;
-                    var maxViewed = 0;
-                    for (final d in ranked) {
-                      final sv = stats.savedCounts[d.id] ?? 0;
-                      final vw = stats.viewedCounts[d.id] ?? 0;
-                      if (sv > maxSaved) maxSaved = sv;
-                      if (vw > maxViewed) maxViewed = vw;
-                    }
-                    final savedColWidth = maxSaved.toString().length * 8.0;
-                    final viewedColWidth = maxViewed.toString().length * 8.0;
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _statCard(
-                                label: 'Total Saves',
-                                value: '${stats.totalSaves}',
-                                color: Colors.pinkAccent,
-                                icon: Icons.favorite_outline,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _statCard(
-                                label: 'Customers Reached',
-                                value: '${stats.uniqueSaverCount}',
-                                color: Colors.lightBlueAccent,
-                                icon: Icons.people_outline,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (topSaves > 0) ...[
-                          const SizedBox(height: 10),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppTheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.star_outline,
-                                    color: AppTheme.gold, size: 18),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: RichText(
-                                    text: TextSpan(
-                                      style: const TextStyle(
-                                        color: AppTheme.textPrimary,
-                                        fontSize: 13,
-                                      ),
-                                      children: [
-                                        const TextSpan(text: 'Most saved: '),
-                                        TextSpan(
-                                          text: topName,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w600),
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              ' · $topSaves ${topSaves == 1 ? 'save' : 'saves'}',
-                                          style: const TextStyle(
-                                              color: AppTheme.textSecondary),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.surface,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (final entry in ranked.asMap().entries)
-                                Padding(
-                                  padding: EdgeInsets.only(
-                                    bottom: entry.key == ranked.length - 1
-                                        ? 0
-                                        : 12,
-                                  ),
-                                  child: _engagementRow(
-                                    name: entry.value.data()['name']
-                                            as String? ??
-                                        'Unnamed watch',
-                                    saved: stats.savedCounts[entry.value.id] ??
-                                        0,
-                                    viewed:
-                                        stats.viewedCounts[entry.value.id] ??
-                                            0,
-                                    savedWidth: savedColWidth,
-                                    viewedWidth: viewedColWidth,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Heart = customers who have this saved. Eye = '
-                          'distinct customers who have viewed it.',
-                          style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 11,
-                              height: 1.4),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
-          );
+          return _content(docs);
         },
       ),
     );
   }
 
-  Widget _statCard({
-    required String label,
-    required String value,
-    required Color color,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _content(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final data = [for (final d in docs) d.data()];
+    final listed = data.where((d) => d['listedInCatalog'] == true).length;
+    final arReady = data.where((d) => d['has3DModel'] == true).length;
 
-  Widget _engagementInfoCard({
-    required IconData icon,
-    required String title,
-    required String body,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final prices = [
+      for (final d in data)
+        if (d['price'] is num) (d['price'] as num).toDouble(),
+    ];
+    final total = prices.fold(0.0, (a, b) => a + b);
+    String peso(double? v) => v == null || prices.isEmpty ? '—' : formatPeso(v);
+
+    final styleCounts = <String, int>{};
+    for (final d in data) {
+      final style = d['styleCategory'] as String? ?? 'Unspecified';
+      styleCounts[style] = (styleCounts[style] ?? 0) + 1;
+    }
+    final styles = styleCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
             children: [
-              Icon(icon, color: AppTheme.textSecondary, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
+              Expanded(child: Text(label, style: _muted)),
+              Text(value,
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 12, height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
+        );
 
-  /// Left-aligned count in a column of the given [width], so every row's
-  /// icons line up regardless of how many digits the numbers have.
-  Widget _countText(String value, double width) {
-    return SizedBox(
-      width: width,
-      child: Text(
-        value,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-      ),
-    );
-  }
-
-  Widget _engagementRow({
-    required String name,
-    required int saved,
-    required int viewed,
-    required double savedWidth,
-    required double viewedWidth,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Text(
-            name,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Icon(Icons.favorite, color: Colors.pinkAccent.withValues(alpha: 0.8), size: 13),
-        const SizedBox(width: 4),
-        _countText('$saved', savedWidth),
-        const SizedBox(width: 8),
-        Icon(Icons.remove_red_eye_outlined,
-            color: AppTheme.textSecondary, size: 13),
-        const SizedBox(width: 4),
-        _countText('$viewed', viewedWidth),
-      ],
-    );
-  }
-
-  Widget _priceRow(String label, String value, {bool isLast = false}) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      child: Column(
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          luxeSection(
+            'CATALOG',
+            _figures([
+              ('Watches', '${docs.length}'),
+              ('Listed', '$listed'),
+              ('Drafts', '${docs.length - listed}'),
+              ('AR ready', '$arReady'),
+            ]),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
+          luxeSection(
+            'PRICING',
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(peso(total), style: AppTheme.serif(size: 34)),
+                const SizedBox(height: 2),
+                const Text('Total inventory value',
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                const SizedBox(height: 6),
+                row('Average price',
+                    peso(prices.isEmpty ? null : total / prices.length)),
+                row('Lowest price',
+                    peso(prices.isEmpty ? null : prices.reduce(min))),
+                row('Highest price',
+                    peso(prices.isEmpty ? null : prices.reduce(max))),
+              ],
             ),
           ),
+          luxeSection(
+            'STYLES',
+            Column(
+              children: [
+                for (final (i, e) in styles.indexed)
+                  Padding(
+                    padding: EdgeInsets.only(top: i == 0 ? 0 : 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(e.key,
+                                  style: const TextStyle(
+                                      color: AppTheme.textPrimary,
+                                      fontSize: 14)),
+                            ),
+                            Text(
+                                '${e.value}  ·  ${(e.value / docs.length * 100).round()}%',
+                                style: _muted),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: e.value / docs.length,
+                            minHeight: 3,
+                            backgroundColor: Colors.white12,
+                            valueColor:
+                                const AlwaysStoppedAnimation(AppTheme.gold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          luxeSection('ENGAGEMENT', _Engagement(docs)),
         ],
       ),
     );
   }
 }
 
-/// Full-page placeholder for the analytics screen: the four sections
-/// (overview, pricing, style breakdown, engagement) with the same headings,
-/// card surfaces and spacing as the real page.
-class _AnalyticsSkeleton extends StatelessWidget {
-  const _AnalyticsSkeleton();
+/// Saves and views per watch. Loaded separately from the watch list, and
+/// only re-fetched when the set of watches changes.
+class _Engagement extends StatefulWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
 
-  static Widget _card(Widget child) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: child,
-      );
+  const _Engagement(this.docs);
 
-  static Widget _title() => const Padding(
-        padding: EdgeInsets.only(bottom: 12),
-        child: SkeletonBox(width: 130, height: 15),
-      );
+  @override
+  State<_Engagement> createState() => _EngagementState();
+}
 
-  static Widget _statRow() => const Row(
+class _EngagementState extends State<_Engagement> {
+  late Future<EngagementStats> _stats = _load();
+
+  List<String> _ids(_Engagement w) => [for (final d in w.docs) d.id];
+
+  Future<EngagementStats> _load() =>
+      WatchService().fetchEngagementStats(_ids(widget));
+
+  @override
+  void didUpdateWidget(_Engagement oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(_ids(widget), _ids(oldWidget))) _stats = _load();
+  }
+
+  /// A watch's name with its saved and viewed columns, right-aligned.
+  Widget _line(Widget name, Widget saved, Widget viewed) => Row(
         children: [
-          Expanded(child: _StatCardSkeleton()),
-          SizedBox(width: 10),
-          Expanded(child: _StatCardSkeleton()),
+          Expanded(child: name),
+          for (final cell in [saved, viewed])
+            SizedBox(
+                width: 44,
+                child: Align(alignment: Alignment.centerRight, child: cell)),
         ],
       );
+
+  Widget _count(int n) => Text('$n', style: _muted);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<EngagementStats>(
+      future: _stats,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SkeletonBox(width: double.infinity, height: 120);
+        }
+        final stats = snapshot.data;
+        if (stats == null) {
+          return const Text('Could not load engagement data. Try again in a moment.',
+              style: _muted);
+        }
+        if (stats.totalSaves == 0 &&
+            stats.viewedCounts.values.every((v) => v == 0)) {
+          return const Text(
+              'No customer activity yet. Saves and views will appear here '
+              'once customers start engaging with your catalog.',
+              style: _muted);
+        }
+
+        final ranked = [...widget.docs]..sort((a, b) =>
+            (stats.savedCounts[b.id] ?? 0)
+                .compareTo(stats.savedCounts[a.id] ?? 0));
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _figures([
+              ('Total saves', '${stats.totalSaves}'),
+              ('Customers who saved', '${stats.uniqueSaverCount}'),
+            ], band: true),
+            const SizedBox(height: 20),
+            _line(
+              const SizedBox.shrink(),
+              const Icon(Icons.favorite_border,
+                  size: 15, color: AppTheme.textSecondary),
+              const Icon(Icons.visibility_outlined,
+                  size: 15, color: AppTheme.textSecondary),
+            ),
+            for (final d in ranked)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _line(
+                  Text(d.data()['name'] as String? ?? 'Unnamed watch',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary, fontSize: 13)),
+                  _count(stats.savedCounts[d.id] ?? 0),
+                  _count(stats.viewedCounts[d.id] ?? 0),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Placeholder with the real section labels and boxes where content goes.
+class _AnalyticsSkeleton extends StatelessWidget {
+  const _AnalyticsSkeleton();
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _title(),
-          _statRow(),
-          const SizedBox(height: 10),
-          _statRow(),
-          const SizedBox(height: 24),
-          _title(),
-          _card(
-            Column(
-              children: List.generate(
-                3,
-                (i) => Padding(
-                  padding: EdgeInsets.only(bottom: i == 2 ? 0 : 10),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      SkeletonBox(width: 90, height: 13),
-                      SkeletonBox(width: 70, height: 13),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          _title(),
-          _card(
-            Column(
-              children: List.generate(
-                3,
-                (i) => Padding(
-                  padding: EdgeInsets.only(bottom: i == 2 ? 0 : 14),
-                  child: const Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          SkeletonBox(width: 90, height: 13),
-                          SkeletonBox(width: 50, height: 12),
-                        ],
-                      ),
-                      SizedBox(height: 6),
-                      SkeletonBox(width: double.infinity, height: 6),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          _title(),
-          const _EngagementSkeleton(),
-        ],
-      ),
-    );
-  }
-}
-
-/// Placeholder for the "Customer Engagement" content: a pair of stat cards
-/// and a card of per-watch rows. Also used on its own while the engagement
-/// stats load after the rest of the page is already showing.
-class _EngagementSkeleton extends StatelessWidget {
-  const _EngagementSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Row(
-          children: [
-            Expanded(child: _StatCardSkeleton()),
-            SizedBox(width: 10),
-            Expanded(child: _StatCardSkeleton()),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: List.generate(
-              3,
-              (i) => Padding(
-                padding: EdgeInsets.only(bottom: i == 2 ? 0 : 12),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    SkeletonBox(width: 140, height: 13),
-                    SkeletonBox(width: 60, height: 12),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Placeholder for [MerchantAnalyticsTab._statCard]: icon, label and value.
-class _StatCardSkeleton extends StatelessWidget {
-  const _StatCardSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SkeletonBox(
-            width: 18,
-            height: 18,
-            borderRadius: BorderRadius.all(Radius.circular(9)),
-          ),
-          SizedBox(height: 8),
-          SkeletonBox(width: 70, height: 11),
-          SizedBox(height: 4),
-          SkeletonBox(width: 50, height: 16),
+          for (final (label, height) in const [
+            ('CATALOG', 44.0),
+            ('PRICING', 110.0),
+            ('STYLES', 90.0),
+          ])
+            luxeSection(
+                label, SkeletonBox(width: double.infinity, height: height)),
         ],
       ),
     );

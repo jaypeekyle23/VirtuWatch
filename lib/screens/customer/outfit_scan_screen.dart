@@ -8,6 +8,7 @@ import '../../services/cloudinary_service.dart';
 import '../../services/color_extraction_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/animated_icon_loader.dart';
+import '../../widgets/luxe.dart';
 
 class OutfitScanScreen extends StatefulWidget {
   const OutfitScanScreen({super.key});
@@ -168,14 +169,19 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final padding = MediaQuery.of(context).padding;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Outfit Color Scan'),
+        scrolledUnderElevation: 0,
+        title: Text('Outfit Scan', style: AppTheme.serif(size: 28)),
+        centerTitle: true,
         actions: [
           IconButton(
+            tooltip: 'How it works',
             icon: const Icon(Icons.help_outline),
             onPressed: () => _showHelpDialog(context),
           ),
@@ -188,37 +194,22 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
           // exists) fills the entire body.
           _buildCameraArea(),
 
-          // Step indicator, floating just below the (transparent) app bar.
+          // Step labels, floating just below the transparent app bar.
           Positioned(
-            top: MediaQuery.of(context).padding.top + kToolbarHeight + 12,
+            top: padding.top + kToolbarHeight + 8,
             left: 0,
             right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              color: Colors.black.withValues(alpha: 0.35),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _stepCircle('1', 'Aim Camera', active: _step == 1),
-                  _stepConnector(),
-                  _stepCircle('2', 'Analyze', active: _step == 2),
-                  _stepConnector(),
-                  _stepCircle('3', 'Results', active: _step == 3),
-                ],
-              ),
-            ),
+            child: _stepBar(),
           ),
 
-          // Bottom control panel, overlaid on the camera feed with a dark
-          // scrim behind it so it stays legible over live video.
+          // Bottom controls, over the camera feed with a dark scrim behind
+          // them so they stay legible over live video.
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: Container(
-              padding: EdgeInsets.fromLTRB(
-                  16, 16, 16, MediaQuery.of(context).padding.bottom + 10),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, padding.bottom + 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -234,52 +225,32 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (_results != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'LIVE COLOR EXTRACTION',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              for (var i = 0; i < _results!.length; i++) ...[
-                                if (i > 0) const SizedBox(width: 4),
-                                _colorBar(_results![i].color,
-                                    _results![i].percentage / 100),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              for (final r in _results!)
-                                Text('${r.percentage.round()}%',
-                                    style: const TextStyle(
-                                        color: AppTheme.textSecondary,
-                                        fontSize: 10)),
-                            ],
-                          ),
-                        ],
-                      ),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('DOMINANT COLORS', style: kLabelStyle),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        for (var i = 0; i < _results!.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 4),
+                          _colorBar(
+                              _results![i].color, _results![i].percentage / 100),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        for (final r in _results!)
+                          Text('${r.percentage.round()}%',
+                              style: const TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 11)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                   ],
-
                   if (_errorMessage != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -290,71 +261,24 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
                         textAlign: TextAlign.center,
                       ),
                     ),
-
-                  if (_step == 3)
-                    InkWell(
-                      onTap: _retake,
-                      borderRadius: BorderRadius.circular(32),
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: const BoxDecoration(
-                          color: AppTheme.gold,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.refresh,
-                            color: Color(0xFF0E1A2B), size: 28),
-                      ),
-                    )
-                  else
-                    InkWell(
-                      onTap: (_isAnalyzing || !_cameraReady)
-                          ? null
-                          : _captureFromCamera,
-                      borderRadius: BorderRadius.circular(32),
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: _isAnalyzing
-                              ? AppTheme.gold.withValues(alpha: 0.4)
-                              : AppTheme.gold,
-                          shape: BoxShape.circle,
-                        ),
-                        child: _isAnalyzing
-                            ? const Center(
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Color(0xFF0E1A2B),
-                                  ),
-                                ),
-                              )
-                            : const Icon(Icons.camera_alt_outlined,
-                                color: Color(0xFF0E1A2B), size: 28),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
+                  _shutter(),
+                  const SizedBox(height: 10),
                   Text(
                     _isAnalyzing
                         ? 'Analyzing your outfit...'
                         : _step == 3
                             ? 'Tap to scan again'
                             : 'Tap to capture outfit colors',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: AppTheme.textPrimary),
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary, fontSize: 13),
                   ),
                   if (_step != 3)
-                    TextButton(
-                      onPressed: _isAnalyzing ? null : _pickFromGallery,
-                      child: const Text(
-                        'or choose from gallery',
-                        style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 12),
+                    InkWell(
+                      onTap: _isAnalyzing ? null : _pickFromGallery,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Text('OR CHOOSE FROM GALLERY',
+                            style: kLabelStyle),
                       ),
                     ),
                 ],
@@ -366,8 +290,78 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
     );
   }
 
+  /// "AIM  ANALYZE  RESULTS", with the current step in white.
+  Widget _stepBar() {
+    const labels = ['AIM', 'ANALYZE', 'RESULTS'];
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      color: Colors.black.withValues(alpha: 0.35),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (var i = 0; i < labels.length; i++) ...[
+            if (i > 0)
+              Container(
+                width: 24,
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                color: Colors.white24,
+              ),
+            Text(
+              labels[i],
+              style: kLabelStyle.copyWith(
+                color: _step == i + 1 ? AppTheme.textPrimary : Colors.white54,
+                fontWeight:
+                    _step == i + 1 ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// The main button: a gold shutter while aiming, and a quiet outlined
+  /// "scan again" once results are showing.
+  Widget _shutter() {
+    final done = _step == 3;
+    return InkWell(
+      onTap: done
+          ? _retake
+          : (_isAnalyzing || !_cameraReady ? null : _captureFromCamera),
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: done
+              ? null
+              : (_isAnalyzing
+                  ? AppTheme.gold.withValues(alpha: 0.4)
+                  : AppTheme.gold),
+          border: done ? Border.all(color: Colors.white54, width: 1.5) : null,
+        ),
+        child: _isAnalyzing
+            ? const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppTheme.background),
+                ),
+              )
+            : Icon(
+                done ? Icons.refresh : Icons.camera_alt_outlined,
+                color: done ? AppTheme.textPrimary : AppTheme.background,
+                size: 28,
+              ),
+      ),
+    );
+  }
+
   Widget _buildCameraArea() {
-    // Once there's a captured photo — mid-analysis or showing results —
+    // Once there's a captured photo (mid-analysis or showing results),
     // freeze on that instead of the live feed.
     if (_selectedImage != null) {
       return Stack(
@@ -397,12 +391,12 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.videocam_off_outlined,
-                  size: 48, color: AppTheme.textSecondary),
-              const SizedBox(height: 12),
+              Text('Camera unavailable', style: AppTheme.serif(size: 26)),
+              const SizedBox(height: 8),
               Text(_cameraError!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.textSecondary)),
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
             ],
           ),
         ),
@@ -421,7 +415,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
 
     final previewSize = _cameraController!.value.previewSize!;
     // The sensor is natively landscape; displayed portrait width maps to
-    // previewSize.height and vice versa (same as WristMeasurementScreen).
+    // previewSize.height and vice versa.
     final targetAspect = previewSize.height / previewSize.width;
 
     return LayoutBuilder(
@@ -434,9 +428,8 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
         }
 
         // The framing guide: a tall rounded rectangle sized for a
-        // shoulders-to-waist outfit shot, not a small object like the
-        // wrist screen's reference-object box — outfits need much more
-        // of the frame.
+        // shoulders-to-waist outfit shot. Outfits need much more of the
+        // frame than a small object would.
         final guideWidth = displayedWidth * 0.62;
         final guideHeight = displayedHeight * 0.66;
 
@@ -457,7 +450,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
                         width: guideWidth,
                         height: guideHeight,
                         decoration: BoxDecoration(
-                          border: Border.all(color: AppTheme.gold, width: 2),
+                          border: Border.all(color: Colors.white70, width: 1.5),
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
@@ -488,54 +481,6 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
     );
   }
 
-  Widget _stepCircle(String number, String label, {required bool active}) {
-    return SizedBox(
-      width: 72,
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: active ? AppTheme.gold : AppTheme.surface,
-            child: Text(
-              number,
-              style: TextStyle(
-                color:
-                    active ? const Color(0xFF0E1A2B) : AppTheme.textSecondary,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 26,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: active ? AppTheme.gold : AppTheme.textSecondary,
-                fontSize: 9,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepConnector() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 13),
-      child: Container(
-        width: 24,
-        height: 1,
-        color: AppTheme.textSecondary.withValues(alpha: 0.3),
-      ),
-    );
-  }
-
   Widget _colorBar(Color color, double flexValue) {
     final flex = (flexValue * 100).round().clamp(1, 100);
     return Expanded(
@@ -545,6 +490,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.white24, width: 0.5),
         ),
       ),
     );
@@ -555,24 +501,23 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: const Text('How Outfit Color Scan Works',
-            style: TextStyle(color: AppTheme.textPrimary)),
+        title: Text('How it works', style: AppTheme.serif(size: 22)),
         content: const Text(
-          'VirtuWatch analyzes a photo of your outfit to identify its '
-          'dominant colors using a clustering technique (K-means-style '
-          'color extraction).\n\n'
-          'Fit your outfit inside the on-screen guide, in good lighting, '
-          'and the app detects the main tones you\'re wearing — then uses '
-          'those colors to recommend watches with cases, dials, or bands '
-          'that complement your look.\n\n'
+          'VirtuWatch analyzes a photo of your outfit to find its dominant '
+          'colors, using a clustering technique (K-means-style color '
+          'extraction).\n\n'
+          'Fit your outfit inside the on-screen guide, in good lighting. The '
+          'app detects the main tones you are wearing, then uses them to '
+          'recommend watches with cases, dials, or bands that complement '
+          'your look.\n\n'
           'Good, even lighting helps the scan work more accurately.',
-          style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
+          style: TextStyle(
+              color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child:
-                const Text('Got it', style: TextStyle(color: AppTheme.gold)),
+            child: const Text('Got it'),
           ),
         ],
       ),

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../services/cloudinary_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/luxe.dart';
 import '../widgets/network_photo.dart';
 
 class EditAccountNameScreen extends StatefulWidget {
@@ -96,88 +97,84 @@ class _EditAccountNameScreenState extends State<EditAccountNameScreen> {
 
   ImageProvider? get _avatarImage {
     if (_selectedImage != null) return FileImage(_selectedImage!);
-    if (_existingPhotoUrl.isNotEmpty) return NetworkPhoto.provider(_existingPhotoUrl);
+    if (_existingPhotoUrl.isNotEmpty) {
+      return NetworkPhoto.provider(_existingPhotoUrl);
+    }
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
+    final name = _nameController.text.trim();
+    final avatar = _avatarImage;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Profile')),
+      appBar: AppBar(
+        title: Text('Edit Profile', style: AppTheme.serif(size: 28)),
+        centerTitle: true,
+        scrolledUnderElevation: 0,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Center(
-                child: GestureDetector(
-                  onTap: _isUploadingImage ? null : _pickImage,
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: AppTheme.gold,
-                        backgroundImage: _avatarImage,
-                        child: _isUploadingImage
-                            ? const CircularProgressIndicator(
-                                color: Color(0xFF0E1A2B),
-                              )
-                            : (_selectedImage == null &&
-                                    _existingPhotoUrl.isEmpty)
-                                ? Text(
-                                    _nameController.text.isNotEmpty
-                                        ? _nameController.text.trim()[0]
-                                            .toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                      color: Color(0xFF0E1A2B),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 24,
-                                    ),
-                                  )
-                                : null,
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: AppTheme.surface,
+                      backgroundImage: avatar,
+                      child: _isUploadingImage
+                          ? const CircularProgressIndicator(strokeWidth: 2)
+                          : (avatar == null
+                              ? Text(name.isEmpty ? '?' : name[0].toUpperCase(),
+                                  style: AppTheme.serif(size: 28))
+                              : null),
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: _isUploadingImage ? null : _pickImage,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text('CHANGE PHOTO',
+                            style: kLabelStyle.copyWith(
+                                color: AppTheme.textPrimary)),
                       ),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: AppTheme.gold,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.camera_alt,
-                              size: 14, color: Color(0xFF0E1A2B)),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-
-              _fieldLabel('FULL NAME'),
-              TextFormField(
-                controller: _nameController,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(hintText: 'Enter your name'),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your name';
-                  }
-                  return null;
-                },
+              const SizedBox(height: 16),
+              luxeSection(
+                'FULL NAME',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _nameController,
+                      onChanged: (_) => setState(() {}),
+                      style: const TextStyle(fontSize: 15),
+                      decoration:
+                          luxeFieldDecoration(hint: 'Enter your name'),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                              ? 'Please enter your name'
+                              : null,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Your email address can't be changed here. Contact an "
+                      'administrator if you need to update it.',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Your email address can\'t be changed here. Contact an '
-                'administrator if you need to update it.',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              ),
-              const SizedBox(height: 24),
-
               if (_errorMessage != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
@@ -187,7 +184,6 @@ class _EditAccountNameScreenState extends State<EditAccountNameScreen> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleSave,
                 child: _isLoading
@@ -200,21 +196,6 @@ class _EditAccountNameScreenState extends State<EditAccountNameScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _fieldLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textSecondary,
-          letterSpacing: 0.5,
         ),
       ),
     );

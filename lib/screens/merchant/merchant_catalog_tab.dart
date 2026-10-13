@@ -1,13 +1,18 @@
+import 'dart:math' show max, min;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/catalog_filter_sheet.dart';
-import '../../widgets/skeleton_box.dart';
+import '../../widgets/delete_watch.dart';
+import '../../widgets/luxe.dart';
+import '../../widgets/watch_tile.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_edit_watch_screen.dart';
 import 'merchant_watch_detail_screen.dart';
-import '../../widgets/network_photo.dart';
+
+const _muted = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
 
 /// Which fields this watch is missing that the recommendation engine and
 /// chatbot actually rely on: gender (informational, but customer-facing
@@ -29,16 +34,6 @@ List<String> missingWatchFields(Map<String, dynamic> data) {
   return missing;
 }
 
-enum _SortOption {
-  newest('Newest'),
-  priceLowToHigh('Price: Low to High'),
-  priceHighToLow('Price: High to Low'),
-  nameAToZ('Name: A to Z');
-
-  final String label;
-  const _SortOption(this.label);
-}
-
 class MerchantCatalogTab extends StatefulWidget {
   const MerchantCatalogTab({super.key});
 
@@ -47,31 +42,26 @@ class MerchantCatalogTab extends StatefulWidget {
 }
 
 class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
+  static const _styleOptions = ['Classic', 'Sport', 'Luxury', 'Casual'];
+
   final _watchService = WatchService();
   final _searchController = TextEditingController();
 
-  String _searchQuery = '';
-  // Style/gender/AR/brand/price/listing-status all live in one shared
-  // CatalogFilters, set via the filter sheet — the same model and sheet
-  // the customer catalog uses, so merchants get the identical set of
-  // filters rather than a hand-maintained subset.
-  CatalogFilters _filters = const CatalogFilters();
-  // "Needs Info" stays a separate toggle rather than folding into
-  // CatalogFilters — it's a merchant/admin data-completeness tool, not a
-  // catalog-browsing filter a customer would ever have a use for, so it
-  // doesn't belong in the model shared with the customer screen.
-  bool _needsInfoOnly = false;
-  _SortOption _sortOption = _SortOption.newest;
-  // Multi-column grid is the default; the toggle in the app bar lets the
-  // merchant switch to the original single-column list instead.
-  bool _isMultiColumn = true;
+  // Created once, so rebuilds don't re-subscribe and swap the list for
+  // loading placeholders.
+  late final _watches = _watchService.myWatches();
 
-  static const List<String> _styleOptions = [
-    'Classic',
-    'Sport',
-    'Luxury',
-    'Casual',
-  ];
+  // Keeps photo Hero tags unique to this copy of the screen, so photos
+  // never fly between it and another copy of the catalog.
+  late final _heroScope = 'merchant-catalog-$hashCode';
+
+  String _searchQuery = '';
+  CatalogFilters _filters = const CatalogFilters();
+  CatalogSort _sort = CatalogSort.newest;
+  // "Needs info" is a merchant-only data-completeness tool, not a catalog
+  // filter a customer would use, so it stays out of the shared CatalogFilters.
+  bool _needsInfoOnly = false;
+  bool _isMultiColumn = true;
 
   @override
   void dispose() {
@@ -79,95 +69,41 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
     super.dispose();
   }
 
+  void _open(Widget screen) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _watchService.myWatches(),
+      stream: _watches,
       builder: (context, snapshot) {
-        final allDocs = snapshot.data?.docs ?? [];
-
-        final brandOptions = allDocs
-            .map((d) => d.data()['brand'] as String? ?? '')
-            .where((b) => b.isNotEmpty)
-            .toSet()
-            .toList()
+        final allDocs = snapshot.data?.docs ?? <WatchDoc>[];
+        final brands = {
+          for (final d in allDocs)
+            if ((d.data()['brand'] as String? ?? '').isNotEmpty)
+              d.data()['brand'] as String,
+        }.toList()
           ..sort();
-        final prices = allDocs
-            .map((d) => (d.data()['price'] as num?)?.toDouble())
-            .whereType<double>()
-            .toList();
-        final priceFloor =
-            prices.isEmpty ? 0.0 : prices.reduce((a, b) => a < b ? a : b);
-        final priceCeiling =
-            prices.isEmpty ? 0.0 : prices.reduce((a, b) => a > b ? a : b);
-
-        // Computed from the FULL unfiltered set, so the banner always
-        // reflects the whole catalog regardless of which filters are
-        // currently applied.
-        final incompleteCount = allDocs
+        final prices = [
+          for (final d in allDocs)
+            if (d.data()['price'] is num) (d.data()['price'] as num).toDouble(),
+        ];
+        // Counted over the whole catalog, whatever filters are applied.
+        final incomplete = allDocs
             .where((d) => missingWatchFields(d.data()).isNotEmpty)
             .length;
-
-        var docs = allDocs;
-
-        if (_needsInfoOnly) {
-          docs = docs
-              .where((d) => missingWatchFields(d.data()).isNotEmpty)
-              .toList();
-        }
-        if (_filters.style != 'All') {
-          docs = docs
-              .where((d) => d.data()['styleCategory'] == _filters.style)
-              .toList();
-        }
-        if (_filters.brand != 'All') {
-          docs =
-              docs.where((d) => d.data()['brand'] == _filters.brand).toList();
-        }
-        if (_filters.gender != 'All') {
-          docs = docs
-              .where((d) => d.data()['targetGender'] == _filters.gender)
-              .toList();
-        }
-        if (_filters.arOnly) {
-          docs = docs
-              .where((d) => d.data()['has3DModel'] as bool? ?? false)
-              .toList();
-        }
-        if (_filters.listingStatus != 'All') {
-          final wantListed = _filters.listingStatus == 'Active';
-          docs = docs
-              .where((d) =>
-                  (d.data()['listedInCatalog'] as bool? ?? false) ==
-                  wantListed)
-              .toList();
-        }
-        if (_filters.priceRange != null) {
-          final range = _filters.priceRange!;
-          docs = docs.where((d) {
-            final price = (d.data()['price'] as num?)?.toDouble();
-            if (price == null) return false;
-            return price >= range.start && price <= range.end;
-          }).toList();
-        }
-        if (_searchQuery.isNotEmpty) {
-          docs = docs.where((d) {
-            final data = d.data();
-            final name = (data['name'] as String? ?? '').toLowerCase();
-            final brand = (data['brand'] as String? ?? '').toLowerCase();
-            final style =
-                (data['styleCategory'] as String? ?? '').toLowerCase();
-            return name.contains(_searchQuery) ||
-                brand.contains(_searchQuery) ||
-                style.contains(_searchQuery);
-          }).toList();
-        }
-
-        docs = _applySort(docs);
+        final docs = sortWatchDocs(allDocs.where(_matches).toList(), _sort);
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('My Catalog'),
+            title: Text('My Catalog', style: AppTheme.serif(size: 28)),
             actions: [
               CatalogFilterButton(
                 activeCount: _filters.activeCount,
@@ -176,9 +112,9 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
                     context,
                     initial: _filters,
                     styleOptions: _styleOptions,
-                    brandOptions: brandOptions,
-                    priceFloor: priceFloor,
-                    priceCeiling: priceCeiling,
+                    brandOptions: brands,
+                    priceFloor: prices.isEmpty ? 0.0 : prices.reduce(min),
+                    priceCeiling: prices.isEmpty ? 0.0 : prices.reduce(max),
                     showGenderFilter: true,
                     showArFilter: true,
                     showListingStatusFilter: true,
@@ -195,188 +131,26 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
                 onPressed: () =>
                     setState(() => _isMultiColumn = !_isMultiColumn),
               ),
-              PopupMenuButton<_SortOption>(
-                icon: const Icon(Icons.sort),
-                color: AppTheme.surface,
-                initialValue: _sortOption,
-                onSelected: (option) => setState(() => _sortOption = option),
-                itemBuilder: (context) => _SortOption.values.map((option) {
-                  final isSelected = option == _sortOption;
-                  return PopupMenuItem(
-                    value: option,
-                    child: Row(
-                      children: [
-                        if (isSelected)
-                          const Icon(Icons.check, color: AppTheme.gold, size: 18)
-                        else
-                          const SizedBox(width: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          option.label,
-                          style: TextStyle(
-                            color: isSelected
-                                ? AppTheme.gold
-                                : AppTheme.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
+              CatalogSortButton(
+                selected: _sort,
+                onSelected: (sort) => setState(() => _sort = sort),
               ),
               IconButton(
                 icon: const Icon(Icons.add),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const MerchantAddWatchScreen(),
-                    ),
-                  );
-                },
+                tooltip: 'Add watch',
+                onPressed: () => _open(const MerchantAddWatchScreen()),
               ),
             ],
           ),
           body: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search by name, brand, or style...',
-                    prefixIcon:
-                        const Icon(Icons.search, color: AppTheme.textSecondary),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close, size: 18),
-                            color: AppTheme.textSecondary,
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (value) {
-                    setState(() => _searchQuery = value.toLowerCase());
-                  },
-                ),
+              CatalogSearchField(
+                controller: _searchController,
+                onChanged: (value) =>
+                    setState(() => _searchQuery = value.toLowerCase()),
               ),
-              if (incompleteCount > 0)
-                _NeedsInfoBanner(
-                  count: incompleteCount,
-                  isActive: _needsInfoOnly,
-                  onToggle: () =>
-                      setState(() => _needsInfoOnly = !_needsInfoOnly),
-                ),
-              Expanded(
-                child: Builder(builder: (context) {
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text(
-                        'Error loading catalog: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.redAccent),
-                      ),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    // Matches whichever view (grid or list) is active, so
-                    // the layout doesn't change shape when data arrives.
-                    return _isMultiColumn
-                        ? const _CatalogGridSkeleton()
-                        : const _CatalogListSkeleton();
-                  }
-                  if (docs.isEmpty) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.watch_outlined,
-                                size: 48, color: AppTheme.textSecondary),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchQuery.isEmpty && _filters.isDefault && !_needsInfoOnly
-                                  ? 'No watches yet. Tap + to add your first one.'
-                                  : 'No watches match your search or filters.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  if (_isMultiColumn) {
-                    // Built row-by-row instead of GridView + a fixed
-                    // childAspectRatio: a hardcoded ratio has to guess a
-                    // worst-case cell height for the narrowest phone this
-                    // app supports, which leaves leftover blank space
-                    // under every card on a normal-width phone. Since
-                    // _WatchGridCard already sizes itself to exactly what
-                    // its content needs (mainAxisSize.min throughout),
-                    // putting two cards in a Row and letting the Row size
-                    // itself to them gives every row its exact natural
-                    // height, on any screen width, with no guessing and
-                    // no leftover space.
-                    final rowCount = (docs.length / 2).ceil();
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.only(bottom: 16, top: 4),
-                        itemCount: rowCount,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (context, rowIndex) {
-                          final firstIndex = rowIndex * 2;
-                          final secondIndex = firstIndex + 1;
-                          final firstDoc = docs[firstIndex];
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _WatchGridCard(
-                                  watchId: firstDoc.id,
-                                  data: firstDoc.data(),
-                                  watchService: _watchService,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: secondIndex < docs.length
-                                    ? _WatchGridCard(
-                                        watchId: docs[secondIndex].id,
-                                        data: docs[secondIndex].data(),
-                                        watchService: _watchService,
-                                      )
-                                    : const SizedBox.shrink(),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    );
-                  }
-
-                  return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                    itemCount: docs.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final doc = docs[index];
-                      final data = doc.data();
-                      return _WatchListTile(
-                        watchId: doc.id,
-                        data: data,
-                        watchService: _watchService,
-                      );
-                    },
-                  );
-                }),
-              ),
+              if (incomplete > 0) _needsInfoBar(incomplete),
+              Expanded(child: _body(snapshot, docs)),
             ],
           ),
         );
@@ -384,851 +158,203 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
     );
   }
 
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _applySort(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-    final sorted = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
-
-    switch (_sortOption) {
-      case _SortOption.priceLowToHigh:
-        sorted.sort((a, b) {
-          final priceA = (a.data()['price'] as num?) ?? 0;
-          final priceB = (b.data()['price'] as num?) ?? 0;
-          return priceA.compareTo(priceB);
-        });
-        break;
-      case _SortOption.priceHighToLow:
-        sorted.sort((a, b) {
-          final priceA = (a.data()['price'] as num?) ?? 0;
-          final priceB = (b.data()['price'] as num?) ?? 0;
-          return priceB.compareTo(priceA);
-        });
-        break;
-      case _SortOption.nameAToZ:
-        sorted.sort((a, b) {
-          final nameA = (a.data()['name'] as String? ?? '').toLowerCase();
-          final nameB = (b.data()['name'] as String? ?? '').toLowerCase();
-          return nameA.compareTo(nameB);
-        });
-        break;
-      case _SortOption.newest:
-        sorted.sort((a, b) {
-          final createdA = a.data()['createdAt'] as Timestamp?;
-          final createdB = b.data()['createdAt'] as Timestamp?;
-          if (createdA == null && createdB == null) return 0;
-          if (createdA == null) return 1;
-          if (createdB == null) return -1;
-          return createdB.compareTo(createdA);
-        });
-        break;
+  Widget _body(AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+      List<WatchDoc> docs) {
+    if (snapshot.hasError) {
+      return Center(
+        child: Text(
+          'Error loading catalog: ${snapshot.error}',
+          style: const TextStyle(color: Colors.redAccent),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    final loading =
+        snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
+    if (!loading && docs.isEmpty) {
+      final unfiltered =
+          _filters.isDefault && _searchQuery.isEmpty && !_needsInfoOnly;
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            unfiltered
+                ? 'No watches yet. Tap + to add your first one.'
+                : 'No watches match your search or filters.',
+            style: _muted,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
     }
 
-    return sorted;
+    // Placeholders match the active view, so the layout doesn't change
+    // shape when the data arrives.
+    final List<Widget> tiles = loading
+        ? [
+            for (var i = 0; i < 6; i++)
+              _isMultiColumn
+                  ? const WatchTileSkeleton(showPrice: true, showFooter: true)
+                  : const WatchListTileSkeleton(showFooter: true),
+          ]
+        : [for (final doc in docs) _tile(doc)];
+
+    return ListView(
+      physics: loading ? const NeverScrollableScrollPhysics() : null,
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+      children: _isMultiColumn
+          ? watchGridRows(tiles)
+          : [
+              for (final tile in tiles)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 12), child: tile),
+            ],
+    );
   }
-}
 
-/// Summary bar above the catalog grid/list, shown only when at least one
-/// of the merchant's watches is missing gender, color, or lug-to-lug data
-/// (see [missingWatchFields]). Tapping it toggles between showing only
-/// the incomplete watches and showing everything — this exists so a
-/// merchant with a large catalog can find the gaps without opening every
-/// watch one by one.
-class _NeedsInfoBanner extends StatelessWidget {
-  final int count;
-  final bool isActive;
-  final VoidCallback onToggle;
+  Widget _tile(WatchDoc doc) {
+    final id = doc.id;
+    final data = doc.data();
+    void open(String heroTag) => _open(
+        MerchantWatchDetailScreen(watchId: id, data: data, heroTag: heroTag));
+    final footer = _footer(id, data);
 
-  const _NeedsInfoBanner({
-    required this.count,
-    required this.isActive,
-    required this.onToggle,
-  });
+    return _isMultiColumn
+        ? WatchTile(
+            watchId: id,
+            data: data,
+            heroScope: _heroScope,
+            showPrice: true,
+            onTap: open,
+            footer: footer)
+        : WatchListTile(
+            watchId: id,
+            data: data,
+            heroScope: _heroScope,
+            onTap: open,
+            footer: footer);
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onToggle,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.orangeAccent.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.orangeAccent, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isActive
-                    ? 'Showing ${count == 1 ? '1 watch' : '$count watches'} needing gender, color, or fit data.'
-                    : '${count == 1 ? '1 watch is' : '$count watches are'} missing gender, color, or fit data.',
-                style: const TextStyle(
-                  color: Colors.orangeAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+  /// Listing status, a flag when key data is missing, and the actions menu.
+  Widget _footer(String id, Map<String, dynamic> data) {
+    final listed = data['listedInCatalog'] as bool? ?? false;
+    final missing = missingWatchFields(data);
+
+    PopupMenuItem<String> item(String value, String label, {Color? color}) =>
+        PopupMenuItem(
+          value: value,
+          child: Text(label,
+              style: TextStyle(
+                  color: color ?? AppTheme.textPrimary, fontSize: 14)),
+        );
+
+    return SizedBox(
+      height: 28,
+      child: Row(
+        children: [
+          Text(listed ? 'LISTED' : 'DRAFT',
+              style: kLabelStyle.copyWith(
+                  color:
+                      listed ? AppTheme.textPrimary : AppTheme.textSecondary)),
+          if (missing.isNotEmpty)
+            Tooltip(
+              message: 'Missing: ${missing.join(', ')}',
+              child: const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: Icon(Icons.error_outline,
+                    size: 14, color: Colors.orangeAccent),
               ),
             ),
-            Text(
-              isActive ? 'Show all' : 'Review',
-              style: const TextStyle(
-                color: Colors.orangeAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
+          const Spacer(),
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz,
+                  size: 18, color: AppTheme.textSecondary),
+              padding: EdgeInsets.zero,
+              color: AppTheme.surface,
+              onSelected: (action) {
+                switch (action) {
+                  case 'edit':
+                    _open(MerchantEditWatchScreen(watchId: id, data: data));
+                  case 'toggle':
+                    _toggleListed(id, data);
+                  default:
+                    _confirmDelete(id, data);
+                }
+              },
+              itemBuilder: (context) => [
+                item('edit', 'Edit'),
+                item('toggle', listed ? 'Unlist' : 'List in catalog'),
+                item('delete', 'Delete', color: Colors.redAccent),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-}
 
-class _WatchListTile extends StatelessWidget {
-  final String watchId;
-  final Map<String, dynamic> data;
-  final WatchService watchService;
-
-  const _WatchListTile({
-    required this.watchId,
-    required this.data,
-    required this.watchService,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final name = data['name'] as String? ?? 'Unnamed Watch';
-    final brand = data['brand'] as String? ?? '';
-    final price = data['price'];
-    final listed = data['listedInCatalog'] as bool? ?? false;
-    final has3D = data['has3DModel'] as bool? ?? false;
-    final missing = missingWatchFields(data);
-    final imageUrl = data['imageUrl'] as String? ?? '';
-
-    return InkWell(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => MerchantWatchDetailScreen(
-              watchId: watchId,
-              data: data,
-              heroTag: 'merchant-list-photo-$watchId',
-            ),
+  /// Strip under the search field. Shown only while some watch is missing
+  /// gender, color or lug-to-lug data (see [missingWatchFields]); tapping it
+  /// toggles between those watches and everything, so a large catalog's gaps
+  /// can be found without opening every watch.
+  Widget _needsInfoBar(int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: InkWell(
+        onTap: () => setState(() => _needsInfoOnly = !_needsInfoOnly),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: const BoxDecoration(
+            border: Border.symmetric(
+                horizontal: BorderSide(color: AppTheme.hairline)),
           ),
-        );
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          child: Row(
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: AppTheme.background,
-                  borderRadius: BorderRadius.circular(10),
+              Expanded(
+                child: Text(
+                  '${count == 1 ? '1 watch is' : '$count watches are'} '
+                  'missing gender, color or fit data.',
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: imageUrl.isNotEmpty
-                    ? Hero(
-                        tag: 'merchant-list-photo-$watchId',
-                        child: NetworkPhoto(
-                          url: imageUrl,
-                          errorWidget: const Icon(Icons.watch, color: AppTheme.gold, size: 36),
-                        ),
-                      )
-                    : const Icon(Icons.watch, color: AppTheme.gold, size: 36),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      brand.isNotEmpty ? '$brand $name' : name,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _statusChip(listed ? 'ACTIVE' : 'DRAFT',
-                            listed ? Colors.greenAccent : AppTheme.textSecondary),
-                        _statusChip(has3D ? 'AR' : 'NO 3D',
-                            has3D ? AppTheme.gold : AppTheme.textSecondary),
-                        if (missing.isNotEmpty)
-                          Tooltip(
-                            message: 'Missing: ${missing.join(', ')}',
-                            child: _statusChip(
-                                'NEEDS INFO', Colors.orangeAccent),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Transform.scale(
-                scale: 0.8,
-                child: Switch(
-                  value: listed,
-                  activeThumbColor: AppTheme.gold,
-                  onChanged: (value) => _handleToggleListed(context, value),
-                ),
-              ),
+              Text(_needsInfoOnly ? 'SHOW ALL' : 'REVIEW',
+                  style: kLabelStyle.copyWith(color: AppTheme.textPrimary)),
             ],
           ),
-          const SizedBox(height: 10),
-          Divider(color: AppTheme.background, height: 1),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              if (price != null)
-                Text(
-                  'PHP $price',
-                  style: const TextStyle(
-                    color: AppTheme.gold,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                )
-              else
-                const SizedBox(),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    color: AppTheme.textSecondary,
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => MerchantEditWatchScreen(
-                            watchId: watchId,
-                            data: data,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20),
-                    color: Colors.redAccent,
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => _confirmDelete(context),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
       ),
     );
   }
 
-  Future<void> _handleToggleListed(BuildContext context, bool value) async {
+  bool _matches(WatchDoc doc) {
+    final data = doc.data();
+    if (!_filters.matches(data)) return false;
+    if (_needsInfoOnly && missingWatchFields(data).isEmpty) return false;
+    if (_searchQuery.isEmpty) return true;
+    return ['name', 'brand', 'styleCategory'].any((key) =>
+        (data[key] as String? ?? '').toLowerCase().contains(_searchQuery));
+  }
+
+  Future<void> _toggleListed(String id, Map<String, dynamic> data) async {
+    final listed = !(data['listedInCatalog'] as bool? ?? false);
     try {
-      await watchService.updateWatch(watchId, {'listedInCatalog': value});
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              value
-                  ? '"${data['name']}" is now listed in the catalog.'
-                  : '"${data['name']}" was unlisted from the catalog.',
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      await _watchService.updateWatch(id, {'listedInCatalog': listed});
+      _snack(listed
+          ? '"${data['name']}" is now listed in the catalog.'
+          : '"${data['name']}" was unlisted from the catalog.');
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update listing: $e')),
-        );
-      }
+      _snack('Could not update listing: $e');
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Delete Watch?',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: Text(
-          'This will permanently remove "${data['name']}" from your catalog.',
-          style: const TextStyle(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await watchService.deleteWatch(
-        watchId,
-        watchLabel: data['name'] as String? ?? watchId,
-      );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Watch deleted.')),
-        );
-      }
-    }
-  }
-
-  Widget _statusChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-/// Compact grid-cell version of the watch tile, shown when the catalog's
-/// view toggle is set to grid mode (the default). Keeps the same listed
-/// switch and edit/delete actions as the single-column list tile.
-class _WatchGridCard extends StatelessWidget {
-  final String watchId;
-  final Map<String, dynamic> data;
-  final WatchService watchService;
-
-  const _WatchGridCard({
-    required this.watchId,
-    required this.data,
-    required this.watchService,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final name = data['name'] as String? ?? 'Unnamed Watch';
-    final brand = data['brand'] as String? ?? '';
-    final price = data['price'];
-    final listed = data['listedInCatalog'] as bool? ?? false;
-    final has3D = data['has3DModel'] as bool? ?? false;
-    final missing = missingWatchFields(data);
-    final imageUrl = data['imageUrl'] as String? ?? '';
-
-    return InkWell(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => MerchantWatchDetailScreen(
-              watchId: watchId,
-              data: data,
-              heroTag: 'merchant-grid-photo-$watchId',
-            ),
-          ),
-        );
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 1.3,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: Container(
-                color: AppTheme.background,
-                child: imageUrl.isNotEmpty
-                    ? Hero(
-                        tag: 'merchant-grid-photo-$watchId',
-                        child: NetworkPhoto(
-                          url: imageUrl,
-                          errorWidget: const Center(child: Icon(Icons.watch, size: 32, color: AppTheme.gold)),
-                        ),
-                      )
-                    : const Center(
-                        child: Icon(Icons.watch, size: 32, color: AppTheme.gold),
-                      ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Fixed-height box sized for 2 lines, so a short name
-                // doesn't leave this card shorter than its neighbors.
-                SizedBox(
-                  height: 36,
-                  child: Text(
-                    brand.isNotEmpty ? '$brand $name' : name,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // Fixed-height box sized for 2 rows of chips: with
-                // "Needs Info" showing, 3 chips can wrap to a second row
-                // on a narrow card, while watches without that chip only
-                // need 1 row. Reserving space for the taller case keeps
-                // every card the same height regardless of chip count.
-                SizedBox(
-                  height: 36,
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: [
-                      _statusChip(listed ? 'ACTIVE' : 'DRAFT',
-                          listed ? Colors.greenAccent : AppTheme.textSecondary),
-                      _statusChip(has3D ? 'AR' : 'NO 3D',
-                          has3D ? AppTheme.gold : AppTheme.textSecondary),
-                      if (missing.isNotEmpty)
-                        Tooltip(
-                          message: 'Missing: ${missing.join(', ')}',
-                          child: _statusChip('NEEDS INFO', Colors.orangeAccent),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                SizedBox(
-                  height: 18,
-                  child: price != null
-                      ? Text(
-                          'PHP $price',
-                          style: const TextStyle(
-                            color: AppTheme.gold,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Transform.scale(
-                      scale: 0.75,
-                      alignment: Alignment.centerLeft,
-                      child: Switch(
-                        value: listed,
-                        activeThumbColor: AppTheme.gold,
-                        onChanged: (value) => _handleToggleListed(context, value),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          color: AppTheme.textSecondary,
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MerchantEditWatchScreen(
-                                  watchId: watchId,
-                                  data: data,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 18),
-                          color: Colors.redAccent,
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                          onPressed: () => _confirmDelete(context),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      ),
-    );
-  }
-
-  Future<void> _handleToggleListed(BuildContext context, bool value) async {
-    try {
-      await watchService.updateWatch(watchId, {'listedInCatalog': value});
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              value
-                  ? '"${data['name']}" is now listed in the catalog.'
-                  : '"${data['name']}" was unlisted from the catalog.',
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update listing: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Delete Watch?',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: Text(
-          'This will permanently remove "${data['name']}" from your catalog.',
-          style: const TextStyle(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await watchService.deleteWatch(
-        watchId,
-        watchLabel: data['name'] as String? ?? watchId,
-      );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Watch deleted.')),
-        );
-      }
-    }
-  }
-
-  Widget _statusChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
-/// Loading placeholder for the merchant catalog's grid view: [rows] rows
-/// of two [_WatchGridCardSkeleton]s, with the same padding and spacing as
-/// the real grid built in [_MerchantCatalogTabState.build].
-class _CatalogGridSkeleton extends StatelessWidget {
-  static const int rows = 3;
-
-  const _CatalogGridSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: ListView.separated(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 16, top: 4),
-        itemCount: rows,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _WatchGridCardSkeleton()),
-            SizedBox(width: 12),
-            Expanded(child: _WatchGridCardSkeleton()),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Loading placeholder for the merchant catalog's list view: [count] rows
-/// shaped like [_WatchListTile].
-class _CatalogListSkeleton extends StatelessWidget {
-  static const int count = 5;
-
-  const _CatalogListSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      itemCount: count,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
-      itemBuilder: (context, index) => const _WatchListTileSkeleton(),
-    );
-  }
-}
-
-/// Placeholder for [_WatchGridCard], mirroring its layout: a 1.3-ratio
-/// photo, a 2-line name, a row of status chips, the price, and the
-/// switch / edit / delete row, at the same fixed heights.
-class _WatchGridCardSkeleton extends StatelessWidget {
-  const _WatchGridCardSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const AspectRatio(
-            aspectRatio: 1.3,
-            child: SkeletonBox(
-              width: double.infinity,
-              height: double.infinity,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                SizedBox(
-                  height: 36,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SkeletonBox(width: 110, height: 13),
-                      SizedBox(height: 6),
-                      SkeletonBox(width: 70, height: 13),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 4),
-                SizedBox(
-                  height: 36,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SkeletonBox(
-                        width: 44,
-                        height: 18,
-                        borderRadius: BorderRadius.all(Radius.circular(9)),
-                      ),
-                      SizedBox(width: 4),
-                      SkeletonBox(
-                        width: 36,
-                        height: 18,
-                        borderRadius: BorderRadius.all(Radius.circular(9)),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 6),
-                SizedBox(
-                  height: 18,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: SkeletonBox(width: 76, height: 14),
-                  ),
-                ),
-                SizedBox(height: 2),
-                SizedBox(
-                  height: 44,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      SkeletonBox(
-                        width: 36,
-                        height: 20,
-                        borderRadius: BorderRadius.all(Radius.circular(10)),
-                      ),
-                      Row(
-                        children: [
-                          SkeletonBox(
-                            width: 20,
-                            height: 20,
-                            borderRadius: BorderRadius.all(Radius.circular(10)),
-                          ),
-                          SizedBox(width: 8),
-                          SkeletonBox(
-                            width: 20,
-                            height: 20,
-                            borderRadius: BorderRadius.all(Radius.circular(10)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Placeholder for [_WatchListTile]: photo, name, status chips and
-/// listing switch on top, then a divider and the price / edit / delete row,
-/// inside the same padded, rounded surface as the real row.
-class _WatchListTileSkeleton extends StatelessWidget {
-  const _WatchListTileSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SkeletonBox(
-                width: 72,
-                height: 72,
-                borderRadius: BorderRadius.all(Radius.circular(10)),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SkeletonBox(width: 150, height: 14),
-                    SizedBox(height: 6),
-                    SkeletonBox(width: 100, height: 14),
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        SkeletonBox(
-                          width: 46,
-                          height: 18,
-                          borderRadius: BorderRadius.all(Radius.circular(9)),
-                        ),
-                        SizedBox(width: 6),
-                        SkeletonBox(
-                          width: 38,
-                          height: 18,
-                          borderRadius: BorderRadius.all(Radius.circular(9)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: 8),
-              SkeletonBox(
-                width: 36,
-                height: 20,
-                borderRadius: BorderRadius.all(Radius.circular(10)),
-              ),
-            ],
-          ),
-          SizedBox(height: 10),
-          Divider(color: AppTheme.background, height: 1),
-          SizedBox(height: 10),
-          SizedBox(
-            height: 40,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                SkeletonBox(width: 80, height: 14),
-                Row(
-                  children: [
-                    SkeletonBox(
-                      width: 22,
-                      height: 22,
-                      borderRadius: BorderRadius.all(Radius.circular(11)),
-                    ),
-                    SizedBox(width: 14),
-                    SkeletonBox(
-                      width: 22,
-                      height: 22,
-                      borderRadius: BorderRadius.all(Radius.circular(11)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDelete(String id, Map<String, dynamic> data) async {
+    final deleted = await confirmDeleteWatch(context,
+        watchId: id, name: data['name'] as String? ?? id);
+    if (deleted) _snack('Watch deleted.');
   }
 }

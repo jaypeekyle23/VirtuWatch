@@ -19,7 +19,10 @@ class _AdminShellState extends State<AdminShell> {
   @override
   Widget build(BuildContext context) {
     final tabs = [
-      AdminDashboardTab(username: widget.username),
+      AdminDashboardTab(
+        username: widget.username,
+        onSelectTab: (i) => setState(() => _currentIndex = i),
+      ),
       const AdminWatchManagementTab(),
       const AdminAccountManagementScreen(),
       const AdminProfileTab(),

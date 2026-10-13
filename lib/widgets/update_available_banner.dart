@@ -41,71 +41,59 @@ class _UpdateAvailableBannerState extends State<UpdateAvailableBanner> {
         }
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const UpdateScreen()),
-                );
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.gold.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppTheme.gold.withValues(alpha: 0.4),
-                  ),
+          padding: const EdgeInsets.only(bottom: 24),
+          child: InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const UpdateScreen()),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: const BoxDecoration(
+                border: Border.symmetric(
+                  horizontal: BorderSide(color: AppTheme.hairline),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.system_update_alt,
-                      color: AppTheme.gold,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Update available — v${result.latestVersion}',
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Update available · v${result.latestVersion}',
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
                           ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Go to Updates to download and install.',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () => setState(() => _dismissed = true),
-                      child: const Padding(
-                        padding: EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.close,
-                          color: AppTheme.textSecondary,
-                          size: 18,
                         ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Tap to download and install.',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => setState(() => _dismissed = true),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close,
+                        color: AppTheme.textSecondary,
+                        size: 18,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

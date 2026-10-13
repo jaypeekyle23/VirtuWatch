@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/luxe.dart';
 import 'register_screen.dart';
 import 'verify_email_screen.dart';
 import 'forgot_password_screen.dart';
@@ -35,6 +35,23 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Opens the right home screen for the signed-in user's role. Shared by
+  /// email and Google sign-in.
+  void _goToHome(Map<String, dynamic> profile) {
+    final role = profile['role'] as String? ?? 'customer';
+    final username = profile['username'] as String? ?? 'User';
+
+    final Widget destination = switch (role) {
+      'admin' => AdminShell(username: username),
+      'merchant' => MerchantShell(username: username),
+      _ => CustomerShell(username: username),
+    };
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => destination),
+    );
+  }
+
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -49,28 +66,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
-
       if (profile == null || !mounted) return;
-
-      final role = profile['role'] as String? ?? 'customer';
-      final username = profile['username'] as String? ?? 'User';
-
-      Widget destination;
-
-      switch (role) {
-        case 'admin':
-          destination = AdminShell(username: username);
-          break;
-        case 'merchant':
-          destination = MerchantShell(username: username);
-          break;
-        default:
-          destination = CustomerShell(username: username);
-      }
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => destination),
-      );
+      _goToHome(profile);
     } catch (e) {
       if (e.toString() == 'EMAIL_NOT_VERIFIED') {
         setState(() {
@@ -79,16 +76,10 @@ class _LoginScreenState extends State<LoginScreen> {
           _showResendVerification = true;
         });
       } else {
-        setState(() {
-          _errorMessage = e.toString();
-        });
+        setState(() => _errorMessage = e.toString());
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -112,13 +103,9 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-      });
+      setState(() => _errorMessage = e.toString());
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -143,38 +130,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final profile = await _authService.signInWithGoogle();
-
       if (profile == null || !mounted) return;
-
-      final role = profile['role'] as String? ?? 'customer';
-      final username = profile['username'] as String? ?? 'User';
-
-      Widget destination;
-
-      switch (role) {
-        case 'admin':
-          destination = AdminShell(username: username);
-          break;
-        case 'merchant':
-          destination = MerchantShell(username: username);
-          break;
-        default:
-          destination = CustomerShell(username: username);
-      }
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => destination),
-      );
+      _goToHome(profile);
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-      });
+      setState(() => _errorMessage = e.toString());
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -222,96 +183,69 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const SizedBox(height: 0),
-
-                              Text(
-                                'Welcome Back.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineMedium,
-                              ),
-
+                              Text('Welcome back',
+                                  style: AppTheme.serif(size: 36)),
                               const SizedBox(height: 6),
-
-                              Text(
+                              const Text(
                                 'Sign in to your account',
-                                style: Theme.of(context).textTheme.bodyMedium,
+                                style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 13),
                               ),
-
                               const SizedBox(height: 32),
 
-                              _fieldLabel('EMAIL ADDRESS'),
-
+                              const Text('EMAIL ADDRESS', style: kLabelStyle),
                               TextFormField(
                                 controller: _emailController,
                                 keyboardType: TextInputType.emailAddress,
-                                decoration: const InputDecoration(
-                                  hintText: 'Enter your email',
-                                ),
-                                validator: (value) {
-                                  if (value == null ||
-                                      value.trim().isEmpty) {
-                                    return 'Please enter an email';
-                                  }
-                                  return null;
-                                },
+                                style: const TextStyle(fontSize: 15),
+                                decoration: luxeFieldDecoration(
+                                    hint: 'Enter your email'),
+                                validator: (value) =>
+                                    value == null || value.trim().isEmpty
+                                        ? 'Please enter an email'
+                                        : null,
                               ),
+                              const SizedBox(height: 20),
 
-                              const SizedBox(height: 16),
-
-                              _fieldLabel('PASSWORD'),
-
+                              const Text('PASSWORD', style: kLabelStyle),
                               TextFormField(
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
-                                decoration: InputDecoration(
-                                  hintText: 'Enter your password',
+                                style: const TextStyle(fontSize: 15),
+                                decoration: luxeFieldDecoration(
+                                  hint: 'Enter your password',
                                   suffixIcon: IconButton(
+                                    padding: EdgeInsets.zero,
                                     icon: Icon(
                                       _obscurePassword
-                                          ? Icons.visibility_off
-                                          : Icons.visibility,
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
                                       color: AppTheme.textSecondary,
                                       size: 20,
                                     ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword =
-                                            !_obscurePassword;
-                                      });
-                                    },
+                                    onPressed: () => setState(() =>
+                                        _obscurePassword = !_obscurePassword),
                                   ),
                                 ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Please enter your password';
-                                  }
-                                  return null;
-                                },
+                                validator: (value) =>
+                                    value == null || value.isEmpty
+                                        ? 'Please enter your password'
+                                        : null,
                               ),
-
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 12),
 
                               Align(
                                 alignment: Alignment.centerRight,
-                                child: TextButton(
-                                  onPressed: _handleForgotPassword,
-                                  style: TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: const Size(0, 0),
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  child: const Text(
-                                    'Forgot Password?',
-                                    style: TextStyle(
-                                      color: AppTheme.gold,
-                                      fontSize: 13,
-                                    ),
+                                child: InkWell(
+                                  onTap: _handleForgotPassword,
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 4),
+                                    child: Text('FORGOT PASSWORD?',
+                                        style: kLabelStyle),
                                   ),
                                 ),
                               ),
-
                               const SizedBox(height: 16),
 
                               if (_errorMessage != null)
@@ -320,8 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text(
                                     _errorMessage!,
                                     style: const TextStyle(
-                                      color: Colors.redAccent,
-                                    ),
+                                        color: Colors.redAccent, fontSize: 13),
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
@@ -329,125 +262,101 @@ class _LoginScreenState extends State<LoginScreen> {
                               if (_showResendVerification)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 16),
-                                  child: TextButton(
-                                    onPressed: _isLoading
-                                        ? null
-                                        : _handleGoToVerify,
-                                    child: const Text(
-                                      'Resend verification email',
-                                      style: TextStyle(
-                                        color: AppTheme.gold,
+                                  child: Center(
+                                    child: InkWell(
+                                      onTap:
+                                          _isLoading ? null : _handleGoToVerify,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 4),
+                                        child: Text(
+                                          'RESEND VERIFICATION EMAIL',
+                                          style: kLabelStyle.copyWith(
+                                              color: AppTheme.textPrimary),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
 
                               ElevatedButton(
-                                onPressed:
-                                    _isLoading ? null : _handleLogin,
+                                onPressed: _isLoading ? null : _handleLogin,
                                 child: _isLoading
                                     ? const SizedBox(
                                         height: 20,
                                         width: 20,
                                         child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
+                                            strokeWidth: 2),
                                       )
                                     : const Text('Log In'),
                               ),
+                              const SizedBox(height: 24),
 
-                              const SizedBox(height: 20),
-
-                              Row(
+                              const Row(
                                 children: [
                                   Expanded(
-                                    child: Divider(
-                                      color: AppTheme.textSecondary
-                                          .withValues(alpha: 0.3),
-                                    ),
-                                  ),
-
+                                      child: Divider(color: AppTheme.hairline)),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    child: Text(
-                                      'OR',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium,
-                                    ),
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 12),
+                                    child: Text('OR', style: kLabelStyle),
                                   ),
-
                                   Expanded(
-                                    child: Divider(
-                                      color: AppTheme.textSecondary
-                                          .withValues(alpha: 0.3),
-                                    ),
-                                  ),
+                                      child: Divider(color: AppTheme.hairline)),
                                 ],
                               ),
-
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 24),
 
                               OutlinedButton.icon(
-                                onPressed: _isLoading
-                                    ? null
-                                    : _handleGoogleSignIn,
+                                onPressed:
+                                    _isLoading ? null : _handleGoogleSignIn,
                                 icon: SvgPicture.asset(
                                   'assets/icons/google_logo.svg',
                                   width: 20,
                                   height: 20,
                                 ),
-                                label: const Text(
-                                  'Continue with Google',
-                                ),
+                                label: const Text('Continue with Google'),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppTheme.textPrimary,
-                                  side: const BorderSide(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
-                                  ),
+                                  side: const BorderSide(color: Colors.white24),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
                               ),
+                              const SizedBox(height: 24),
 
-                              const SizedBox(height: 20),
-
-                              Center(
-                                child: RichText(
-                                  text: TextSpan(
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium,
-                                    children: [
-                                      const TextSpan(
-                                        text: "Don't have an account? ",
-                                      ),
-                                      TextSpan(
-                                        text: 'Sign Up',
-                                        style: const TextStyle(
-                                          color: AppTheme.gold,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        recognizer: TapGestureRecognizer()
-                                          ..onTap = () {
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    const RegisterScreen(),
-                                              ),
-                                            );
-                                          },
-                                      ),
-                                    ],
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    "Don't have an account?  ",
+                                    style: TextStyle(
+                                        color: AppTheme.textSecondary,
+                                        fontSize: 13),
                                   ),
-                                ),
+                                  InkWell(
+                                    onTap: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const RegisterScreen(),
+                                      ),
+                                    ),
+                                    child: const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 4),
+                                      child: Text(
+                                        'Sign Up',
+                                        style: TextStyle(
+                                          color: AppTheme.textPrimary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -459,21 +368,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             );
           },
-        ),
-      ),
-    );
-  }
-
-  Widget _fieldLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textSecondary,
-          letterSpacing: 0.5,
         ),
       ),
     );

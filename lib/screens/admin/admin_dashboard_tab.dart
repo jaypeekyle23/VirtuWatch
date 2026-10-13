@@ -1,619 +1,245 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../services/activity_log_service.dart';
+import '../../services/user_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/home_header.dart';
+import '../../widgets/luxe.dart';
 import '../../widgets/skeleton_box.dart';
 import '../../widgets/update_available_banner.dart';
-import 'admin_create_account_screen.dart';
-import 'admin_account_management_screen.dart';
-import 'admin_watch_management_tab.dart';
-import 'admin_profile_tab.dart';
 import '../merchant/merchant_add_watch_screen.dart';
-import '../../services/activity_log_service.dart';
-import '../../widgets/network_photo.dart';
+import 'admin_create_account_screen.dart';
+import 'admin_profile_tab.dart';
 
-class AdminDashboardTab extends StatelessWidget {
+class AdminDashboardTab extends StatefulWidget {
   final String username;
-  const AdminDashboardTab({super.key, required this.username});
 
-  String _relativeTime(Timestamp? timestamp) {
-    if (timestamp == null) return '';
-    final diff = DateTime.now().difference(timestamp.toDate());
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}hr ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${timestamp.toDate().month}/${timestamp.toDate().day}/${timestamp.toDate().year}';
-  }
+  /// Switches the shell to another tab (1 = watches, 2 = accounts) instead of
+  /// pushing a second copy of it.
+  final ValueChanged<int> onSelectTab;
+
+  const AdminDashboardTab({
+    super.key,
+    required this.username,
+    required this.onSelectTab,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final usersStream = FirebaseFirestore.instance.collection('users').snapshots();
-    final watchesStream =
-        FirebaseFirestore.instance.collection('watches').snapshots();
-
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseAuth.instance.currentUser == null
-                    ? null
-                    : FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(FirebaseAuth.instance.currentUser!.uid)
-                        .snapshots(),
-                builder: (context, selfSnapshot) {
-                  final liveUsername =
-                      selfSnapshot.data?.data()?['username'] as String? ??
-                          username;
-                  final livePhotoUrl =
-                      selfSnapshot.data?.data()?['photoUrl'] as String? ?? '';
-                  final liveInitials = liveUsername.isEmpty
-                      ? '?'
-                      : liveUsername
-                          .trim()
-                          .split(' ')
-                          .map((e) => e[0])
-                          .take(2)
-                          .join()
-                          .toUpperCase();
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        height: 84,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Positioned(
-                              left: -48,
-                              top: -48,
-                              child: Image.asset(
-                                'assets/images/branding/logo.png',
-                                height: 180,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                            Positioned.fill(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.redAccent
-                                            .withValues(alpha: 0.15),
-                                        borderRadius:
-                                            BorderRadius.circular(20),
-                                      ),
-                                      child: const Text(
-                                        'ADMIN',
-                                        style: TextStyle(
-                                          color: Colors.redAccent,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    InkWell(
-                                      onTap: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                const AdminProfileTab(),
-                                          ),
-                                        );
-                                      },
-                                      customBorder: const CircleBorder(),
-                                      child: CircleAvatar(
-                                        radius: 16,
-                                        backgroundColor: Colors.redAccent
-                                            .withValues(alpha: 0.2),
-                                        backgroundImage:
-                                            livePhotoUrl.isNotEmpty
-                                                ? NetworkPhoto.provider(livePhotoUrl)
-                                                : null,
-                                        child: livePhotoUrl.isEmpty
-                                            ? Text(
-                                                liveInitials,
-                                                style: const TextStyle(
-                                                  color: Colors.redAccent,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12,
-                                                ),
-                                              )
-                                            : null,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'ADMIN PANEL',
-                        style: TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Welcome, $liveUsername!',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(fontSize: 22),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'VirtuWatch Administration',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 20),
-
-              const UpdateAvailableBanner(),
-
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: usersStream,
-                builder: (context, userSnap) {
-                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: watchesStream,
-                    builder: (context, watchSnap) {
-                      final users = userSnap.data?.docs ?? [];
-                      final watches = watchSnap.data?.docs ?? [];
-                      final activeUsers = users
-                          .where((d) => d.data()['accountStatus'] == 'active')
-                          .length;
-                      final merchants = users
-                          .where((d) => d.data()['role'] == 'merchant')
-                          .length;
-                      final savedWatches = users.fold<int>(
-                        0,
-                        (total, d) =>
-                            total +
-                            ((d.data()['savedWatches'] as List?)?.length ??
-                                0),
-                      );
-
-                      return Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _statCard(
-                                  icon: Icons.watch_outlined,
-                                  label: 'Total Watches',
-                                  value: '${watches.length}',
-                                  color: AppTheme.gold,
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const AdminWatchManagementTab(),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _statCard(
-                                  icon: Icons.person_outline,
-                                  label: 'Active Users',
-                                  value: '$activeUsers',
-                                  color: Colors.greenAccent,
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const AdminAccountManagementScreen(
-                                          initialFilter: 'Active',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _statCard(
-                                  icon: Icons.storefront_outlined,
-                                  label: 'Merchants',
-                                  value: '$merchants',
-                                  color: Colors.purpleAccent,
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const AdminAccountManagementScreen(
-                                          initialFilter: 'Merchant',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _statCard(
-                                  icon: Icons.favorite_border,
-                                  label: 'Saved Watches',
-                                  value: '$savedWatches',
-                                  color: Colors.pinkAccent,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-
-              Text(
-                'Quick Actions',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 12),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 1.7,
-                children: [
-                  _quickAction(
-                    context,
-                    icon: Icons.add_circle_outline,
-                    label: 'Add New Watch',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MerchantAddWatchScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _quickAction(
-                    context,
-                    icon: Icons.person_add_outlined,
-                    label: 'Add Account',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AdminCreateAccountScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _quickAction(
-                    context,
-                    icon: Icons.watch_outlined,
-                    label: 'Manage Watches',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AdminWatchManagementTab(),
-                        ),
-                      );
-                    },
-                  ),
-                  _quickAction(
-                    context,
-                    icon: Icons.people_outline,
-                    label: 'Manage Accounts',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AdminAccountManagementScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              Text(
-                'Recent Activity',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 12),
-
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: ActivityLogService().recentActivity(limit: 8),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const _ActivitySkeleton();
-                  }
-                  if (snapshot.hasError) {
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'Could not load activity: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                      ),
-                    );
-                  }
-
-                  final docs = snapshot.data?.docs ?? [];
-
-                  if (docs.isEmpty) {
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'No recent activity yet.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    );
-                  }
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: docs.asMap().entries.map((entry) {
-                        final isLast = entry.key == docs.length - 1;
-                        final data = entry.value.data();
-                        final type = data['type'] as String? ?? '';
-                        final message =
-                            data['message'] as String? ?? 'Unknown activity';
-                        final timestamp = data['timestamp'] as Timestamp?;
-
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            border: isLast
-                                ? null
-                                : const Border(
-                                    bottom: BorderSide(color: Color(0x1AFFFFFF)),
-                                  ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(_iconForActivityType(type),
-                                  color: AppTheme.textSecondary, size: 16),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  message,
-                                  style: const TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _relativeTime(timestamp),
-                                style: const TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _iconForActivityType(String type) {
-    switch (type) {
-      case 'user_registered':
-        return Icons.person_add_alt_outlined;
-      case 'account_created':
-        return Icons.person_add_outlined;
-      case 'account_disabled':
-        return Icons.block_outlined;
-      case 'account_enabled':
-        return Icons.check_circle_outline;
-      case 'account_deleted':
-      case 'account_self_deleted':
-        return Icons.person_remove_outlined;
-      case 'role_changed':
-        return Icons.swap_horiz;
-      case 'watch_added':
-        return Icons.watch_outlined;
-      case 'watch_deleted':
-        return Icons.delete_outline;
-      default:
-        return Icons.circle_notifications_outlined;
-    }
-  }
-
-  Widget _statCard({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-    String? subtitle,
-    VoidCallback? onTap,
-  }) {
-    final card = Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          if (subtitle != null)
-            Text(
-              subtitle,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9),
-            ),
-        ],
-      ),
-    );
-
-    if (onTap == null) return card;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: card,
-    );
-  }
-
-  Widget _quickAction(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppTheme.gold, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  State<AdminDashboardTab> createState() => _AdminDashboardTabState();
 }
 
-/// Placeholder for the "Recent Activity" card: same rounded surface, with
-/// [count] rows of icon / message / time and the same divider lines as the
-/// real feed built in [AdminDashboardTab.build].
-class _ActivitySkeleton extends StatelessWidget {
-  static const int count = 5;
+class _AdminDashboardTabState extends State<AdminDashboardTab> {
+  // Created once so rebuilds don't re-subscribe and flash the skeletons.
+  late final _user = UserService().currentUserStream();
+  late final _users = FirebaseFirestore.instance.collection('users').snapshots();
+  late final _watches =
+      FirebaseFirestore.instance.collection('watches').snapshots();
+  late final _activity = ActivityLogService().recentActivity(limit: 8);
 
-  const _ActivitySkeleton();
+  static const _icons = {
+    'user_registered': Icons.person_add_alt_outlined,
+    'account_created': Icons.person_add_outlined,
+    'account_disabled': Icons.block_outlined,
+    'account_enabled': Icons.check_circle_outline,
+    'account_deleted': Icons.person_remove_outlined,
+    'account_self_deleted': Icons.person_remove_outlined,
+    'role_changed': Icons.swap_horiz,
+    'watch_added': Icons.watch_outlined,
+    'watch_deleted': Icons.delete_outline,
+  };
 
-  // Varied message widths so the placeholder reads like real text lines.
-  static const _messageWidths = [190.0, 150.0, 210.0, 170.0, 130.0];
+  void _open(Widget screen) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+
+  String _ago(Timestamp? ts) {
+    if (ts == null) return '';
+    final d = DateTime.now().difference(ts.toDate());
+    if (d.inMinutes < 1) return 'Just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}hr ago';
+    if (d.inDays < 7) return '${d.inDays}d ago';
+    final t = ts.toDate();
+    return '${t.month}/${t.day}/${t.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: List.generate(count, (i) {
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: i == count - 1
-                  ? null
-                  : const Border(
-                      bottom: BorderSide(color: Color(0x1AFFFFFF)),
-                    ),
-            ),
-            child: Row(
-              children: [
-                const SkeletonBox(
-                  width: 16,
-                  height: 16,
-                  borderRadius: BorderRadius.all(Radius.circular(8)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: SkeletonBox(
-                      width: _messageWidths[i % _messageWidths.length],
-                      height: 12,
+    return Scaffold(
+      body: SafeArea(
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: _user,
+          builder: (context, userSnap) {
+            final user = userSnap.data?.data();
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HomeHeader(
+                    username: user?['username'] as String? ?? widget.username,
+                    photoUrl: user?['photoUrl'] as String? ?? '',
+                    subtitle: 'Manage VirtuWatch.',
+                    onAvatarTap: () => _open(const AdminProfileTab()),
+                  ),
+                  const UpdateAvailableBanner(),
+                  _stats(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('List a new watch',
+                                  style: AppTheme.serif(size: 22)),
+                              const SizedBox(height: 4),
+                              const Text('Add photos, specs and a 3D model.',
+                                  style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () => _open(const MerchantAddWatchScreen()),
+                          style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 12)),
+                          child: const Text('Add watch'),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                const SkeletonBox(width: 24, height: 10),
-              ],
-            ),
-          );
-        }),
+                  luxeBand([
+                    _action('WATCHES', () => widget.onSelectTab(1)),
+                    _action('ACCOUNTS', () => widget.onSelectTab(2)),
+                    _action('ADD ACCOUNT',
+                        () => _open(const AdminCreateAccountScreen())),
+                  ]),
+                  const SizedBox(height: 32),
+                  luxeHeader('Recent activity'),
+                  _feed(),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
+
+  Widget _stats() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _users,
+        builder: (context, userSnap) =>
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _watches,
+          builder: (context, watchSnap) {
+            final loading = !userSnap.hasData || !watchSnap.hasData;
+            final users = userSnap.data?.docs ?? [];
+            String count(Iterable list) => loading ? '–' : '${list.length}';
+            return luxeBand([
+              _stat('WATCHES', count(watchSnap.data?.docs ?? [])),
+              _stat(
+                  'ACTIVE USERS',
+                  count(users
+                      .where((d) => d.data()['accountStatus'] == 'active'))),
+              _stat('MERCHANTS',
+                  count(users.where((d) => d.data()['role'] == 'merchant'))),
+            ]);
+          },
+        ),
+      );
+
+  Widget _stat(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          children: [
+            Text(value, style: AppTheme.serif(size: 28)),
+            const SizedBox(height: 2),
+            Text(label, style: kLabelStyle.copyWith(fontSize: 10)),
+          ],
+        ),
+      );
+
+  Widget _action(String label, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Center(
+            child: Text(label,
+                style: kLabelStyle.copyWith(
+                    color: AppTheme.textPrimary, fontSize: 10)),
+          ),
+        ),
+      );
+
+  Widget _feed() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _activity,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return Column(children: [
+              for (var i = 0; i < 5; i++) const _RowSkeleton(),
+            ]);
+          }
+          if (snap.hasError) {
+            return const Text('Could not load activity.',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
+          }
+          final docs = snap.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const Text('No recent activity yet.',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
+          }
+          return Column(children: [
+            for (final doc in docs) _row(doc.data()),
+          ]);
+        },
+      );
+
+  Widget _row(Map<String, dynamic> data) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppTheme.hairline)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(_icons[data['type']] ?? Icons.notifications_none,
+                color: AppTheme.textSecondary, size: 16),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(data['message'] as String? ?? 'Unknown activity',
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary, fontSize: 13)),
+            ),
+            const SizedBox(width: 12),
+            Text(_ago(data['timestamp'] as Timestamp?),
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 11)),
+          ],
+        ),
+      );
+}
+
+/// Placeholder shaped like a row in "Recent activity".
+class _RowSkeleton extends StatelessWidget {
+  const _RowSkeleton();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            SkeletonBox(
+              width: 16,
+              height: 16,
+              borderRadius: BorderRadius.all(Radius.circular(8)),
+            ),
+            SizedBox(width: 12),
+            SkeletonBox(width: 180, height: 12),
+          ],
+        ),
+      );
 }

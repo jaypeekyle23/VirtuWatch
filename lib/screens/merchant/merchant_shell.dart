@@ -19,7 +19,10 @@ class _MerchantShellState extends State<MerchantShell> {
   @override
   Widget build(BuildContext context) {
     final tabs = [
-      MerchantDashboardTab(username: widget.username),
+      MerchantDashboardTab(
+        username: widget.username,
+        onSelectTab: (i) => setState(() => _currentIndex = i),
+      ),
       const MerchantCatalogTab(),
       const MerchantAnalyticsTab(),
       const MerchantProfileTab(),

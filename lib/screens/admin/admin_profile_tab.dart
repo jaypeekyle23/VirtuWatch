@@ -2,15 +2,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../constants/app_version.dart';
-import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/format.dart';
+import '../../widgets/luxe.dart';
+import '../../widgets/profile_parts.dart';
 import '../../widgets/profile_skeleton.dart';
-import '../change_password_screen.dart';
-import '../edit_account_name_screen.dart';
 import '../about_screen.dart';
-import '../version_info_screen.dart';
+import '../change_password_screen.dart';
+import '../delete_account_screen.dart';
+import '../edit_account_name_screen.dart';
+import '../privacy_policy_screen.dart';
+import '../terms_of_service_screen.dart';
 import '../update_screen.dart';
-import '../../widgets/network_photo.dart';
+import '../version_info_screen.dart';
 
 class AdminProfileTab extends StatelessWidget {
   const AdminProfileTab({super.key});
@@ -20,7 +24,7 @@ class AdminProfileTab extends StatelessWidget {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Profile')),
+      appBar: profileAppBar(context),
       body: uid == null
           ? const Center(child: Text('Not logged in'))
           : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -28,258 +32,84 @@ class AdminProfileTab extends StatelessWidget {
                   .collection('users')
                   .doc(uid)
                   .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const ProfileSkeleton(
-                    kind: ProfileSkeletonKind.account,
-                    menuItems: 4,
-                  );
-                }
-                final data = snapshot.data!.data() ?? {};
-                final username = data['username'] as String? ?? 'Admin';
-                final email = data['email'] as String? ?? '';
-                final createdAt = data['createdAt'] as Timestamp?;
-                final createdDate = createdAt != null
-                    ? '${createdAt.toDate().month}/${createdAt.toDate().day}/${createdAt.toDate().year}'
-                    : '—';
-                final initials = username.isNotEmpty
-                    ? username.trim().split(' ').map((e) => e[0]).take(2).join()
-                    : '?';
-                final photoUrl = data['photoUrl'] as String? ?? '';
+              builder: (context, snapshot) => snapshot.hasData
+                  ? _content(context, snapshot.data!.data() ?? {})
+                  : const ProfileSkeleton(menuItems: 6),
+            ),
+    );
+  }
 
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
+  Widget _content(BuildContext context, Map<String, dynamic> data) {
+    final username = data['username'] as String? ?? 'Admin';
+    final photoUrl = data['photoUrl'] as String? ?? '';
+    final created = (data['createdAt'] as Timestamp?)?.toDate();
+
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              children: [
+                ProfileHeader(
+                  username: username,
+                  email: data['email'] as String? ?? '',
+                  photoUrl: photoUrl,
+                  onEdit: () => pushScreen(
+                    context,
+                    EditAccountNameScreen(
+                        currentUsername: username, currentPhotoUrl: photoUrl),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                luxeSection(
+                  'ACCOUNT',
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-                        backgroundImage: photoUrl.isNotEmpty
-                            ? NetworkPhoto.provider(photoUrl)
-                            : null,
-                        child: photoUrl.isEmpty
-                            ? Text(
-                                initials.toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.redAccent,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 22,
-                                ),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        username,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(fontSize: 18),
-                      ),
-                      Text(
-                        email,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'ADMIN',
-                          style: TextStyle(
-                            color: Colors.redAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.gold,
-                          side: const BorderSide(color: AppTheme.gold),
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => EditAccountNameScreen(
-                                currentUsername: username,
-                                currentPhotoUrl: photoUrl,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('Edit Profile'),
-                      ),
-                      const SizedBox(height: 24),
-
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surface,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            _infoRow('Full Name', username),
-                            _infoRow('Email', email),
-                            _infoRow('Role', 'Administrator'),
-                            _infoRow('Account Created', createdDate,
-                                isLast: true),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      _menuTile(context, 'Change Password', Icons.lock_outline,
-                          () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ChangePasswordScreen(),
-                          ),
-                        );
-                      }),
-                      _menuTile(context, 'About VirtuWatch',
-                          Icons.info_outline, () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AboutScreen(),
-                          ),
-                        );
-                      }),
-                      _menuTile(
-                          context,
-                          'Version Info (v${AppVersion.versionName})',
-                          Icons.numbers_outlined, () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const VersionInfoScreen(),
-                          ),
-                        );
-                      }),
-                      _menuTile(context, 'Check for Updates',
-                          Icons.system_update_alt, () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const UpdateScreen(),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 20),
-
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          onPressed: () => _confirmLogout(context),
-                          child: const Text('Log Out'),
-                        ),
-                      ),
+                      Text('Administrator', style: AppTheme.serif(size: 28)),
+                      if (created != null) ...[
+                        const SizedBox(height: 4),
+                        Text('Member since ${formatDate(created)}',
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 13)),
+                      ],
                     ],
                   ),
-                );
-              },
-            ),
-    );
-  }
-
-  Widget _infoRow(String label, String value, {bool isLast = false}) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _menuTile(
-      BuildContext context, String title, IconData icon, VoidCallback onTap) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: AppTheme.textSecondary, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(color: AppTheme.textPrimary),
                 ),
+                const SizedBox(height: 8),
+                profileMenu(context, [
+                  ('Change Password', const ChangePasswordScreen(), null),
+                  ('About VirtuWatch', const AboutScreen(), null),
+                  ('Version', const VersionInfoScreen(),
+                      'v${AppVersion.versionName}'),
+                  ('Check for Updates', const UpdateScreen(), null),
+                  ('Terms of Service', const TermsOfServiceScreen(), null),
+                  ('Privacy Policy', const PrivacyPolicyScreen(), null),
+                ]),
+              ],
+            ),
+          ),
+        ),
+        // Pinned to the bottom so short content doesn't leave it floating.
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 24, bottom: 16),
+              child: TextButton(
+                onPressed: () =>
+                    pushScreen(context, const DeleteAccountScreen()),
+                child: Text('Delete account',
+                    style: TextStyle(
+                        color: Colors.redAccent.withValues(alpha: 0.8),
+                        fontSize: 12)),
               ),
-              const Icon(Icons.chevron_right,
-                  color: AppTheme.textSecondary, size: 18),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
-  }
-
-  Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Log Out of Admin Panel?',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: const Text(
-          'You will be returned to the login screen. Any unsaved changes will be lost.',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Stay'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child:
-                const Text('Log Out', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      await AuthService().logout();
-      if (context.mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
-      }
-    }
   }
 }

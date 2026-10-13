@@ -6,8 +6,8 @@ import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 
 /// One action button shown under an assistant message (e.g. "Measure my
-/// wrist"). Styled as a gold outlined pill so it reads as tappable and
-/// stays visually distinct from the watch cards above it.
+/// wrist"). A neutral outlined pill: it reads as tappable without
+/// competing with the watch cards above it.
 class ChatActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -40,10 +40,11 @@ class ChatActionButton extends StatelessWidget {
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppTheme.gold,
+          foregroundColor: AppTheme.textPrimary,
           backgroundColor:
-              highlighted ? AppTheme.gold.withValues(alpha: 0.15) : null,
-          side: BorderSide(color: AppTheme.gold.withValues(alpha: 0.6)),
+              highlighted ? Colors.white.withValues(alpha: 0.08) : null,
+          side: BorderSide(
+              color: highlighted ? AppTheme.textPrimary : Colors.white24),
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           minimumSize: const Size(0, 36),

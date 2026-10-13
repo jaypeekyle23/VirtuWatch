@@ -67,13 +67,12 @@ class ChatWatchCard extends StatelessWidget {
       width: math.min(MediaQuery.of(context).size.width * 0.85, 360),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.gold.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.all(10),
@@ -90,10 +89,11 @@ class ChatWatchCard extends StatelessWidget {
                             NetworkPhoto(
                               url: imageUrl,
                               errorWidget: const Icon(Icons.watch,
-                                  color: AppTheme.gold),
+                                  color: AppTheme.textSecondary),
                             ),
                           )
-                        : const Icon(Icons.watch, color: AppTheme.gold),
+                        : const Icon(Icons.watch,
+                            color: AppTheme.textSecondary),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -106,9 +106,9 @@ class ChatWatchCard extends StatelessWidget {
                         Text(
                           brand,
                           style: const TextStyle(
-                            color: AppTheme.gold,
+                            color: AppTheme.textSecondary,
                             fontSize: 9,
-                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -137,8 +137,8 @@ class ChatWatchCard extends StatelessWidget {
                         Text(
                           _formatPrice(price),
                           style: const TextStyle(
-                            color: AppTheme.gold,
-                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
                         ),

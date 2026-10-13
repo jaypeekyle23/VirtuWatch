@@ -3,30 +3,23 @@ import '../theme/app_theme.dart';
 
 /// A reusable "edge match" guide: one fixed horizontal reference line
 /// near the top of the available area, and a second horizontal line
-/// offset below it by [offsetPx] logical pixels — a connecting vertical
-/// line between them shows the gap being measured.
+/// offset below it by [offsetPx] logical pixels. A thin vertical line
+/// between them shows the gap being measured.
 ///
 /// Used identically by screen calibration (matching a card's short edge)
 /// and wrist measurement (matching a wrist's edge): the object rests
 /// above or below the phone, its near edge lined up with the fixed top
-/// line, and the bottom line is moved (via an [OffsetStepperControl]
-/// the caller supplies) until it matches the object's far edge. Same
-/// interaction, same widget, so there's only one place this geometry
-/// can go wrong.
+/// line, and the bottom line is moved until it matches the object's far
+/// edge. Same interaction, same widget, so there is only one place this
+/// geometry can go wrong.
 ///
-/// This widget is purely visual — it draws the two lines at the offset
-/// it's given. The caller is responsible for bounding [offsetPx] to
-/// what will actually fit (see the `LayoutBuilder` pattern in
-/// `ScreenCalibrationScreen`/`WristMeasurementScreen`).
+/// This widget is purely visual. The caller is responsible for bounding
+/// [offsetPx] to what will actually fit (see the `LayoutBuilder` pattern in
+/// `ScreenCalibrationScreen` and `WristMeasurementScreen`).
 class EdgeMatchGuide extends StatelessWidget {
   final double offsetPx;
-  final String? centerLabel;
 
-  const EdgeMatchGuide({
-    super.key,
-    required this.offsetPx,
-    this.centerLabel,
-  });
+  const EdgeMatchGuide({super.key, required this.offsetPx});
 
   static const double _topInset = 8;
   static const double _lineWidthFraction = 0.75;
@@ -44,33 +37,9 @@ class EdgeMatchGuide extends StatelessWidget {
             right: 0,
             height: offsetPx,
             child: Center(
-              child: Container(width: 2, color: AppTheme.gold.withValues(alpha: 0.6)),
+              child: Container(width: 1, color: Colors.white38),
             ),
           ),
-          if (centerLabel != null)
-            Positioned(
-              top: _topInset + offsetPx / 2 - 10,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppTheme.background.withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    centerLabel!,
-                    style: const TextStyle(
-                      color: AppTheme.gold,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -84,7 +53,7 @@ class EdgeMatchGuide extends StatelessWidget {
       child: FractionallySizedBox(
         widthFactor: _lineWidthFraction,
         alignment: Alignment.center,
-        child: Container(height: 3, color: AppTheme.gold),
+        child: Container(height: 2, color: AppTheme.textPrimary),
       ),
     );
   }
