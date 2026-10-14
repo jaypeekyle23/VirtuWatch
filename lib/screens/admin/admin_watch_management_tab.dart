@@ -101,6 +101,8 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
                     brandOptions: brands,
                     priceFloor: prices.isEmpty ? 0.0 : prices.reduce(min),
                     priceCeiling: prices.isEmpty ? 0.0 : prices.reduce(max),
+                    lugFloor: lugBounds(allDocs).floor,
+                    lugCeiling: lugBounds(allDocs).ceiling,
                     showGenderFilter: true,
                     showArFilter: true,
                     showListingStatusFilter: true,

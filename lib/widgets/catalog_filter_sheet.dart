@@ -1,3 +1,5 @@
+import 'dart:math' show max, min;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
@@ -22,6 +24,8 @@ class CatalogFilters {
   final bool arOnly;
   final String brand;
   final RangeValues? priceRange;
+  // Lug-to-lug range in mm. Null means not constrained, same as [priceRange].
+  final RangeValues? lugRange;
   // 'All' | 'Active' | 'Draft' — only meaningful on merchant/admin screens,
   // where showListingStatusFilter is true. Customers only ever see listed
   // watches in the first place, so this field is simply unused there.
@@ -33,6 +37,7 @@ class CatalogFilters {
     this.arOnly = false,
     this.brand = 'All',
     this.priceRange,
+    this.lugRange,
     this.listingStatus = 'All',
   });
 
@@ -58,6 +63,14 @@ class CatalogFilters {
         return false;
       }
     }
+    final lugRangeValue = lugRange;
+    if (lugRangeValue != null) {
+      // No lug-to-lug on file: excluded once a range is applied.
+      final lug = (data['lugToLugMm'] as num?)?.toDouble();
+      if (lug == null || lug < lugRangeValue.start || lug > lugRangeValue.end) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -68,6 +81,8 @@ class CatalogFilters {
     String? brand,
     RangeValues? priceRange,
     bool clearPriceRange = false,
+    RangeValues? lugRange,
+    bool clearLugRange = false,
     String? listingStatus,
   }) {
     return CatalogFilters(
@@ -76,6 +91,7 @@ class CatalogFilters {
       arOnly: arOnly ?? this.arOnly,
       brand: brand ?? this.brand,
       priceRange: clearPriceRange ? null : (priceRange ?? this.priceRange),
+      lugRange: clearLugRange ? null : (lugRange ?? this.lugRange),
       listingStatus: listingStatus ?? this.listingStatus,
     );
   }
@@ -90,11 +106,27 @@ class CatalogFilters {
     if (arOnly) count++;
     if (brand != 'All') count++;
     if (priceRange != null) count++;
+    if (lugRange != null) count++;
     if (listingStatus != 'All') count++;
     return count;
   }
 
   bool get isDefault => activeCount == 0;
+}
+
+/// Smallest and largest lug-to-lug (rounded outward to whole mm) among
+/// [docs]. Both are 0 when no watch lists one.
+({double floor, double ceiling}) lugBounds(Iterable<WatchDoc> docs) {
+  final values = [
+    for (final d in docs)
+      if (d.data()['lugToLugMm'] is num)
+        (d.data()['lugToLugMm'] as num).toDouble(),
+  ];
+  if (values.isEmpty) return (floor: 0, ceiling: 0);
+  return (
+    floor: values.reduce(min).floorToDouble(),
+    ceiling: values.reduce(max).ceilToDouble(),
+  );
 }
 
 /// Opens the shared filter bottom sheet and returns the filters the user
@@ -112,6 +144,8 @@ Future<CatalogFilters?> showCatalogFilterSheet(
   required List<String> brandOptions,
   required double priceFloor,
   required double priceCeiling,
+  required double lugFloor,
+  required double lugCeiling,
   bool showGenderFilter = true,
   bool showArFilter = true,
   bool showListingStatusFilter = false,
@@ -129,6 +163,8 @@ Future<CatalogFilters?> showCatalogFilterSheet(
       brandOptions: brandOptions,
       priceFloor: priceFloor,
       priceCeiling: priceCeiling,
+      lugFloor: lugFloor,
+      lugCeiling: lugCeiling,
       showGenderFilter: showGenderFilter,
       showArFilter: showArFilter,
       showListingStatusFilter: showListingStatusFilter,
@@ -142,6 +178,8 @@ class _FilterSheetBody extends StatefulWidget {
   final List<String> brandOptions;
   final double priceFloor;
   final double priceCeiling;
+  final double lugFloor;
+  final double lugCeiling;
   final bool showGenderFilter;
   final bool showArFilter;
   final bool showListingStatusFilter;
@@ -152,6 +190,8 @@ class _FilterSheetBody extends StatefulWidget {
     required this.brandOptions,
     required this.priceFloor,
     required this.priceCeiling,
+    required this.lugFloor,
+    required this.lugCeiling,
     required this.showGenderFilter,
     required this.showArFilter,
     required this.showListingStatusFilter,
@@ -164,6 +204,7 @@ class _FilterSheetBody extends StatefulWidget {
 class _FilterSheetBodyState extends State<_FilterSheetBody> {
   late CatalogFilters _draft;
   late RangeValues _priceDraft;
+  late RangeValues _lugDraft;
 
   static const List<String> _genderOptions = [
     'All',
@@ -179,16 +220,22 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
     _draft = widget.initial;
     _priceDraft = widget.initial.priceRange ??
         RangeValues(widget.priceFloor, widget.priceCeiling);
+    _lugDraft = widget.initial.lugRange ??
+        RangeValues(widget.lugFloor, widget.lugCeiling);
   }
 
   bool get _priceIsFullRange =>
       _priceDraft.start <= widget.priceFloor &&
       _priceDraft.end >= widget.priceCeiling;
 
+  bool get _lugIsFullRange =>
+      _lugDraft.start <= widget.lugFloor && _lugDraft.end >= widget.lugCeiling;
+
   void _reset() {
     setState(() {
       _draft = const CatalogFilters();
       _priceDraft = RangeValues(widget.priceFloor, widget.priceCeiling);
+      _lugDraft = RangeValues(widget.lugFloor, widget.lugCeiling);
     });
   }
 
@@ -196,6 +243,8 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
     final result = _draft.copyWith(
       priceRange: _priceIsFullRange ? null : _priceDraft,
       clearPriceRange: _priceIsFullRange,
+      lugRange: _lugIsFullRange ? null : _lugDraft,
+      clearLugRange: _lugIsFullRange,
     );
     Navigator.of(context).pop(result);
   }
@@ -227,6 +276,42 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
     );
   }
 
+  /// A label, the chosen range as text, and a range slider. Shows a short
+  /// note instead when the catalog has no variation to filter by.
+  Widget _rangeSection(String label, RangeValues draft, double floor,
+      double ceiling, String Function(double) fmt, String what,
+      ValueChanged<RangeValues> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: kLabelStyle),
+        const SizedBox(height: 10),
+        if (ceiling > floor) ...[
+          Text('${fmt(draft.start)}  to  ${fmt(draft.end)}',
+              style: AppTheme.serif(size: 20)),
+          RangeSlider(
+            values: draft,
+            min: floor,
+            max: ceiling,
+            activeColor: AppTheme.textPrimary,
+            inactiveColor: AppTheme.outline,
+            labels: RangeLabels(fmt(draft.start), fmt(draft.end)),
+            onChanged: (values) => setState(() => onChanged(values)),
+          ),
+        ] else
+          // Every watch shares the same value (or there is only one). A
+          // slider with equal min and max looks broken, so say so.
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Not enough $what variation in the catalog to filter by range yet.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -247,8 +332,11 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                   Text('Filters', style: AppTheme.serif(size: 26)),
                   const Spacer(),
                   TextButton(
-                    onPressed:
-                        _draft.isDefault && _priceIsFullRange ? null : _reset,
+                    onPressed: _draft.isDefault &&
+                            _priceIsFullRange &&
+                            _lugIsFullRange
+                        ? null
+                        : _reset,
                     style: TextButton.styleFrom(
                         foregroundColor: AppTheme.textSecondary),
                     child: const Text('Reset'),
@@ -284,36 +372,13 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                 ),
                 const SizedBox(height: 12),
               ],
-              Text('PRICE RANGE', style: kLabelStyle),
-              const SizedBox(height: 10),
-              if (widget.priceCeiling > widget.priceFloor) ...[
-                Text(
-                  '${formatPeso(_priceDraft.start)}  to  '
-                  '${formatPeso(_priceDraft.end)}',
-                  style: AppTheme.serif(size: 20),
-                ),
-                RangeSlider(
-                  values: _priceDraft,
-                  min: widget.priceFloor,
-                  max: widget.priceCeiling,
-                  activeColor: AppTheme.textPrimary,
-                  inactiveColor: AppTheme.outline,
-                  labels: RangeLabels(
-                    formatPeso(_priceDraft.start),
-                    formatPeso(_priceDraft.end),
-                  ),
-                  onChanged: (values) => setState(() => _priceDraft = values),
-                ),
-              ] else
-                // Every watch shares the same price (or there is only one).
-                // A slider with equal min and max looks broken, so say so.
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'Not enough price variation in the catalog to filter by range yet.',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                  ),
-                ),
+              _rangeSection('PRICE RANGE', _priceDraft, widget.priceFloor,
+                  widget.priceCeiling, formatPeso, 'price',
+                  (v) => _priceDraft = v),
+              const SizedBox(height: 20),
+              _rangeSection('LUG-TO-LUG RANGE', _lugDraft, widget.lugFloor,
+                  widget.lugCeiling, (v) => '${v.round()} mm', 'lug-to-lug',
+                  (v) => _lugDraft = v),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,

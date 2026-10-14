@@ -93,6 +93,7 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
             prices.isEmpty ? 0.0 : prices.reduce((a, b) => a < b ? a : b);
         final priceCeiling =
             prices.isEmpty ? 0.0 : prices.reduce((a, b) => a > b ? a : b);
+        final lug = lugBounds(allDocs);
 
         final docs = _applySort(allDocs.where(_matches).toList());
 
@@ -110,6 +111,8 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
                     brandOptions: brandOptions,
                     priceFloor: priceFloor,
                     priceCeiling: priceCeiling,
+                    lugFloor: lug.floor,
+                    lugCeiling: lug.ceiling,
                     showGenderFilter: true,
                     showArFilter: true,
                     showListingStatusFilter: false,
@@ -286,29 +289,7 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
   /// Whether a watch passes the current filters and search text.
   bool _matches(_WatchDoc doc) {
     final data = doc.data();
-    if (_filters.style != 'All' && data['styleCategory'] != _filters.style) {
-      return false;
-    }
-    if (_filters.brand != 'All' && data['brand'] != _filters.brand) {
-      return false;
-    }
-    // A watch with no targetGender never appears under a specific gender
-    // filter. It still shows under "All", and is never guessed into a bucket.
-    if (_filters.gender != 'All' && data['targetGender'] != _filters.gender) {
-      return false;
-    }
-    if (_filters.arOnly && !(data['has3DModel'] as bool? ?? false)) {
-      return false;
-    }
-    final range = _filters.priceRange;
-    if (range != null) {
-      // No listed price at all: excluded once a range is applied, since
-      // there is no way to know if it belongs in range.
-      final price = (data['price'] as num?)?.toDouble();
-      if (price == null || price < range.start || price > range.end) {
-        return false;
-      }
-    }
+    if (!_filters.matches(data)) return false;
     if (_searchQuery.isNotEmpty) {
       bool has(String key) =>
           (data[key] as String? ?? '').toLowerCase().contains(_searchQuery);
