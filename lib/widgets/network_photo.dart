@@ -83,7 +83,7 @@ class NetworkPhoto extends StatelessWidget {
       },
       errorBuilder: (context, error, stackTrace) =>
           errorWidget ??
-          const Center(child: Icon(Icons.watch, color: AppTheme.gold)),
+          Center(child: Icon(Icons.watch, color: AppTheme.gold)),
     );
   }
 }

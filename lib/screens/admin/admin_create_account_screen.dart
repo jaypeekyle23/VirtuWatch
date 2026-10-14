@@ -145,13 +145,13 @@ class _AdminCreateAccountScreenState extends State<AdminCreateAccountScreen> {
                           fontWeight: FontWeight.w500)),
                   const SizedBox(height: 2),
                   Text(description,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 12)),
                 ],
               ),
             ),
             if (selected)
-              const Icon(Icons.check, size: 18, color: AppTheme.gold),
+              Icon(Icons.check, size: 18, color: AppTheme.gold),
           ],
         ),
       ),
@@ -187,10 +187,10 @@ class _AdminCreateAccountScreenState extends State<AdminCreateAccountScreen> {
                       ? 'Password must be at least 6 characters'
                       : null,
                   password: true),
-              const Text('They will be asked to change this on first login.',
+              Text('They will be asked to change this on first login.',
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
               const SizedBox(height: 28),
-              const Text('ACCOUNT ROLE', style: kLabelStyle),
+              Text('ACCOUNT ROLE', style: kLabelStyle),
               const SizedBox(height: 8),
               for (final (value, title, description) in _roles)
                 _roleRow(value, title, description),
@@ -203,7 +203,7 @@ class _AdminCreateAccountScreenState extends State<AdminCreateAccountScreen> {
                 ),
               if (_selectedRole == 'customer') ...[
                 const SizedBox(height: 28),
-                const Text('STYLE PREFERENCES', style: kLabelStyle),
+                Text('STYLE PREFERENCES', style: kLabelStyle),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,

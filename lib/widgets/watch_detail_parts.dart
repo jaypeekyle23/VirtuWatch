@@ -53,7 +53,7 @@ class WatchHeadline extends StatelessWidget {
         if (price is num) ...[
           const SizedBox(height: 6),
           Text(formatPeso(price),
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w600)),
@@ -70,13 +70,13 @@ class WatchHeadline extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: hexToColor(hex),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white24),
+                    border: Border.all(color: AppTheme.outline),
                   ),
                 ),
               if (hexes.isNotEmpty) const SizedBox(width: 4),
               Expanded(
                 child: Text(meta,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 13)),
               ),
             ],
@@ -120,13 +120,13 @@ Widget watchSpecsSection(Map<String, dynamic> data) {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 13)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(value,
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w500)),
@@ -153,7 +153,7 @@ class WatchPhotoCarousel extends StatefulWidget {
 }
 
 class _WatchPhotoCarouselState extends State<WatchPhotoCarousel> {
-  static const _fallback =
+  static Widget get _fallback =>
       Center(child: Icon(Icons.watch, size: 100, color: AppTheme.textSecondary));
 
   final _pageController = PageController();
@@ -175,7 +175,7 @@ class _WatchPhotoCarouselState extends State<WatchPhotoCarousel> {
         fit: StackFit.expand,
         children: [
           if (photos.isEmpty)
-            const ColoredBox(color: AppTheme.surface, child: _fallback)
+            ColoredBox(color: AppTheme.surface, child: _fallback)
           else
             PageView.builder(
               controller: _pageController,

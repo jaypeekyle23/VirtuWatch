@@ -137,7 +137,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         const SizedBox(height: 8),
                         Text(
                           body,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 14,
                             height: 1.5,
@@ -161,7 +161,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     decoration: BoxDecoration(
                       color: i == _currentPage
                           ? AppTheme.textPrimary
-                          : Colors.white24,
+                          : AppTheme.outline,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),

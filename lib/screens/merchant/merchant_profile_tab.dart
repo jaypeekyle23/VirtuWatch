@@ -7,6 +7,7 @@ import '../../utils/format.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/profile_parts.dart';
 import '../../widgets/profile_skeleton.dart';
+import '../../widgets/theme_mode_picker.dart';
 import '../about_screen.dart';
 import '../change_password_screen.dart';
 import '../delete_account_screen.dart';
@@ -71,12 +72,13 @@ class MerchantProfileTab extends StatelessWidget {
                       if (created != null) ...[
                         const SizedBox(height: 4),
                         Text('Member since ${formatDate(created)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 13)),
                       ],
                     ],
                   ),
                 ),
+                luxeSection('APPEARANCE', const ThemeModePicker()),
                 const SizedBox(height: 8),
                 profileMenu(context, [
                   ('Change Password', const ChangePasswordScreen(), null),

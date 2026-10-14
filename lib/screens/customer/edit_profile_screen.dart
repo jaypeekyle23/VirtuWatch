@@ -230,10 +230,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(widget.currentEmail,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 15)),
                   const SizedBox(height: 4),
-                  const Text('Email cannot be changed here.',
+                  Text('Email cannot be changed here.',
                       style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 11)),
                 ],
@@ -258,7 +258,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     max: 500000,
                     divisions: 100,
                     activeColor: AppTheme.textPrimary,
-                    inactiveColor: Colors.white24,
+                    inactiveColor: AppTheme.outline,
                     labels: RangeLabels(
                       formatPeso(_budgetRange.start),
                       formatPeso(_budgetRange.end),

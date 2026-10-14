@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 /// Small letter-spaced caps used for section labels and text links.
-const kLabelStyle = TextStyle(
+TextStyle get kLabelStyle => TextStyle(
   color: AppTheme.textSecondary,
   fontSize: 11,
   letterSpacing: 1.4,
@@ -10,7 +10,7 @@ const kLabelStyle = TextStyle(
 );
 
 /// A single hairline along the top edge, used to separate sections.
-const kTopRule =
+BoxDecoration get kTopRule =>
     BoxDecoration(border: Border(top: BorderSide(color: AppTheme.hairline)));
 
 /// Hairline-topped block: small caps [label], optional [trailing] widget,
@@ -45,10 +45,12 @@ Widget luxePill(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.white.withValues(alpha: 0.08) : null,
+          color: selected ? AppTheme.textPrimary.withValues(alpha: 0.08) : null,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? AppTheme.textPrimary : Colors.white24,
+            color: selected
+                ? AppTheme.textPrimary
+                : AppTheme.textPrimary.withValues(alpha: 0.24),
           ),
         ),
         child: Text(
@@ -75,10 +77,10 @@ InputDecoration luxeFieldDecoration({
       prefixIconConstraints: const BoxConstraints(minWidth: 32),
       suffixIconConstraints: const BoxConstraints(minWidth: 32),
       contentPadding: const EdgeInsets.symmetric(vertical: 8),
-      enabledBorder: const UnderlineInputBorder(
-        borderSide: BorderSide(color: Colors.white24),
+      enabledBorder: UnderlineInputBorder(
+        borderSide: BorderSide(color: AppTheme.outline),
       ),
-      focusedBorder: const UnderlineInputBorder(
+      focusedBorder: UnderlineInputBorder(
         borderSide: BorderSide(color: AppTheme.gold),
       ),
       errorBorder: const UnderlineInputBorder(
@@ -112,7 +114,7 @@ Widget luxeHeader(String title, {String? action, VoidCallback? onTap}) =>
 
 /// Cells in one row, with a hairline above, below and between them.
 Widget luxeBand(List<Widget> cells) => Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border:
             Border.symmetric(horizontal: BorderSide(color: AppTheme.hairline)),
       ),
@@ -121,7 +123,7 @@ Widget luxeBand(List<Widget> cells) => Container(
           children: [
             for (var i = 0; i < cells.length; i++) ...[
               if (i > 0)
-                const VerticalDivider(width: 1, color: AppTheme.hairline),
+                VerticalDivider(width: 1, color: AppTheme.hairline),
               Expanded(child: cells[i]),
             ],
           ],
@@ -140,7 +142,7 @@ Widget luxeLogo({Alignment alignment = Alignment.centerLeft}) => Align(
           widthFactor: 0.56,
           heightFactor: 0.34,
           child: Image.asset(
-            'assets/images/branding/logo.png',
+            AppTheme.logoAsset,
             width: 260,
             fit: BoxFit.fitWidth,
           ),
@@ -164,9 +166,9 @@ Widget luxeCenteredPage(Widget child) => SafeArea(
 
 /// Neutral secondary button: a faint outline and white text, so the gold
 /// primary button stays the only focal point.
-final luxeOutlinedStyle = OutlinedButton.styleFrom(
+ButtonStyle get luxeOutlinedStyle => OutlinedButton.styleFrom(
   foregroundColor: AppTheme.textPrimary,
-  side: const BorderSide(color: Colors.white24),
+  side: BorderSide(color: AppTheme.outline),
   padding: const EdgeInsets.symmetric(vertical: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
 );

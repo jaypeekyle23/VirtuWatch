@@ -61,7 +61,7 @@ class _LogoLoadingScreenState extends State<LogoLoadingScreen>
       child: FractionallySizedBox(
         widthFactor: 0.85,
         child: Image.asset(
-          'assets/images/branding/logo.png',
+          AppTheme.logoAsset,
           fit: BoxFit.contain,
           // The source PNG is 2000x2000 (~16MB decoded). Decoding it at a
           // screen-appropriate size keeps the first frame quick, so the

@@ -86,7 +86,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                       textAlign: TextAlign.center,
                       style: AppTheme.serif(size: 26)),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Point your camera at your wrist to try on watches.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
@@ -123,11 +123,11 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         children: [
           Row(
             children: [
-              const Text('FINE-TUNE SIZE', style: kLabelStyle),
+              Text('FINE-TUNE SIZE', style: kLabelStyle),
               const Spacer(),
               Text(
                 '${_userScaleAdjust >= 0 ? '+' : ''}${_userScaleAdjust.toInt()}%',
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppTheme.textPrimary, fontSize: 13),
               ),
             ],
@@ -170,7 +170,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                 );
               }
               if (docs.isEmpty) {
-                return const SizedBox(
+                return SizedBox(
                   height: 130,
                   child: Center(
                     child: Text(
@@ -244,7 +244,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('Share your try-on', style: AppTheme.serif(size: 22)),
-        content: const Text(
+        content: Text(
           'This button lets you save or share a photo of the watch overlaid '
           'on your wrist, so you can send it to a friend, post it, or compare '
           'a few favorites before deciding.',
@@ -279,7 +279,7 @@ class _ArWatchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final imageUrl = data['imageUrl'] as String? ?? '';
     final hasModel = data['has3DModel'] as bool? ?? false;
-    const fallback = Center(
+    final fallback = Center(
       child: Icon(Icons.watch, color: AppTheme.textSecondary, size: 32),
     );
 
@@ -338,7 +338,7 @@ class _ArWatchCard extends StatelessWidget {
                     (data['brand'] as String? ?? '').toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 9,
                         letterSpacing: 1.2),
@@ -347,7 +347,7 @@ class _ArWatchCard extends StatelessWidget {
                     data['name'] as String? ?? 'Watch',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 11,
                         fontWeight: FontWeight.w500),

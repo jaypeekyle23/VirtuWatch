@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
 import '../../widgets/skeleton_box.dart';
+import '../../widgets/theme_mode_picker.dart';
 import '../about_screen.dart';
 import '../change_password_screen.dart';
 import '../delete_account_screen.dart';
@@ -121,7 +122,7 @@ class CustomerProfileTab extends StatelessWidget {
                     Text(email,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 13)),
                     const SizedBox(height: 6),
                     _link(
@@ -171,9 +172,10 @@ class CustomerProfileTab extends StatelessWidget {
             luxeSection(
               'STYLE',
               Text(styles.join('  ·  '),
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textPrimary, fontSize: 15)),
             ),
+          luxeSection('APPEARANCE', const ThemeModePicker()),
           _SavedWatches(savedWatchIds: (data['savedWatches'] as List?)?.cast<String>() ?? []),
           const SizedBox(height: 8),
           for (final (title, screen, trailing) in menu)
@@ -186,15 +188,15 @@ class CustomerProfileTab extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(title,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textPrimary, fontSize: 14)),
                     ),
                     if (trailing != null)
                       Text(trailing,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textSecondary, fontSize: 13)),
                     const SizedBox(width: 8),
-                    const Icon(Icons.chevron_right,
+                    Icon(Icons.chevron_right,
                         size: 18, color: AppTheme.textSecondary),
                   ],
                 ),
@@ -219,7 +221,7 @@ class CustomerProfileTab extends StatelessWidget {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('Log out?', style: AppTheme.serif(size: 22)),
-        content: const Text(
+        content: Text(
           'Are you sure you want to log out of your VirtuWatch account?',
           style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
         ),
@@ -282,10 +284,10 @@ class _SavedWatches extends StatelessWidget {
       onTap: () => _go(context, const SavedWatchesScreen()),
       child: luxeSection(
         'SAVED WATCHES (${ids.length})',
-        trailing: const Icon(Icons.chevron_right,
+        trailing: Icon(Icons.chevron_right,
             size: 18, color: AppTheme.textSecondary),
         ids.isEmpty
-            ? const Text(
+            ? Text(
                 'No saved watches yet. Tap the heart on a watch to save it.',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               )
@@ -302,17 +304,17 @@ class _SavedWatches extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: (images[id] ?? '').isEmpty
-                          ? const Icon(Icons.watch,
+                          ? Icon(Icons.watch,
                               size: 20, color: AppTheme.textSecondary)
                           : NetworkPhoto(
                               url: images[id]!,
-                              errorWidget: const Icon(Icons.watch,
+                              errorWidget: Icon(Icons.watch,
                                   size: 20, color: AppTheme.textSecondary),
                             ),
                     ),
                   if (ids.length > 4)
                     Text('+${ids.length - 4}',
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 13)),
                 ],
               ),

@@ -72,14 +72,14 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
           }
           final merchants = snapshot.data?.docs ?? [];
           if (merchants.isEmpty) {
-            return const Text('No merchant accounts exist yet. Create one first.',
+            return Text('No merchant accounts exist yet. Create one first.',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
           }
           return DropdownButtonFormField<String>(
             initialValue: _merchantId,
             isExpanded: true,
             dropdownColor: AppTheme.surface,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 15),
             decoration: luxeFieldDecoration(hint: 'Select a merchant'),
             items: [
               for (final doc in merchants)

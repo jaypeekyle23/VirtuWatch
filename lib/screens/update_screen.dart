@@ -77,7 +77,8 @@ class _UpdateScreenState extends State<UpdateScreen> {
     }
   }
 
-  static const _small =
+  static TextStyle get _small =>
+
       TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.5);
 
   @override
@@ -143,7 +144,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
 
     // An update is available.
     final notes = result.releaseNotes?.trim() ?? '';
-    const caption = TextStyle(color: AppTheme.textSecondary, fontSize: 12);
+    final caption = TextStyle(color: AppTheme.textSecondary, fontSize: 12);
     return luxeSection(
       'UPDATE AVAILABLE',
       Column(
@@ -153,7 +154,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
           Text('v${result.latestVersion}', style: AppTheme.serif(size: 22)),
           if (notes.isNotEmpty) Text(notes, style: _small),
           if (!Platform.isAndroid)
-            const Text(
+            Text(
               'In-app install is only supported on Android. Open this '
               "release's page on an Android device to download it.",
               style: caption,
@@ -162,7 +163,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
             LinearProgressIndicator(
               value: _progress,
               minHeight: 4,
-              backgroundColor: Colors.white24,
+              backgroundColor: AppTheme.outline,
               color: AppTheme.textPrimary,
             ),
             Text(
@@ -171,7 +172,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                   : 'Downloading...',
               style: caption,
             ),
-            const Text('Keep the app open until this finishes.',
+            Text('Keep the app open until this finishes.',
                 style: caption),
           ] else ...[
             if (_downloadError != null)

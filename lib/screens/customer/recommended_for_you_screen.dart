@@ -26,7 +26,7 @@ class RecommendedForYouScreen extends StatefulWidget {
 
 class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
   static const _filters = ['All', 'Best Fit', 'Newest', 'Your Style'];
-  static const _rowDivider =
+  static BoxDecoration get _rowDivider =>
       BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.hairline)));
 
   final _recommendationService = RecommendationService();
@@ -161,7 +161,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('Remove outfit colors?', style: AppTheme.serif(size: 22)),
-        content: const Text(
+        content: Text(
           'Recommendations will stop factoring in outfit color until you '
           'scan an outfit again.',
           style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
@@ -208,7 +208,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('How matches are scored', style: AppTheme.serif(size: 22)),
-        content: const Text(
+        content: Text(
           'Fit compares your wrist width with each watch\'s lug-to-lug size.\n\n'
           'Style checks your saved preferences against the watch\'s category.\n\n'
           'Color compares your latest outfit scan with the watch\'s colors.\n\n'
@@ -253,7 +253,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
             _summary(),
             const SizedBox(height: 24),
             _filterTabs(),
-            const Divider(height: 1, color: AppTheme.hairline),
+            Divider(height: 1, color: AppTheme.hairline),
             if (_isLoading)
               ...List.generate(4, (_) => const _RowSkeleton())
             else if (_loadError != null)
@@ -285,7 +285,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(line,
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppTheme.textSecondary, fontSize: 13, height: 1.5)),
         const SizedBox(height: 8),
         Row(
@@ -308,7 +308,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                 ),
               InkWell(
                 onTap: _isClearingOutfit ? null : _confirmClearOutfitColors,
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(4),
                   child: Icon(Icons.close,
                       size: 14, color: AppTheme.textSecondary),
@@ -318,7 +318,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
             const Spacer(),
             InkWell(
               onTap: _showHowItWorks,
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.all(4),
                 child: Icon(Icons.info_outline,
                     size: 16, color: AppTheme.textSecondary),
@@ -389,7 +389,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
           children: [
             Text(text,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppTheme.textSecondary)),
+                style: TextStyle(color: AppTheme.textSecondary)),
             if (retry)
               TextButton(
                 onPressed: _loadRecommendations,
@@ -413,7 +413,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
     final fullData = rec.signalCount == 3;
     final heroTag =
         'recommended-${identityHashCode(ModalRoute.of(context))}-photo-${rec.watchId}';
-    const fallback = Icon(Icons.watch, color: AppTheme.textSecondary);
+    final fallback = Icon(Icons.watch, color: AppTheme.textSecondary);
 
     return InkWell(
       onTap: () => Navigator.of(context).push(
@@ -451,7 +451,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                 children: [
                   if (brand.isNotEmpty)
                     Text(brand,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 10,
                             letterSpacing: 1.4)),
@@ -459,20 +459,20 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                   Text(d['name'] as String? ?? 'Unnamed Watch',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w500)),
                   if (sub.isNotEmpty)
                     Text(sub,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 12)),
                   if (price != null) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         Text(formatPeso(price),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600)),
@@ -482,7 +482,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                               '  ·  ${formatPeso(over)} over budget',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: AppTheme.textSecondary, fontSize: 11),
                             ),
                           ),
@@ -504,7 +504,7 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
                             ? AppTheme.gold
                             : AppTheme.textSecondary)),
                 if (!fullData)
-                  const Text('limited data',
+                  Text('limited data',
                       style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 9)),
               ],

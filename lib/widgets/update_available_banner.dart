@@ -51,7 +51,7 @@ class _UpdateAvailableBannerState extends State<UpdateAvailableBanner> {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border.symmetric(
                   horizontal: BorderSide(color: AppTheme.hairline),
                 ),
@@ -64,14 +64,14 @@ class _UpdateAvailableBannerState extends State<UpdateAvailableBanner> {
                       children: [
                         Text(
                           'Update available · v${result.latestVersion}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w500,
                             fontSize: 13,
                           ),
                         ),
                         const SizedBox(height: 2),
-                        const Text(
+                        Text(
                           'Tap to download and install.',
                           style: TextStyle(
                             color: AppTheme.textSecondary,
@@ -84,7 +84,7 @@ class _UpdateAvailableBannerState extends State<UpdateAvailableBanner> {
                   InkWell(
                     borderRadius: BorderRadius.circular(20),
                     onTap: () => setState(() => _dismissed = true),
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.all(4),
                       child: Icon(
                         Icons.close,

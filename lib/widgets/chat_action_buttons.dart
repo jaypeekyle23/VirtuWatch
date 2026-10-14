@@ -42,9 +42,9 @@ class ChatActionButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppTheme.textPrimary,
           backgroundColor:
-              highlighted ? Colors.white.withValues(alpha: 0.08) : null,
+              highlighted ? AppTheme.textPrimary.withValues(alpha: 0.08) : null,
           side: BorderSide(
-              color: highlighted ? AppTheme.textPrimary : Colors.white24),
+              color: highlighted ? AppTheme.textPrimary : AppTheme.outline),
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           minimumSize: const Size(0, 36),

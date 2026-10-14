@@ -9,7 +9,9 @@ import '../../utils/format.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/skeleton_box.dart';
 
-const _muted = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+TextStyle get _muted =>
+
+    TextStyle(color: AppTheme.textSecondary, fontSize: 13);
 
 /// Serif figures side by side, each with a small label under it. With
 /// [band], they are centered in ruled cells, like the dashboard stats.
@@ -24,7 +26,7 @@ Widget _figures(List<(String, String)> items, {bool band = false}) {
           const SizedBox(height: 2),
           Text(label,
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
         ],
       ),
   ];
@@ -62,7 +64,7 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
           }
           final docs = snapshot.data?.docs ?? [];
           if (docs.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
                 child: Text(
@@ -105,7 +107,7 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
             children: [
               Expanded(child: Text(label, style: _muted)),
               Text(value,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w500)),
@@ -133,7 +135,7 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
               children: [
                 Text(peso(total), style: AppTheme.serif(size: 34)),
                 const SizedBox(height: 2),
-                const Text('Total inventory value',
+                Text('Total inventory value',
                     style:
                         TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 const SizedBox(height: 6),
@@ -160,7 +162,7 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
                           children: [
                             Expanded(
                               child: Text(e.key,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: AppTheme.textPrimary,
                                       fontSize: 14)),
                             ),
@@ -175,9 +177,9 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
                           child: LinearProgressIndicator(
                             value: e.value / docs.length,
                             minHeight: 3,
-                            backgroundColor: Colors.white12,
+                            backgroundColor: AppTheme.outlineSoft,
                             valueColor:
-                                const AlwaysStoppedAnimation(AppTheme.gold),
+                                AlwaysStoppedAnimation(AppTheme.gold),
                           ),
                         ),
                       ],
@@ -241,12 +243,12 @@ class _EngagementState extends State<_Engagement> {
         }
         final stats = snapshot.data;
         if (stats == null) {
-          return const Text('Could not load engagement data. Try again in a moment.',
+          return Text('Could not load engagement data. Try again in a moment.',
               style: _muted);
         }
         if (stats.totalSaves == 0 &&
             stats.viewedCounts.values.every((v) => v == 0)) {
-          return const Text(
+          return Text(
               'No customer activity yet. Saves and views will appear here '
               'once customers start engaging with your catalog.',
               style: _muted);
@@ -266,9 +268,9 @@ class _EngagementState extends State<_Engagement> {
             const SizedBox(height: 20),
             _line(
               const SizedBox.shrink(),
-              const Icon(Icons.favorite_border,
+              Icon(Icons.favorite_border,
                   size: 15, color: AppTheme.textSecondary),
-              const Icon(Icons.visibility_outlined,
+              Icon(Icons.visibility_outlined,
                   size: 15, color: AppTheme.textSecondary),
             ),
             for (final d in ranked)
@@ -278,7 +280,7 @@ class _EngagementState extends State<_Engagement> {
                   Text(d.data()['name'] as String? ?? 'Unnamed watch',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 13)),
                   _count(stats.savedCounts[d.id] ?? 0),
                   _count(stats.viewedCounts[d.id] ?? 0),

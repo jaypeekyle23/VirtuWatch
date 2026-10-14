@@ -69,7 +69,7 @@ class _EdgeMatchInputState extends State<EdgeMatchInput> {
           ],
         ),
         if (_useSlider)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 6),
             child: Text(
               'If something resting on the screen blocks the slider, '
@@ -90,7 +90,7 @@ class _EdgeMatchInputState extends State<EdgeMatchInput> {
             min: widget.minPx,
             max: widget.maxPx,
             activeColor: AppTheme.textPrimary,
-            inactiveColor: Colors.white24,
+            inactiveColor: AppTheme.outline,
             onChanged: widget.onChanged,
           )
         else

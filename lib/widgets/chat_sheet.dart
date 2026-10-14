@@ -288,7 +288,7 @@ class _ChatSheetState extends State<ChatSheet> {
       child: FractionallySizedBox(
         heightFactor: 0.85,
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppTheme.background,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
@@ -299,7 +299,7 @@ class _ChatSheetState extends State<ChatSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white24,
+                  color: AppTheme.outline,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -328,7 +328,7 @@ class _ChatSheetState extends State<ChatSheet> {
                   ],
                 ),
               ),
-              const Divider(color: AppTheme.hairline, height: 1),
+              Divider(color: AppTheme.hairline, height: 1),
               Expanded(
                 child: _isInitializing
                     ? const _ChatSkeleton()
@@ -386,7 +386,7 @@ class _ChatSheetState extends State<ChatSheet> {
             Text(
               widget.emptyStateHint,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
             ),
             if (widget.suggestedQuestions.isNotEmpty) ...[
@@ -430,7 +430,7 @@ class _ChatSheetState extends State<ChatSheet> {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: isUser ? Colors.white.withValues(alpha: 0.1) : AppTheme.surface,
+          color: isUser ? AppTheme.textPrimary.withValues(alpha: 0.1) : AppTheme.surface,
           borderRadius: BorderRadius.circular(14),
         ),
         child: _formattedMessageText(message.text),
@@ -447,7 +447,7 @@ class _ChatSheetState extends State<ChatSheet> {
   /// that covers everything the chat prompts' reply style actually
   /// produces.
   Widget _formattedMessageText(String text) {
-    const baseStyle =
+    final baseStyle =
         TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.5);
     final lines = text.split('\n');
 

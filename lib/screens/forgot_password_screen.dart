@@ -84,7 +84,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const small = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+    final small = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
     final email = _emailController.text.trim();
 
     return Scaffold(
@@ -113,7 +113,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             const TextSpan(text: 'We sent a password reset link to '),
                             TextSpan(
                               text: email,
-                              style: const TextStyle(color: AppTheme.textPrimary),
+                              style: TextStyle(color: AppTheme.textPrimary),
                             ),
                             const TextSpan(
                                 text: '. Open it to choose a new password, then '
@@ -121,7 +121,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           ]),
                         )
                       else
-                        const Text(
+                        Text(
                           "Enter the email associated with your account and we'll "
                           'send you a link to reset your password.',
                           style: small,
@@ -129,7 +129,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       const SizedBox(height: 32),
 
                       if (!_emailSent) ...[
-                        const Text('EMAIL ADDRESS', style: kLabelStyle),
+                        Text('EMAIL ADDRESS', style: kLabelStyle),
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
@@ -177,7 +177,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               : _handleSendResetLink,
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.textPrimary,
-                            side: const BorderSide(color: Colors.white24),
+                            side: BorderSide(color: AppTheme.outline),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

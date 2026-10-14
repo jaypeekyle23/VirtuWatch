@@ -38,7 +38,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('Delete Your Account?', style: AppTheme.serif(size: 22)),
-        content: const Text(
+        content: Text(
           'This will permanently delete your VirtuWatch account and profile '
           'data. This action cannot be undone. Are you absolutely sure?',
           style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
@@ -90,7 +90,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const small =
+    final small =
         TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.5);
 
     return Scaffold(
@@ -109,7 +109,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
               Text('This action is permanent',
                   style: AppTheme.serif(size: 24)),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Deleting your account will permanently remove your profile, '
                 'saved watches, style preferences, and sign-in access. '
                 'This cannot be undone.',
@@ -119,7 +119,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
               if (!_authService.canChangePassword)
                 luxeSection(
                   'CONFIRM IT\'S YOU',
-                  const Text(
+                  Text(
                     'You signed in with Google. To confirm this is really you, '
                     "we'll ask you to sign in with Google one more time before "
                     'deleting your account.',
@@ -191,7 +191,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
               const SizedBox(height: 12),
               TextButton(
                 onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                child: const Text('Cancel',
+                child: Text('Cancel',
                     style: TextStyle(color: AppTheme.textSecondary)),
               ),
             ],

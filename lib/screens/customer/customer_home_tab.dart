@@ -128,7 +128,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                             left: -48,
                             top: -48,
                             child: Image.asset(
-                              'assets/images/branding/logo.png',
+                              AppTheme.logoAsset,
                               height: 180,
                               fit: BoxFit.contain,
                             ),
@@ -144,7 +144,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                                   padding: const EdgeInsets.all(1.5),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white24),
+                                    border: Border.all(color: AppTheme.outline),
                                   ),
                                   child: CircleAvatar(
                                     radius: 17,
@@ -168,7 +168,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                     Text('$_greeting,\n$username',
                         style: AppTheme.serif(size: 32).copyWith(height: 1.1)),
                     const SizedBox(height: 8),
-                    const Text('Find your perfect timepiece today.',
+                    Text('Find your perfect timepiece today.',
                         style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 13)),
                     const SizedBox(height: 24),
@@ -186,7 +186,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                                 Text('Try on a watch',
                                     style: AppTheme.serif(size: 22)),
                                 const SizedBox(height: 4),
-                                const Text('See how a watch looks on your wrist.',
+                                Text('See how a watch looks on your wrist.',
                                     style: TextStyle(
                                         color: AppTheme.textSecondary,
                                         fontSize: 13)),
@@ -206,7 +206,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                       ),
                     ),
                     Container(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         border: Border.symmetric(
                           horizontal: BorderSide(color: AppTheme.hairline),
                         ),
@@ -221,7 +221,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
                                     const WristMeasurementScreen()),
                               ),
                             ),
-                            const VerticalDivider(
+                            VerticalDivider(
                                 width: 1, color: AppTheme.hairline),
                             Expanded(
                               child: _action(
@@ -300,7 +300,7 @@ class _CustomerHomeTabState extends State<CustomerHomeTab> {
         ),
       );
 
-  Widget _emptyText() => const Text('No watches available yet.',
+  Widget _emptyText() => Text('No watches available yet.',
       style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
 
   /// A horizontally scrolling row of tiles. While [loading] it shows

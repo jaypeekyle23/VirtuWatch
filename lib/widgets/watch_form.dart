@@ -10,7 +10,9 @@ import 'network_photo.dart';
 import 'watch_color_picker.dart';
 import 'watch_color_wheel_picker.dart';
 
-const _muted = TextStyle(color: AppTheme.textSecondary, fontSize: 12);
+TextStyle get _muted =>
+
+    TextStyle(color: AppTheme.textSecondary, fontSize: 12);
 
 /// Every field of a watch listing, shared by the add and edit screens.
 ///
@@ -283,7 +285,7 @@ class WatchFormState extends State<WatchForm> {
             'LISTING',
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text('Listed in catalog',
                       style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 14)),
@@ -315,7 +317,7 @@ class WatchFormState extends State<WatchForm> {
       decoration: luxeFieldDecoration(hint: hint).copyWith(
         labelText: label,
         labelStyle:
-            const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            TextStyle(color: AppTheme.textSecondary, fontSize: 13),
       ),
     );
   }
@@ -365,9 +367,9 @@ class WatchFormState extends State<WatchForm> {
           height: 96,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white24),
+            border: Border.all(color: AppTheme.outline),
           ),
-          child: const Column(
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.add, size: 22, color: AppTheme.textSecondary),
@@ -384,7 +386,7 @@ class WatchFormState extends State<WatchForm> {
 
   Widget _photoTile(int i) {
     final isHosted = i < _imageUrls.length;
-    const fallback =
+    final fallback =
         Center(child: Icon(Icons.watch, color: AppTheme.textSecondary));
 
     return Stack(
@@ -478,7 +480,7 @@ class WatchFormState extends State<WatchForm> {
                                 ? AppTheme.textPrimary
                                 : AppTheme.textSecondary,
                             fontSize: 14)),
-                    const Text('A .glb or .gltf file enables AR try-on.',
+                    Text('A .glb or .gltf file enables AR try-on.',
                         style: _muted),
                   ],
                 ),
@@ -486,7 +488,7 @@ class WatchFormState extends State<WatchForm> {
               const SizedBox(width: 12),
               if (_modelFile != null && !_uploadingModel)
                 IconButton(
-                  icon: const Icon(Icons.close,
+                  icon: Icon(Icons.close,
                       size: 18, color: AppTheme.textSecondary),
                   onPressed: () => setState(() => _modelFile = null),
                 )
@@ -540,7 +542,7 @@ class WatchFormState extends State<WatchForm> {
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.textPrimary,
-                side: const BorderSide(color: Colors.white24),
+                side: BorderSide(color: AppTheme.outline),
               ),
               onPressed: () {
                 final hex = _customColorHex.toUpperCase();
@@ -568,7 +570,7 @@ class WatchFormState extends State<WatchForm> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: i == 0 ? AppTheme.textPrimary : Colors.white24),
+        border: Border.all(color: i == 0 ? AppTheme.textPrimary : AppTheme.outline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -579,18 +581,18 @@ class WatchFormState extends State<WatchForm> {
             decoration: BoxDecoration(
               color: hexToColor(hex),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white24),
+              border: Border.all(color: AppTheme.outline),
             ),
           ),
           const SizedBox(width: 8),
           Text(i == 0 ? '$name · Primary' : name,
               style:
-                  const TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+                  TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
           if (_colorHexes.length > 1) ...[
             const SizedBox(width: 6),
             GestureDetector(
               onTap: () => setState(() => _colorHexes.removeAt(i)),
-              child: const Icon(Icons.close,
+              child: Icon(Icons.close,
                   size: 14, color: AppTheme.textSecondary),
             ),
           ],

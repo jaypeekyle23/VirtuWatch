@@ -170,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Image.asset(
-                              'assets/images/branding/logo.png',
+                              AppTheme.logoAsset,
                               height: 350,
                               fit: BoxFit.contain,
                             ),
@@ -186,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Text('Welcome back',
                                   style: AppTheme.serif(size: 36)),
                               const SizedBox(height: 6),
-                              const Text(
+                              Text(
                                 'Sign in to your account',
                                 style: TextStyle(
                                     color: AppTheme.textSecondary,
@@ -194,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 32),
 
-                              const Text('EMAIL ADDRESS', style: kLabelStyle),
+                              Text('EMAIL ADDRESS', style: kLabelStyle),
                               TextFormField(
                                 controller: _emailController,
                                 keyboardType: TextInputType.emailAddress,
@@ -208,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 20),
 
-                              const Text('PASSWORD', style: kLabelStyle),
+                              Text('PASSWORD', style: kLabelStyle),
                               TextFormField(
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
@@ -239,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 alignment: Alignment.centerRight,
                                 child: InkWell(
                                   onTap: _handleForgotPassword,
-                                  child: const Padding(
+                                  child: Padding(
                                     padding: EdgeInsets.symmetric(vertical: 4),
                                     child: Text('FORGOT PASSWORD?',
                                         style: kLabelStyle),
@@ -292,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 24),
 
-                              const Row(
+                              Row(
                                 children: [
                                   Expanded(
                                       child: Divider(color: AppTheme.hairline)),
@@ -318,7 +318,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 label: const Text('Continue with Google'),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppTheme.textPrimary,
-                                  side: const BorderSide(color: Colors.white24),
+                                  side: BorderSide(color: AppTheme.outline),
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 16),
                                   shape: RoundedRectangleBorder(
@@ -331,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Text(
+                                  Text(
                                     "Don't have an account?  ",
                                     style: TextStyle(
                                         color: AppTheme.textSecondary,
@@ -343,7 +343,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         builder: (_) => const RegisterScreen(),
                                       ),
                                     ),
-                                    child: const Padding(
+                                    child: Padding(
                                       padding:
                                           EdgeInsets.symmetric(vertical: 4),
                                       child: Text(

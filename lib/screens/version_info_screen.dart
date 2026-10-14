@@ -37,7 +37,8 @@ class VersionInfoScreen extends StatelessWidget {
     ),
   ];
 
-  static const _body =
+  static TextStyle get _body =>
+
       TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.5);
 
   @override
@@ -55,7 +56,7 @@ class VersionInfoScreen extends StatelessWidget {
           children: [
             luxeLogo(alignment: Alignment.center),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Version ${AppVersion.versionName} (${AppVersion.buildNumber})',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
@@ -71,7 +72,7 @@ class VersionInfoScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(label,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 13)),
                         const SizedBox(width: 12),
                         Expanded(
@@ -96,7 +97,7 @@ class VersionInfoScreen extends StatelessWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.check,
+                          Icon(Icons.check,
                               color: AppTheme.textSecondary, size: 16),
                           const SizedBox(width: 12),
                           Expanded(child: Text(note, style: _body)),
@@ -106,7 +107,7 @@ class VersionInfoScreen extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 12),
-            const Center(
+            Center(
               child: Text(
                 '© 2026 VirtuWatch. All rights reserved.',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),

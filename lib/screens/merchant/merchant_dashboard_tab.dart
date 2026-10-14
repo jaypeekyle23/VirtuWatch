@@ -95,7 +95,7 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
                   children: [
                     Text('List a new watch', style: AppTheme.serif(size: 22)),
                     const SizedBox(height: 4),
-                    const Text('Add photos, specs and a 3D model.',
+                    Text('Add photos, specs and a 3D model.',
                         style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 13)),
                   ],
@@ -122,7 +122,7 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
         if (loading)
           for (var i = 0; i < 3; i++) const _RowSkeleton()
         else if (docs.isEmpty)
-          const Text('No watches yet. Add your first listing above.',
+          Text('No watches yet. Add your first listing above.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13))
         else
           for (final doc in docs.take(3)) _row(doc.id, doc.data()),
@@ -162,7 +162,7 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
       if (price is num) formatPeso(price),
       if (size != null) '${size}mm',
     ].join('  ·  ');
-    const fallback = Center(
+    final fallback = Center(
       child: Icon(Icons.watch, size: 22, color: AppTheme.textSecondary),
     );
 
@@ -171,7 +171,7 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
           _open(MerchantEditWatchScreen(watchId: watchId, data: data)),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: AppTheme.hairline)),
         ),
         child: Row(
@@ -197,20 +197,20 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
                     Text(brand.toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 9,
                             letterSpacing: 1.2)),
                   Text(data['name'] as String? ?? 'Unnamed Watch',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w500)),
                   if (details.isNotEmpty)
                     Text(details,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 12)),
                 ],
               ),

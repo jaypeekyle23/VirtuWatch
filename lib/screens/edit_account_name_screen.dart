@@ -166,7 +166,7 @@ class _EditAccountNameScreenState extends State<EditAccountNameScreen> {
                               : null,
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       "Your email address can't be changed here. Contact an "
                       'administrator if you need to update it.',
                       style: TextStyle(

@@ -12,7 +12,9 @@ import 'merchant_add_watch_screen.dart';
 import 'merchant_edit_watch_screen.dart';
 import 'merchant_watch_detail_screen.dart';
 
-const _muted = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+TextStyle get _muted =>
+
+    TextStyle(color: AppTheme.textSecondary, fontSize: 13);
 
 /// Which fields this watch is missing that the recommendation engine and
 /// chatbot actually rely on: gender (informational, but customer-facing
@@ -270,7 +272,7 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
             width: 28,
             height: 28,
             child: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_horiz,
+              icon: Icon(Icons.more_horiz,
                   size: 18, color: AppTheme.textSecondary),
               padding: EdgeInsets.zero,
               color: AppTheme.surface,
@@ -307,7 +309,7 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
         onTap: () => setState(() => _needsInfoOnly = !_needsInfoOnly),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border.symmetric(
                 horizontal: BorderSide(color: AppTheme.hairline)),
           ),
@@ -317,7 +319,7 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
                 child: Text(
                   '${count == 1 ? '1 watch is' : '$count watches are'} '
                   'missing gender, color or fit data.',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ),

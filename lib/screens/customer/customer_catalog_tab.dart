@@ -169,7 +169,7 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
                   style: const TextStyle(fontSize: 15),
                   decoration: luxeFieldDecoration(
                     hint: 'Search by name, brand, or style',
-                    prefixIcon: const Icon(Icons.search,
+                    prefixIcon: Icon(Icons.search,
                         size: 20, color: AppTheme.textSecondary),
                     suffixIcon: _searchQuery.isEmpty
                         ? null
@@ -223,7 +223,7 @@ class _CustomerCatalogTabState extends State<CustomerCatalogTab> {
           _filters.isDefault && _searchQuery.isEmpty
               ? 'No watches found.'
               : 'No watches match your search or filters.',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           textAlign: TextAlign.center,
         ),
       );
@@ -366,7 +366,7 @@ class _WatchListTile extends StatelessWidget {
     final style = data['styleCategory'] as String? ?? '';
     final sub = [if (size != null) '${size}mm', if (style.isNotEmpty) style]
         .join(' · ');
-    const fallback = Center(
+    final fallback = Center(
       child: Icon(Icons.watch, size: 32, color: AppTheme.textSecondary),
     );
 
@@ -410,7 +410,7 @@ class _WatchListTile extends StatelessWidget {
                           (data['brand'] as String? ?? '').toUpperCase(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 10,
                               letterSpacing: 1.2),
@@ -420,7 +420,7 @@ class _WatchListTile extends StatelessWidget {
                           data['name'] as String? ?? 'Unnamed Watch',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 14,
                               fontWeight: FontWeight.w500),
@@ -430,13 +430,13 @@ class _WatchListTile extends StatelessWidget {
                           Text(sub,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: AppTheme.textSecondary, fontSize: 12)),
                         ],
                         if (price is num) ...[
                           const SizedBox(height: 6),
                           Text(formatPeso(price),
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600)),

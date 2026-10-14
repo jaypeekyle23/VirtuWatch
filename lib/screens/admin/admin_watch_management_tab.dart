@@ -13,7 +13,9 @@ import '../merchant/merchant_catalog_tab.dart' show missingWatchFields;
 import '../merchant/merchant_edit_watch_screen.dart';
 import '../merchant/merchant_watch_detail_screen.dart';
 
-const _muted = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+TextStyle get _muted =>
+
+    TextStyle(color: AppTheme.textSecondary, fontSize: 13);
 
 /// Every watch on the platform, with the same layout and tools as the
 /// merchant catalog.
@@ -254,7 +256,7 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
             width: 28,
             height: 28,
             child: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_horiz,
+              icon: Icon(Icons.more_horiz,
                   size: 18, color: AppTheme.textSecondary),
               padding: EdgeInsets.zero,
               color: AppTheme.surface,
@@ -289,7 +291,7 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
         onTap: () => setState(() => _needsInfoOnly = !_needsInfoOnly),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border.symmetric(
                 horizontal: BorderSide(color: AppTheme.hairline)),
           ),
@@ -299,7 +301,7 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
                 child: Text(
                   '${count == 1 ? '1 watch is' : '$count watches are'} '
                   'missing gender, color or fit data.',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ),

@@ -17,7 +17,7 @@ Future<bool> confirmDeleteWatch(
       title: Text('Delete watch?', style: AppTheme.serif(size: 22)),
       content: Text(
         'This will permanently remove "$name" from the catalog.',
-        style: const TextStyle(color: AppTheme.textSecondary, height: 1.5),
+        style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
       ),
       actions: [
         TextButton(

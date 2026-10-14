@@ -101,14 +101,14 @@ class PrivacyPolicyScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('LAST UPDATED: SEPTEMBER 2026', style: kLabelStyle),
+            Text('LAST UPDATED: SEPTEMBER 2026', style: kLabelStyle),
             const SizedBox(height: 16),
             for (final (title, body) in _sections)
               luxeSection(
                 title.toUpperCase(),
                 Text(
                   body,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 13,
                     height: 1.6,

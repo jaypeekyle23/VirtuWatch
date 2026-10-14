@@ -133,7 +133,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
     const outlined = TextStyle(fontSize: 13);
     final outlinedStyle = OutlinedButton.styleFrom(
       foregroundColor: AppTheme.textPrimary,
-      side: const BorderSide(color: Colors.white24),
+      side: BorderSide(color: AppTheme.outline),
       padding: const EdgeInsets.symmetric(vertical: 14),
       textStyle: outlined,
     );
@@ -185,7 +185,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                   if (price is num) ...[
                     const SizedBox(height: 6),
                     Text(formatPeso(price),
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w600)),
@@ -202,13 +202,13 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                             decoration: BoxDecoration(
                               color: hexToColor(hex),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white24),
+                              border: Border.all(color: AppTheme.outline),
                             ),
                           ),
                         if (hexes.isNotEmpty) const SizedBox(width: 4),
                         Expanded(
                           child: Text(meta,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 13)),
                         ),
@@ -232,14 +232,14 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(label,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 13)),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(value,
                                         textAlign: TextAlign.right,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             color: AppTheme.textPrimary,
                                             fontSize: 13,
                                             fontWeight: FontWeight.w500)),
@@ -347,12 +347,12 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(subtitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 12)),
                     if (rec.confidenceNote != null) ...[
                       const SizedBox(height: 4),
                       Text(rec.confidenceNote!,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 11,
                               fontStyle: FontStyle.italic)),
@@ -375,7 +375,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                         child: CircularProgressIndicator(
                           value: rec.combinedScore * t,
                           strokeWidth: 3,
-                          backgroundColor: Colors.white12,
+                          backgroundColor: AppTheme.outlineSoft,
                           valueColor: AlwaysStoppedAnimation(accent),
                         ),
                       ),
@@ -447,7 +447,7 @@ class _WatchPhotoCarousel extends StatefulWidget {
 }
 
 class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
-  static const _fallback =
+  static Widget get _fallback =>
       Center(child: Icon(Icons.watch, size: 100, color: AppTheme.textSecondary));
 
   final _pageController = PageController();
@@ -469,7 +469,7 @@ class _WatchPhotoCarouselState extends State<_WatchPhotoCarousel> {
         fit: StackFit.expand,
         children: [
           if (photos.isEmpty)
-            const ColoredBox(color: AppTheme.surface, child: _fallback)
+            ColoredBox(color: AppTheme.surface, child: _fallback)
           else
             PageView.builder(
               controller: _pageController,

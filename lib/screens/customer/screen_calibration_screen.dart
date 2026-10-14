@@ -74,7 +74,7 @@ class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const muted = TextStyle(
+    final muted = TextStyle(
         color: AppTheme.textSecondary, fontSize: 13, height: 1.4);
 
     return Scaffold(
@@ -113,14 +113,14 @@ class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
+                      Text(
                         'One-time setup so VirtuWatch knows how big things '
                         'really are on this screen.',
                         textAlign: TextAlign.center,
                         style: muted,
                       ),
                       const SizedBox(height: 16),
-                      const Text('REFERENCE OBJECT', style: kLabelStyle),
+                      Text('REFERENCE OBJECT', style: kLabelStyle),
                       const SizedBox(height: 10),
                       Wrap(
                         alignment: WrapAlignment.center,
@@ -135,7 +135,7 @@ class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
                       ),
                       if (_selected != _ReferenceObject.card) ...[
                         const SizedBox(height: 6),
-                        const Text(
+                        Text(
                           'A card gives the most accurate calibration. The '
                           'PHP 20 coin works too, but a card is recommended '
                           'if you have one.',
@@ -171,7 +171,7 @@ class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         'You only need to do this once for this device. You '
                         'can redo it any time from the wrist measurement '
                         'screen.',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 /// A single shimmering placeholder block, the building piece for
 /// skeleton-loading UI that mimics the shape of real content while
@@ -31,11 +32,11 @@ class _SkeletonBoxState extends State<SkeletonBox>
     duration: const Duration(milliseconds: 1500),
   )..repeat();
 
-  // Slightly lighter than AppTheme.surface (0xFF16263D), so the
-  // skeleton reads clearly against both the surface cards and the
-  // page background without importing AppTheme's exact palette here.
-  static const _base = Color(0xFF223A5C);
-  static const _highlight = Color(0xFF35547E);
+  // Slightly different from the surface color, so the skeleton reads
+  // clearly against both the cards and the page background. The colors
+  // come from the current look (Default, Dark or Light).
+  static Color get _base => AppTheme.skeletonBase;
+  static Color get _highlight => AppTheme.skeletonHighlight;
 
   @override
   void dispose() {
@@ -57,7 +58,7 @@ class _SkeletonBoxState extends State<SkeletonBox>
           return ShaderMask(
             blendMode: BlendMode.srcIn,
             shaderCallback: (bounds) => LinearGradient(
-              colors: const [_base, _highlight, _base],
+              colors: [_base, _highlight, _base],
               stops: const [0.35, 0.5, 0.65],
               begin: Alignment(-1 + slide, 0),
               end: Alignment(1 + slide, 0),

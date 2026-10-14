@@ -72,10 +72,10 @@ class _CustomerShellState extends State<CustomerShell> {
                 alignment: Alignment.topCenter,
                 children: [
                   Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppTheme.surface,
                       border: Border(
-                        top: BorderSide(color: Color(0x1AFFFFFF)),
+                        top: BorderSide(color: AppTheme.hairline),
                       ),
                     ),
                     child: Row(
@@ -124,13 +124,13 @@ class _CustomerShellState extends State<CustomerShell> {
                         width: 56,
                         height: 56,
                         decoration: BoxDecoration(
-                          color: AppTheme.gold,
+                          color: AppTheme.goldFill,
                           shape: BoxShape.circle,
                           border: Border.all(color: AppTheme.surface, width: 3),
                         ),
                         child: Icon(
                           Icons.view_in_ar,
-                          color: const Color(0xFF0E1A2B),
+                          color: AppTheme.onGold,
                           size: _currentIndex == 2 ? 28 : 24,
                         ),
                       ),

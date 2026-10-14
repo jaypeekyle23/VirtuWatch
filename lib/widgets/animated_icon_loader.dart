@@ -144,7 +144,7 @@ class _AnimatedIconLoaderState extends State<AnimatedIconLoader>
         ),
         if (widget.label != null) ...[
           const SizedBox(height: 12),
-          Text(widget.label!, style: const TextStyle(color: Colors.white)),
+          Text(widget.label!, style: TextStyle(color: AppTheme.textPrimary)),
         ],
       ],
     );

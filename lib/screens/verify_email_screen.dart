@@ -121,7 +121,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const small = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+    final small = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
 
     return Scaffold(
       body: luxeCenteredPage(
@@ -138,7 +138,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 const TextSpan(text: 'We sent a verification link to '),
                 TextSpan(
                   text: widget.email,
-                  style: const TextStyle(color: AppTheme.textPrimary),
+                  style: TextStyle(color: AppTheme.textPrimary),
                 ),
                 const TextSpan(
                   text: ". Click the link in your email — you'll be signed "
@@ -147,7 +147,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               ]),
             ),
             const SizedBox(height: 32),
-            const Row(
+            Row(
               children: [
                 SizedBox(
                   width: 14,

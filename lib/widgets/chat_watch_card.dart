@@ -88,11 +88,11 @@ class ChatWatchCard extends StatelessWidget {
                         ? _maybeHero(
                             NetworkPhoto(
                               url: imageUrl,
-                              errorWidget: const Icon(Icons.watch,
+                              errorWidget: Icon(Icons.watch,
                                   color: AppTheme.textSecondary),
                             ),
                           )
-                        : const Icon(Icons.watch,
+                        : Icon(Icons.watch,
                             color: AppTheme.textSecondary),
                   ),
                 ),
@@ -105,7 +105,7 @@ class ChatWatchCard extends StatelessWidget {
                       if (brand.isNotEmpty)
                         Text(
                           brand,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 9,
                             letterSpacing: 1.2,
@@ -115,7 +115,7 @@ class ChatWatchCard extends StatelessWidget {
                         ),
                       Text(
                         name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
@@ -126,7 +126,7 @@ class ChatWatchCard extends StatelessWidget {
                       if (detail.isNotEmpty)
                         Text(
                           detail,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 10,
                           ),
@@ -136,7 +136,7 @@ class ChatWatchCard extends StatelessWidget {
                       if (price != null)
                         Text(
                           _formatPrice(price),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
@@ -166,7 +166,7 @@ class ChatWatchCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Icon(Icons.chevron_right,
+                    Icon(Icons.chevron_right,
                         color: AppTheme.textSecondary, size: 18),
                   ],
                 ),

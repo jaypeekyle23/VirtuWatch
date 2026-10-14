@@ -74,7 +74,8 @@ class AboutScreen extends StatelessWidget {
     'Argene Jay Acebes',
   ];
 
-  static const _body =
+  static TextStyle get _body =>
+
       TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.6);
 
   @override
@@ -92,7 +93,7 @@ class AboutScreen extends StatelessWidget {
           children: [
             luxeLogo(alignment: Alignment.center),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'AI-Based Virtual Watch Try-On &\nWrist Size Suggestion App',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -104,7 +105,7 @@ class AboutScreen extends StatelessWidget {
             const SizedBox(height: 28),
             luxeSection(
               'ABOUT THE APP',
-              const Text(
+              Text(
                 'VirtuWatch is a mobile platform that helps online shoppers find the '
                 'right watch with confidence. By combining an AR virtual try-on '
                 'experience with screen-calibrated wrist measurement, VirtuWatch '
@@ -137,7 +138,7 @@ class AboutScreen extends StatelessWidget {
               ),
             luxeSection(
               'CAPSTONE PROJECT',
-              const Text(
+              Text(
                 'VirtuWatch is developed as a Capstone Project at the National '
                 'Teachers College, Manila, Philippines.',
                 style: _body,
@@ -152,7 +153,7 @@ class AboutScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            const Center(
+            Center(
               child: Text('VirtuWatch v${AppVersion.versionName}',
                   style: kLabelStyle),
             ),

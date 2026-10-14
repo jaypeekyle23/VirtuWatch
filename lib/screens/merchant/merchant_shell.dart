@@ -52,7 +52,7 @@ class _MerchantShellState extends State<MerchantShell> {
           },
           backgroundColor: AppTheme.surface,
           indicatorColor: AppTheme.gold.withValues(alpha: 0.2),
-          destinations: const [
+          destinations: [
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               selectedIcon: Icon(Icons.dashboard, color: AppTheme.gold),

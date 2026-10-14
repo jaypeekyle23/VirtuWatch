@@ -140,7 +140,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Measure with a ruler across your wrist bone, or wrap a '
                 'tape measure around your wrist and divide the circumference '
                 'by 3.14. Most adult wrists fall between 50 and 70mm.',
@@ -207,7 +207,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('How it works', style: AppTheme.serif(size: 22)),
-        content: const Text(
+        content: Text(
           'VirtuWatch measures your wrist by direct comparison against your '
           'screen. No camera needed.\n\n'
           'Rest your wrist above or below your phone, line its near edge up '
@@ -270,7 +270,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
         children: [
           Text('Calibrate first', style: AppTheme.serif(size: 26)),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Your screen needs a one-time calibration before you can measure '
             'this way.',
             textAlign: TextAlign.center,
@@ -332,7 +332,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text(
+                  Text(
                     'Rest your wrist above or below your phone, line its near '
                     'edge up with the top line, then adjust the second line '
                     'until it matches your wrist\'s far edge.',
@@ -381,7 +381,7 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
                     decoration: kTopRule,
                     child: Row(
                       children: [
-                        const Text('SAVED', style: kLabelStyle),
+                        Text('SAVED', style: kLabelStyle),
                         const Spacer(),
                         Text(
                           _savedWristWidthMm != null

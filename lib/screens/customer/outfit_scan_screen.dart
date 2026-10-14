@@ -225,7 +225,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (_results != null) ...[
-                    const Align(
+                    Align(
                       alignment: Alignment.centerLeft,
                       child: Text('DOMINANT COLORS', style: kLabelStyle),
                     ),
@@ -245,7 +245,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
                       children: [
                         for (final r in _results!)
                           Text('${r.percentage.round()}%',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: AppTheme.textSecondary, fontSize: 11)),
                       ],
                     ),
@@ -269,13 +269,13 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
                         : _step == 3
                             ? 'Tap to scan again'
                             : 'Tap to capture outfit colors',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary, fontSize: 13),
                   ),
                   if (_step != 3)
                     InkWell(
                       onTap: _isAnalyzing ? null : _pickFromGallery,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.symmetric(vertical: 10),
                         child: Text('OR CHOOSE FROM GALLERY',
                             style: kLabelStyle),
@@ -343,7 +343,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
           border: done ? Border.all(color: Colors.white54, width: 1.5) : null,
         ),
         child: _isAnalyzing
-            ? const Center(
+            ? Center(
                 child: SizedBox(
                   width: 24,
                   height: 24,
@@ -395,7 +395,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
               const SizedBox(height: 8),
               Text(_cameraError!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
             ],
           ),
@@ -502,7 +502,7 @@ class _OutfitScanScreenState extends State<OutfitScanScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: Text('How it works', style: AppTheme.serif(size: 22)),
-        content: const Text(
+        content: Text(
           'VirtuWatch analyzes a photo of your outfit to find its dominant '
           'colors, using a clustering technique (K-means-style color '
           'extraction).\n\n'

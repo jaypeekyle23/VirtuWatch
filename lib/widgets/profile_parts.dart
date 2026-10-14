@@ -84,7 +84,7 @@ class ProfileHeader extends StatelessWidget {
               Text(email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 13)),
               const SizedBox(height: 6),
               profileLink('EDIT PROFILE', onEdit),
@@ -111,15 +111,15 @@ Widget profileMenu(
                 children: [
                   Expanded(
                     child: Text(title,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textPrimary, fontSize: 14)),
                   ),
                   if (trailing != null)
                     Text(trailing,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 13)),
                   const SizedBox(width: 8),
-                  const Icon(Icons.chevron_right,
+                  Icon(Icons.chevron_right,
                       size: 18, color: AppTheme.textSecondary),
                 ],
               ),
@@ -134,7 +134,7 @@ Future<void> confirmLogout(BuildContext context) async {
     builder: (context) => AlertDialog(
       backgroundColor: AppTheme.surface,
       title: Text('Log out?', style: AppTheme.serif(size: 22)),
-      content: const Text(
+      content: Text(
         'Are you sure you want to log out of your VirtuWatch account?',
         style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
       ),

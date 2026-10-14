@@ -74,7 +74,7 @@ class WatchTile extends StatelessWidget {
     final price = data['price'];
     final size = data['caseDiameterMm'];
     final heroTag = '$heroScope-photo-$watchId';
-    const fallback = Center(
+    final fallback = Center(
       child: Icon(Icons.watch, size: 30, color: AppTheme.textSecondary),
     );
 
@@ -115,7 +115,7 @@ class WatchTile extends StatelessWidget {
                     (data['brand'] as String? ?? '').toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 9,
                         letterSpacing: 1.2),
@@ -127,7 +127,7 @@ class WatchTile extends StatelessWidget {
                       data['name'] as String? ?? 'Unnamed Watch',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 12,
                           fontWeight: FontWeight.w500),
@@ -140,7 +140,7 @@ class WatchTile extends StatelessWidget {
                           ? Text.rich(
                               TextSpan(
                                 text: formatPeso(price),
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600),
@@ -148,7 +148,7 @@ class WatchTile extends StatelessWidget {
                                   if (size != null)
                                     TextSpan(
                                       text: '  ·  ${size}mm',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 11,
                                           fontWeight: FontWeight.w400),
@@ -281,7 +281,7 @@ class WatchListTile extends StatelessWidget {
     final style = data['styleCategory'] as String? ?? '';
     final sub = [if (size != null) '${size}mm', if (style.isNotEmpty) style]
         .join(' · ');
-    const fallback = Center(
+    final fallback = Center(
       child: Icon(Icons.watch, size: 32, color: AppTheme.textSecondary),
     );
 
@@ -320,7 +320,7 @@ class WatchListTile extends StatelessWidget {
                         (data['brand'] as String? ?? '').toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 10,
                             letterSpacing: 1.2),
@@ -330,7 +330,7 @@ class WatchListTile extends StatelessWidget {
                         data['name'] as String? ?? 'Unnamed Watch',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.w500),
@@ -340,13 +340,13 @@ class WatchListTile extends StatelessWidget {
                         Text(sub,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 12)),
                       ],
                       if (price is num) ...[
                         const SizedBox(height: 6),
                         Text(formatPeso(price),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600)),

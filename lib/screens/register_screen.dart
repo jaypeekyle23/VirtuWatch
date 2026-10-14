@@ -134,7 +134,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   TextSpan _link(String text, Widget screen) => TextSpan(
         text: text,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppTheme.textPrimary,
           fontWeight: FontWeight.w600,
         ),
@@ -143,7 +143,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const small = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
+    final small = TextStyle(color: AppTheme.textSecondary, fontSize: 13);
 
     return Scaffold(
       body: SafeArea(
@@ -158,7 +158,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 24),
                 Text('Create account', style: AppTheme.serif(size: 36)),
                 const SizedBox(height: 6),
-                const Text('Start your virtual try-on experience',
+                Text('Start your virtual try-on experience',
                     style: small),
                 const SizedBox(height: 32),
 
@@ -205,7 +205,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
 
-                const Text('STYLE PREFERENCE (OPTIONAL)', style: kLabelStyle),
+                Text('STYLE PREFERENCE (OPTIONAL)', style: kLabelStyle),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -235,7 +235,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         value: _agreedToTerms,
                         activeColor: AppTheme.textPrimary,
                         checkColor: AppTheme.background,
-                        side: const BorderSide(color: Colors.white38),
+                        side: BorderSide(color: AppTheme.outlineStrong),
                         onChanged: (v) =>
                             setState(() => _agreedToTerms = v ?? false),
                       ),
@@ -286,10 +286,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('Already have an account?  ', style: small),
+                    Text('Already have an account?  ', style: small),
                     InkWell(
                       onTap: () => Navigator.of(context).pop(),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.symmetric(vertical: 4),
                         child: Text(
                           'Log In',

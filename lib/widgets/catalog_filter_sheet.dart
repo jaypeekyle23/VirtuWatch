@@ -269,22 +269,22 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                     _draft.listingStatus,
                     (v) => _draft = _draft.copyWith(listingStatus: v)),
               if (widget.showArFilter) ...[
-                const Text('AR TRY-ON', style: kLabelStyle),
+                Text('AR TRY-ON', style: kLabelStyle),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: _draft.arOnly,
                   onChanged: (value) =>
                       setState(() => _draft = _draft.copyWith(arOnly: value)),
                   activeThumbColor: AppTheme.textPrimary,
-                  activeTrackColor: Colors.white30,
-                  title: const Text(
+                  activeTrackColor: AppTheme.outline,
+                  title: Text(
                     'Only show watches with AR try-on',
                     style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                   ),
                 ),
                 const SizedBox(height: 12),
               ],
-              const Text('PRICE RANGE', style: kLabelStyle),
+              Text('PRICE RANGE', style: kLabelStyle),
               const SizedBox(height: 10),
               if (widget.priceCeiling > widget.priceFloor) ...[
                 Text(
@@ -297,7 +297,7 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                   min: widget.priceFloor,
                   max: widget.priceCeiling,
                   activeColor: AppTheme.textPrimary,
-                  inactiveColor: Colors.white24,
+                  inactiveColor: AppTheme.outline,
                   labels: RangeLabels(
                     formatPeso(_priceDraft.start),
                     formatPeso(_priceDraft.end),
@@ -307,7 +307,7 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
               ] else
                 // Every watch shares the same price (or there is only one).
                 // A slider with equal min and max looks broken, so say so.
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text(
                     'Not enough price variation in the catalog to filter by range yet.',
@@ -464,7 +464,7 @@ class CatalogSearchField extends StatelessWidget {
         style: const TextStyle(fontSize: 15),
         decoration: luxeFieldDecoration(
           hint: 'Search by name, brand, or style',
-          prefixIcon: const Icon(Icons.search,
+          prefixIcon: Icon(Icons.search,
               size: 20, color: AppTheme.textSecondary),
           suffixIcon: controller.text.isEmpty
               ? null

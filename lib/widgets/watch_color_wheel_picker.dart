@@ -129,12 +129,12 @@ class _WatchColorWheelPickerState extends State<WatchColorWheelPicker> {
           ),
         ),
         const SizedBox(height: 16),
-        const Text('BRIGHTNESS', style: kLabelStyle),
+        Text('BRIGHTNESS', style: kLabelStyle),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             activeTrackColor: AppTheme.textPrimary,
             thumbColor: AppTheme.textPrimary,
-            inactiveTrackColor: Colors.white24,
+            inactiveTrackColor: AppTheme.outline,
           ),
           child: Slider(
             value: _hsv.value,
@@ -150,7 +150,7 @@ class _WatchColorWheelPickerState extends State<WatchColorWheelPicker> {
                 color: _hsv.toColor(),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: Colors.white24,
+                  color: AppTheme.outline,
                   width: 2,
                 ),
               ),
@@ -167,9 +167,9 @@ class _WatchColorWheelPickerState extends State<WatchColorWheelPicker> {
                 style: TextStyle(color: AppTheme.textPrimary),
                 decoration: luxeFieldDecoration().copyWith(
                   prefixText: '#',
-                  prefixStyle: const TextStyle(color: AppTheme.textSecondary),
+                  prefixStyle: TextStyle(color: AppTheme.textSecondary),
                   labelText: 'Hex code',
-                  labelStyle: const TextStyle(
+                  labelStyle: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 13),
                   counterText: '',
                 ),

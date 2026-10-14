@@ -47,7 +47,7 @@ class HomeHeader extends StatelessWidget {
               Positioned(
                 left: -48,
                 top: -48,
-                child: Image.asset('assets/images/branding/logo.png',
+                child: Image.asset(AppTheme.logoAsset,
                     height: 180, fit: BoxFit.contain),
               ),
               Positioned.fill(
@@ -60,7 +60,7 @@ class HomeHeader extends StatelessWidget {
                       padding: const EdgeInsets.all(1.5),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white24),
+                        border: Border.all(color: AppTheme.outline),
                       ),
                       child: CircleAvatar(
                         radius: 17,
@@ -85,7 +85,7 @@ class HomeHeader extends StatelessWidget {
             style: AppTheme.serif(size: 32).copyWith(height: 1.1)),
         const SizedBox(height: 8),
         Text(subtitle,
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppTheme.textSecondary, fontSize: 13)),
         const SizedBox(height: 24),
       ],

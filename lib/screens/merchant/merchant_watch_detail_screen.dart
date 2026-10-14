@@ -60,7 +60,7 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                           listed
                               ? 'Visible to customers in the catalog.'
                               : 'Hidden from customers until you list it.',
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textSecondary, fontSize: 12),
                         ),
                         const SizedBox(height: 8),
@@ -103,7 +103,7 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                           message: 'Delete watch',
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.white24),
+                              side: BorderSide(color: AppTheme.outline),
                               minimumSize: const Size(52, 0),
                               padding: EdgeInsets.zero,
                             ),

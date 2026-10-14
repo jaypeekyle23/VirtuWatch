@@ -60,7 +60,7 @@ class _AdminAccountManagementScreenState
           title: Text(title, style: AppTheme.serif(size: 22)),
           content: Text(body,
               style:
-                  const TextStyle(color: AppTheme.textSecondary, height: 1.5)),
+                  TextStyle(color: AppTheme.textSecondary, height: 1.5)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(c, false),
@@ -122,7 +122,7 @@ class _AdminAccountManagementScreenState
                     value: r,
                     activeColor: AppTheme.gold,
                     title: Text(r[0].toUpperCase() + r.substring(1),
-                        style: const TextStyle(color: AppTheme.textPrimary)),
+                        style: TextStyle(color: AppTheme.textPrimary)),
                   ),
               ],
             ),
@@ -186,7 +186,7 @@ class _AdminAccountManagementScreenState
               style: const TextStyle(fontSize: 15),
               decoration: luxeFieldDecoration(
                 hint: 'Search by name or email',
-                prefixIcon: const Icon(Icons.search,
+                prefixIcon: Icon(Icons.search,
                     size: 20, color: AppTheme.textSecondary),
                 suffixIcon: _query.isEmpty
                     ? null
@@ -245,7 +245,7 @@ class _AdminAccountManagementScreenState
 
   Widget _message(String text) => Center(
         child: Text(text,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
       );
 
   Widget _row(String uid, Map<String, dynamic> d) {
@@ -265,7 +265,7 @@ class _AdminAccountManagementScreenState
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: AppTheme.hairline)),
       ),
       child: Opacity(
@@ -290,14 +290,14 @@ class _AdminAccountManagementScreenState
                   Text(username,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w500)),
                   Text(d['email'] as String? ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 12)),
                 ],
               ),
@@ -316,17 +316,17 @@ class _AdminAccountManagementScreenState
             PopupMenuButton<String>(
               color: AppTheme.surface,
               padding: const EdgeInsets.only(left: 8),
-              icon: const Icon(Icons.more_vert,
+              icon: Icon(Icons.more_vert,
                   size: 20, color: AppTheme.textSecondary),
               onSelected: (v) => _onAction(v, uid, d),
               itemBuilder: (_) => [
                 PopupMenuItem(
                   value: isActive ? 'disable' : 'enable',
                   child: Text(isActive ? 'Disable account' : 'Enable account',
-                      style: const TextStyle(color: AppTheme.textPrimary)),
+                      style: TextStyle(color: AppTheme.textPrimary)),
                 ),
                 if (!isSelf)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'change_role',
                     child: Text('Change role',
                         style: TextStyle(color: AppTheme.textPrimary)),

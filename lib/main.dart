@@ -4,6 +4,7 @@ import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth_gate.dart';
 import 'services/notification_service.dart';
+import 'services/theme_controller.dart';
 import 'services/update_checker_service.dart';
 
 /// Lets the notification tap handler below show a SnackBar (e.g.
@@ -14,6 +15,8 @@ final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Load the saved look first so the very first screen already uses it.
+  await ThemeController.instance.load();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -84,8 +87,40 @@ void _showUpdateSnackBar(String message, {bool isError = false}) {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    ThemeController.instance.addListener(_onThemeChanged);
+  }
+
+  @override
+  void dispose() {
+    ThemeController.instance.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  /// Runs when the user picks a different look. Screens read their colors
+  /// straight from AppTheme, which Flutter does not track, so besides
+  /// giving MaterialApp the new theme we also ask every widget currently
+  /// on screen to rebuild. Open screens and navigation stay as they are.
+  void _onThemeChanged() {
+    if (!mounted) return;
+    setState(() {});
+    void markDirty(Element element) {
+      element.markNeedsBuild();
+      element.visitChildren(markDirty);
+    }
+
+    (context as Element).visitChildren(markDirty);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +129,9 @@ class MyApp extends StatelessWidget {
       title: 'VirtuWatch',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
+      // Colors come from AppTheme directly, so a fade between two themes
+      // would only animate part of the screen. Switch instantly instead.
+      themeAnimationDuration: Duration.zero,
       home: const AuthGate(),
     );
   }

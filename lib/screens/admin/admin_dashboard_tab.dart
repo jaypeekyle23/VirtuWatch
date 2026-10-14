@@ -94,7 +94,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                               Text('List a new watch',
                                   style: AppTheme.serif(size: 22)),
                               const SizedBox(height: 4),
-                              const Text('Add photos, specs and a 3D model.',
+                              Text('Add photos, specs and a 3D model.',
                                   style: TextStyle(
                                       color: AppTheme.textSecondary,
                                       fontSize: 13)),
@@ -184,12 +184,12 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
             ]);
           }
           if (snap.hasError) {
-            return const Text('Could not load activity.',
+            return Text('Could not load activity.',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
           }
           final docs = snap.data?.docs ?? [];
           if (docs.isEmpty) {
-            return const Text('No recent activity yet.',
+            return Text('No recent activity yet.',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
           }
           return Column(children: [
@@ -200,7 +200,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   Widget _row(Map<String, dynamic> data) => Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: AppTheme.hairline)),
         ),
         child: Row(
@@ -211,12 +211,12 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(data['message'] as String? ?? 'Unknown activity',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textPrimary, fontSize: 13)),
             ),
             const SizedBox(width: 12),
             Text(_ago(data['timestamp'] as Timestamp?),
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppTheme.textSecondary, fontSize: 11)),
           ],
         ),
