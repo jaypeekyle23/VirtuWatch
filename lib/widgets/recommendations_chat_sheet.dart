@@ -71,6 +71,7 @@ Future<void> showRecommendationsChatSheet(
           currentBudgetMin: (data['budgetMin'] as num?)?.toDouble() ?? 0,
           currentBudgetMax: (data['budgetMax'] as num?)?.toDouble() ?? 50000,
           currentPhotoUrl: data['photoUrl'] as String? ?? '',
+          currentGender: data['gender'] as String?,
         ),
       ),
     );

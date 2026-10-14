@@ -76,6 +76,7 @@ class AuthService {
     required String password,
     required String username,
     List<String> stylePreferences = const [],
+    String? gender,
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -90,6 +91,7 @@ class AuthService {
           'username': username,
           'role': 'customer',
           'stylePreferences': stylePreferences,
+          'gender': ?gender,
           'accountStatus': 'active',
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -383,12 +385,15 @@ class AuthService {
     double? budgetMin,
     double? budgetMax,
     String? photoUrl,
+    String? gender,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw 'You must be logged in.';
 
     await _firestore.collection('users').doc(uid).update({
       'username': username,
+      // Null (prefer not to say) removes the field.
+      'gender': gender ?? FieldValue.delete(),
       'stylePreferences': stylePreferences,
       'preferredBrands': preferredBrands,
       'budgetMin': ?budgetMin,

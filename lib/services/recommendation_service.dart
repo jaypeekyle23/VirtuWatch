@@ -100,6 +100,7 @@ typedef _Profile = ({
   List<Map<String, dynamic>> outfitColors,
   double budgetMin,
   double budgetMax,
+  String? gender,
 });
 
 /// Ranks the watch catalog against a user's profile.
@@ -150,6 +151,7 @@ class RecommendationService {
           [],
       budgetMin: (userData['budgetMin'] as num?)?.toDouble() ?? 0,
       budgetMax: (userData['budgetMax'] as num?)?.toDouble() ?? 50000,
+      gender: userData['gender'] as String?,
     );
   }
 
@@ -158,7 +160,7 @@ class RecommendationService {
   /// (like recently viewed watches) don't trigger a pointless re-score.
   String _profileKey(_Profile p) =>
       '${p.wristWidthMm}|${p.stylePreferences}|${p.outfitColors}|'
-      '${p.budgetMin}|${p.budgetMax}';
+      '${p.budgetMin}|${p.budgetMax}|${p.gender}';
 
   /// Scores a single watch against the current user's profile — used by
   /// [WatchDetailScreen] to show a match percentage without pulling the
@@ -230,6 +232,15 @@ class RecommendationService {
         .asyncMap(_buildResult);
   }
 
+  /// Whether a watch made for [targetGender] suits a user of [gender]
+  /// ('Male' or 'Female'). Unisex always suits. A watch with no gender on
+  /// file is left out for a user who set one, same as the catalog filter.
+  /// Users who haven't set a gender see every watch.
+  bool _suitsGender(String? gender, Object? targetGender) {
+    final wanted = {'Male': "Men's", 'Female': "Women's"}[gender];
+    return wanted == null || targetGender == wanted || targetGender == 'Unisex';
+  }
+
   /// Scores the whole listed catalog against [profile] and ranks it.
   Future<RecommendationResult> _buildResult(_Profile profile) async {
     final watchesSnapshot = await _firestore
@@ -237,7 +248,9 @@ class RecommendationService {
         .where('listedInCatalog', isEqualTo: true)
         .get();
 
-    final scored = watchesSnapshot.docs.map((doc) {
+    final scored = watchesSnapshot.docs
+        .where((doc) => _suitsGender(profile.gender, doc.data()['targetGender']))
+        .map((doc) {
       return _score(
         watchId: doc.id,
         data: doc.data(),

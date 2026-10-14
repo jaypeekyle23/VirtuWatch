@@ -142,6 +142,7 @@ class CustomerProfileTab extends StatelessWidget {
                           currentBudgetMax:
                               (data['budgetMax'] as num?)?.toDouble() ?? 50000,
                           currentPhotoUrl: photoUrl,
+                          currentGender: data['gender'] as String?,
                         ),
                       ),
                     ),

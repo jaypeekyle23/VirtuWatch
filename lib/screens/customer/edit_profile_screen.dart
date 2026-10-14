@@ -17,6 +17,7 @@ class EditProfileScreen extends StatefulWidget {
   final double currentBudgetMin;
   final double currentBudgetMax;
   final String currentPhotoUrl;
+  final String? currentGender;
 
   const EditProfileScreen({
     super.key,
@@ -27,6 +28,7 @@ class EditProfileScreen extends StatefulWidget {
     this.currentBudgetMin = 0,
     this.currentBudgetMax = 50000,
     this.currentPhotoUrl = '',
+    this.currentGender,
   });
 
   @override
@@ -41,6 +43,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late Set<String> _selectedStyles;
   late Set<String> _selectedBrands;
   late RangeValues _budgetRange;
+  // 'Male', 'Female', or null for prefer not to say.
+  String? _gender;
   late String _existingPhotoUrl;
   File? _selectedImage;
   bool _isUploadingImage = false;
@@ -73,6 +77,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.currentUsername);
     _selectedStyles = widget.currentStylePreferences.toSet();
+    _gender = widget.currentGender;
     _selectedBrands = widget.currentPreferredBrands.toSet();
     _budgetRange = RangeValues(
       widget.currentBudgetMin.clamp(0, 500000),
@@ -125,6 +130,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         budgetMin: _budgetRange.start,
         budgetMax: _budgetRange.end,
         photoUrl: photoUrl,
+        gender: _gender,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -236,6 +242,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   Text('Email cannot be changed here.',
                       style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 11)),
+                ],
+              ),
+            ),
+            luxeSection(
+              'GENDER',
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final option in const ['Male', 'Female', null])
+                        luxePill(
+                          option ?? 'Prefer not to say',
+                          selected: _gender == option,
+                          onTap: () => setState(() => _gender = option),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Used to leave out watches made for another gender. '
+                    'Unisex watches are always included.',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 11),
+                  ),
                 ],
               ),
             ),

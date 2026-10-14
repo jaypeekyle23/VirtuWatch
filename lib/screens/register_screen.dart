@@ -31,6 +31,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirmController = TextEditingController();
   final _authService = AuthService();
   final _selectedStyles = <String>{};
+  // 'Male', 'Female', or null for prefer not to say.
+  String? _gender;
 
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -67,6 +69,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text.trim(),
         username: _usernameController.text.trim(),
         stylePreferences: _selectedStyles.toList(),
+        gender: _gender,
       );
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -204,6 +207,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onToggle: () =>
                       setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
+
+                Text('GENDER (OPTIONAL)', style: kLabelStyle),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final option in const ['Male', 'Female', null])
+                      luxePill(
+                        option ?? 'Prefer not to say',
+                        selected: _gender == option,
+                        onTap: () => setState(() => _gender = option),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 24),
 
                 Text('STYLE PREFERENCE (OPTIONAL)', style: kLabelStyle),
                 const SizedBox(height: 12),
