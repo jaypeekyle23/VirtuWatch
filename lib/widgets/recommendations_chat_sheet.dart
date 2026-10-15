@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../utils/ar_readiness.dart';
 import '../screens/customer/ar_try_on_screen.dart';
 import '../screens/customer/edit_profile_screen.dart';
 import '../screens/customer/outfit_scan_screen.dart';
@@ -98,7 +99,7 @@ Future<void> showRecommendationsChatSheet(
           final rec = current.recommendations
               .where((r) => r.watchId == action.watchId)
               .firstOrNull;
-          if (rec == null) return;
+          if (rec == null || !isArReady(rec.data)) return;
           await navigator.push(MaterialPageRoute(
             builder: (_) => ArTryOnScreen(
               initialWatchId: rec.watchId,
@@ -149,7 +150,8 @@ Future<void> showRecommendationsChatSheet(
           onPressed: () => runAction(context, action),
         );
       case ChatAction.tryOn:
-        if (rec == null) return null;
+        // No button for watches that can't be rendered in AR.
+        if (rec == null || !isArReady(rec.data)) return null;
         return ChatActionButton(
           icon: Icons.view_in_ar_outlined,
           label: watchName.isEmpty ? 'Try on in AR' : 'Try on $watchName',

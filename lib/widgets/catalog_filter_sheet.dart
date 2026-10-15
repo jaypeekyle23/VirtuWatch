@@ -2,6 +2,7 @@ import 'dart:math' show max, min;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../utils/ar_readiness.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import 'luxe.dart';
@@ -49,7 +50,7 @@ class CatalogFilters {
     // A watch with no targetGender never shows under a specific gender, and
     // is never guessed into a bucket. It still shows under "All".
     if (gender != 'All' && data['targetGender'] != gender) return false;
-    if (arOnly && data['has3DModel'] != true) return false;
+    if (arOnly && !isArReady(data)) return false;
     if (listingStatus != 'All' &&
         (data['listedInCatalog'] == true) != (listingStatus == 'Active')) {
       return false;

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../utils/ar_readiness.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../constants/watch_colors.dart';
 import '../../services/recommendation_service.dart';
@@ -267,16 +268,20 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           style: outlinedStyle,
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ArTryOnScreen(
-                                initialWatchId: widget.watchId,
-                                initialWatchData: data,
-                              ),
-                            ),
-                          ),
+                          onPressed: isArReady(data)
+                              ? () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ArTryOnScreen(
+                                        initialWatchId: widget.watchId,
+                                        initialWatchData: data,
+                                      ),
+                                    ),
+                                  )
+                              : null,
                           icon: const Icon(Icons.view_in_ar_outlined, size: 18),
-                          label: const Text('Try on in AR'),
+                          label: Text(isArReady(data)
+                              ? 'Try on in AR'
+                              : 'AR not available'),
                         ),
                       ),
                       const SizedBox(width: 12),

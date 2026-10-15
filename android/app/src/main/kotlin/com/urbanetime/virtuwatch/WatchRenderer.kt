@@ -1,0 +1,714 @@
+package com.urbanetime.virtuwatch
+
+import android.content.Context
+import android.util.Log
+import android.view.Choreographer
+import android.view.Surface
+import android.view.TextureView
+import com.google.android.filament.Box
+import com.google.android.filament.Camera
+import com.google.android.filament.Engine
+import com.google.android.filament.EntityManager
+import com.google.android.filament.Filament
+import com.google.android.filament.IndexBuffer
+import com.google.android.filament.IndirectLight
+import com.google.android.filament.LightManager
+import com.google.android.filament.Material
+import com.google.android.filament.RenderableManager
+import com.google.android.filament.Renderer
+import com.google.android.filament.Scene
+import com.google.android.filament.SwapChain
+import com.google.android.filament.VertexBuffer
+import com.google.android.filament.View
+import com.google.android.filament.Viewport
+import com.google.android.filament.android.UiHelper
+import com.google.android.filament.gltfio.AssetLoader
+import com.google.android.filament.gltfio.FilamentAsset
+import com.google.android.filament.gltfio.Gltfio
+import com.google.android.filament.gltfio.ResourceLoader
+import com.google.android.filament.gltfio.UbershaderProvider
+import com.google.android.filament.utils.KTX1Loader
+import com.google.android.filament.utils.Utils
+import io.flutter.FlutterInjector
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+/**
+ * Draws the watch (seiko_small.glb) on the tracked wrist with Filament, on a transparent
+ * TextureView stacked over the camera preview.
+ *
+ * Model frame (measured from the GLB's geometry): the strap is a closed ring.
+ *   +X = out of the wrist (watch face normal)
+ *   +Z = ring axis = along the forearm, toward the elbow (crown points to -Z, toward the hand)
+ *   +Y = across the wrist (12 o'clock direction)
+ * The ring's inner opening (where the wrist goes) is centred at (-0.057, 0, 0) with half-sizes
+ * 0.25 (x) by 0.435 (y) model units.
+ *
+ * A depth-only elliptical cylinder fills that opening, so the part of the strap that passes
+ * *behind* the wrist is hidden, like a real watch.
+ *
+ * Everything here runs on the main thread except [submit], which is called from MediaPipe's thread.
+ */
+class WatchRenderer(
+    private val context: Context,
+    private val textureView: TextureView,
+) {
+    private val tag = "WatchRenderer"
+
+    // ---- tunables --------------------------------------------------------
+    /** Multiplier on the default watch size (UI slider). */
+    @Volatile var userScale = 1.0
+    /** Distance from the wrist landmark up the forearm to the watch centre, metres (UI slider). */
+    @Volatile var forearmOffsetM = 0.017
+
+    /** Size/centre the watch to the arm measured in the image (the sliders then act as small corrections). */
+    @Volatile var autoFit = true
+    private val fitMin = 0.8                  // never shrink/grow the whole watch beyond this range:
+    private val fitMax = 1.25                 // a 40 mm case shouldn't turn into a 50 mm one
+    private val fitTauSec = 0.5               // slow, so the watch doesn't pulse in size
+    @Volatile private var fitTargetRatio = 1.0
+    private var fitRatio = 1.0                // main thread only
+
+    private val wristWidthM = 0.058           // average adult wrist width
+    private val holeCx = -0.057               // model units
+    private val holeHalfX = 0.25
+    private val holeHalfY = 0.435
+    private val modelHoleWidth = 2 * holeHalfY
+    /**
+     * How far ahead (seconds) to push the pose beyond the age it already has when drawn. The pose
+     * is ~60-100 ms old on arrival (camera + inference + filtering), so without this the watch
+     * trails a moving hand. 0 = off. (UI slider "Lead".)
+     */
+    @Volatile var leadSec = 0.07
+    // Adaptive follow ("soft deadband"): a still hand's measurement noise (sub-mm / sub-degree) is
+    // followed very slowly so the watch stays put; real movement is followed quickly.
+    private val tauRestSec = 0.25
+    private val tauMoveSec = 0.02
+
+    // ---- pose handed over from the tracker thread -------------------------
+    private class Target(
+        val posGl: DoubleArray,
+        val q: DoubleArray,
+        val visible: Boolean,
+        /** When this measurement arrived (System.nanoTime base, seconds). */
+        val tArrSec: Double,
+        /** Smoothed linear velocity, metres/s (GL camera space). */
+        val vel: DoubleArray,
+        /** Smoothed angular velocity, rad/s, world frame. */
+        val omega: DoubleArray,
+    )
+
+    @Volatile private var target: Target? = null
+    @Volatile private var imgW = 0
+    @Volatile private var imgH = 0
+    @Volatile private var focalPx = 0.0
+
+    // ---- Filament objects ---------------------------------------------------
+    private var engine: Engine? = null
+    private var renderer: Renderer? = null
+    private var scene: Scene? = null
+    private var view: View? = null
+    private var camera: Camera? = null
+    private var swapChain: SwapChain? = null
+    private var uiHelper: UiHelper? = null
+    private var viewportW = 0
+    private var viewportH = 0
+
+    private var assetLoader: AssetLoader? = null
+    private var resourceLoader: ResourceLoader? = null
+    private var provider: UbershaderProvider? = null
+    private var watchAsset: FilamentAsset? = null
+
+    private var indirectLight: IndirectLight? = null
+    private var sunEntity = 0
+
+    private var occluderEntity = 0
+    private var occluderMaterial: Material? = null
+    private var occluderVb: VertexBuffer? = null
+    private var occluderIb: IndexBuffer? = null
+
+    private var choreographer: Choreographer? = null
+    private var frameCallback: Choreographer.FrameCallback? = null
+    private var lastFrameNs = 0L
+
+    // smoothed state (main thread only)
+    private val curPos = DoubleArray(3)
+    private val curQ = doubleArrayOf(0.0, 0.0, 0.0, 1.0)
+    private var shown = false
+
+    // Render only when something changed: a steady hand then costs the GPU nothing, which leaves it
+    // to hand tracking (they share the GPU). A frame is still forced once a second as a safety net.
+    private var needsRender = true
+    private val lastM = FloatArray(16)
+    private var lastProjA = 0.0
+    private var lastProjB = 0.0
+    private var lastRenderNs = 0L
+
+    // ======================================================================
+    // Pose in
+    // ======================================================================
+
+    /** Called from the MediaPipe thread with each new tracking result. */
+    fun submit(frame: TrackingFrame) {
+        val pose = frame.pose
+        val isLeft = frame.isLeftHand
+        if (pose == null || isLeft == null) {
+            target = null
+            return
+        }
+        imgW = pose.imgW
+        imgH = pose.imgH
+        focalPx = pose.focalPx
+
+        // zAxis = x cross y is the BACK-of-hand normal for a left hand and the palm normal for a
+        // right hand, so flip it for right hands.
+        val sign = if (isLeft) 1.0 else -1.0
+        val n = doubleArrayOf(pose.zAxis[0] * sign, pose.zAxis[1] * sign, pose.zAxis[2] * sign)
+        val f = pose.yAxis
+        // The watch model's +Z is its ring axis and its crown sits at -Z.
+        //  - Left wrist: crown toward the hand  => +Z points toward the elbow (along f).
+        //  - Right wrist: a watch is worn turned around, crown toward the ELBOW (so 12 o'clock still
+        //    points to the pinky side and the dial reads upright) => +Z points toward the hand.
+        // Without this the right-hand watch was rotated 180 deg about its face, i.e. upside down.
+        val axisZ = if (isLeft) f else doubleArrayOf(-f[0], -f[1], -f[2])
+        val ym = PoseMath.cross(axisZ, n)
+
+        // Fit to the measured arm. The width is in image pixels and the watch is drawn at the same
+        // depth, so any error in the depth estimate cancels: the strap spans the arm on screen.
+        var shiftX = 0.0
+        var shiftY = 0.0
+        val fw = frame.fitWidthPx
+        if (autoFit && !fw.isNaN()) {
+            val zc = pose.origin[2]
+            val metresPerUnit = fw * zc / (pose.focalPx * modelHoleWidth)
+            fitTargetRatio = (metresPerUnit / (wristWidthM / modelHoleWidth)).coerceIn(fitMin, fitMax)
+            shiftX = frame.fitShiftX * zc / pose.focalPx // centre on the arm, sideways
+            shiftY = frame.fitShiftY * zc / pose.focalPx
+        }
+
+        // Watch centre: wrist landmark moved up the forearm (and sideways onto the arm's centre line).
+        val off = forearmOffsetM
+        val wCv = doubleArrayOf(
+            pose.origin[0] + f[0] * off + shiftX,
+            pose.origin[1] + f[1] * off + shiftY,
+            pose.origin[2] + f[2] * off,
+        )
+
+        // Camera space here is OpenCV-style (x right, y down, z forward); Filament wants
+        // OpenGL-style (x right, y up, z backward): negate y and z.
+        fun gl(v: DoubleArray) = doubleArrayOf(v[0], -v[1], -v[2])
+        val q = quatFromColumns(gl(n), gl(ym), gl(axisZ))
+        val posGl = gl(wCv)
+        val nowSec = System.nanoTime() / 1e9
+
+        // Velocity from the previous measurement (lightly smoothed), used to extrapolate forward.
+        val vel = DoubleArray(3)
+        val omega = DoubleArray(3)
+        val prev = target
+        if (prev != null && prev.visible) {
+            val dtp = nowSec - prev.tArrSec
+            if (dtp in 0.02..0.25) {
+                for (i in 0 until 3) {
+                    val vNew = (posGl[i] - prev.posGl[i]) / dtp
+                    vel[i] = 0.65 * prev.vel[i] + 0.35 * vNew
+                }
+                // dq = q * conj(prevQ): the rotation that took the old orientation to the new one.
+                val a = q
+                val b = doubleArrayOf(-prev.q[0], -prev.q[1], -prev.q[2], prev.q[3])
+                var dx = a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1]
+                var dy = a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0]
+                var dz = a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3]
+                var dw = a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]
+                if (dw < 0) { dx = -dx; dy = -dy; dz = -dz; dw = -dw } // shortest way round
+                val vlen = sqrt(dx * dx + dy * dy + dz * dz)
+                if (vlen > 1e-9) {
+                    val angle = 2.0 * kotlin.math.atan2(vlen, dw)
+                    for (i in 0 until 3) {
+                        val axis = doubleArrayOf(dx, dy, dz)[i] / vlen
+                        omega[i] = 0.65 * prev.omega[i] + 0.35 * (axis * angle / dtp)
+                    }
+                } else {
+                    for (i in 0 until 3) omega[i] = 0.65 * prev.omega[i]
+                }
+            }
+        }
+        // Always visible. With the palm toward the camera the wrist-shaped occluder hides the case
+        // (it is behind the wrist) and you see the strap's underside with the buckle, like a real watch;
+        // turning the wrist in between shows the strap wrapping around the side.
+        target = Target(posGl, q, true, nowSec, vel, omega)
+    }
+
+    // ======================================================================
+    // Lifecycle
+    // ======================================================================
+
+    fun start() {
+        Filament.init()
+        Gltfio.init()
+        Utils.init()
+
+        val eng = Engine.create()
+        engine = eng
+        renderer = eng.createRenderer().also {
+            it.clearOptions = Renderer.ClearOptions().apply {
+                clear = true
+                clearColor = floatArrayOf(0f, 0f, 0f, 0f)
+            }
+        }
+        scene = eng.createScene()
+        camera = eng.createCamera(EntityManager.get().create())
+        view = eng.createView().also {
+            it.scene = scene
+            it.camera = camera
+            it.blendMode = View.BlendMode.TRANSLUCENT
+        }
+
+        setupLighting(eng)
+        loadWatch(eng)
+        loadOccluder(eng)
+
+        val helper = UiHelper(UiHelper.ContextErrorPolicy.DONT_CHECK)
+        helper.isOpaque = false
+        helper.setRenderCallback(object : UiHelper.RendererCallback {
+            override fun onNativeWindowChanged(surface: Surface) {
+                val e = engine ?: return
+                swapChain?.let { e.destroySwapChain(it) }
+                swapChain = e.createSwapChain(surface, helper.swapChainFlags)
+                needsRender = true
+            }
+
+            override fun onDetachedFromSurface() {
+                val e = engine ?: return
+                swapChain?.let {
+                    e.destroySwapChain(it)
+                    e.flushAndWait()
+                }
+                swapChain = null
+            }
+
+            override fun onResized(width: Int, height: Int) {
+                viewportW = width
+                viewportH = height
+                view?.viewport = Viewport(0, 0, width, height)
+                needsRender = true
+            }
+        })
+        helper.attachTo(textureView)
+        uiHelper = helper
+
+        val choreo = Choreographer.getInstance()
+        choreographer = choreo
+        frameCallback = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                renderFrame(frameTimeNanos)
+                choreographer?.postFrameCallback(this)
+            }
+        }
+        choreo.postFrameCallback(frameCallback!!)
+    }
+
+    fun stop() {
+        frameCallback?.let { choreographer?.removeFrameCallback(it) }
+        frameCallback = null
+        choreographer = null
+        uiHelper?.detach()
+        uiHelper = null
+
+        val eng = engine ?: return
+        val sc = scene
+
+        watchAsset?.let {
+            sc?.removeEntities(it.entities)
+            assetLoader?.destroyAsset(it)
+        }
+        watchAsset = null
+        if (occluderEntity != 0) {
+            sc?.removeEntity(occluderEntity)
+            eng.destroyEntity(occluderEntity)
+            EntityManager.get().destroy(occluderEntity)
+            occluderEntity = 0
+        }
+        occluderVb?.let { eng.destroyVertexBuffer(it) }
+        occluderIb?.let { eng.destroyIndexBuffer(it) }
+        occluderMaterial?.let { eng.destroyMaterial(it) }
+        indirectLight?.let { eng.destroyIndirectLight(it) }
+        if (sunEntity != 0) {
+            sc?.removeEntity(sunEntity)
+            eng.destroyEntity(sunEntity)
+            EntityManager.get().destroy(sunEntity)
+            sunEntity = 0
+        }
+
+        resourceLoader?.destroy()
+        assetLoader?.destroy()
+        provider?.destroy()
+
+        renderer?.let { eng.destroyRenderer(it) }
+        view?.let { eng.destroyView(it) }
+        sc?.let { eng.destroyScene(it) }
+        camera?.let { eng.destroyCameraComponent(it.entity) }
+        swapChain?.let { eng.destroySwapChain(it) }
+        swapChain = null
+        eng.destroy()
+
+        engine = null; renderer = null; scene = null; view = null; camera = null
+        assetLoader = null; resourceLoader = null; provider = null
+        indirectLight = null; occluderMaterial = null; occluderVb = null; occluderIb = null
+    }
+
+    // ======================================================================
+    // Setup helpers
+    // ======================================================================
+
+    private fun setupLighting(eng: Engine) {
+        val sc = scene ?: return
+
+        // Image-based light: a generated "studio" environment with soft boxes, so the steel and
+        // glass actually have something to reflect. (assets/studio_ibl.ktx, built with cmgen.)
+        try {
+            val bytes = context.assets.open("studio_ibl.ktx").use { it.readBytes() }
+            val buf = ByteBuffer.allocateDirect(bytes.size)
+            buf.put(bytes)
+            buf.flip()
+            // In Filament 1.68 this returns a bundle (light + its cubemap texture), not the light itself.
+            val ibl = KTX1Loader.createIndirectLight(eng, buf).indirectLight
+            if (ibl != null) {
+                ibl.intensity = 25000f
+                sc.indirectLight = ibl
+                indirectLight = ibl
+            } else {
+                Log.e(tag, "IBL could not be created, continuing without it")
+            }
+        } catch (e: Throwable) {
+            Log.e(tag, "IBL failed, continuing without it: ${e.message}")
+        }
+
+        // One soft key light from upper-left-front (camera space == world space here).
+        sunEntity = EntityManager.get().create()
+        LightManager.Builder(LightManager.Type.DIRECTIONAL)
+            .direction(0.4f, -0.6f, -0.7f)
+            .color(1.0f, 0.98f, 0.95f)
+            .intensity(20000.0f)
+            .build(eng, sunEntity)
+        sc.addEntity(sunEntity)
+    }
+
+    private fun loadWatch(eng: Engine) {
+        try {
+            val prov = UbershaderProvider(eng)
+            provider = prov
+            val loader = AssetLoader(eng, prov, EntityManager.get())
+            assetLoader = loader
+            val resLoader = ResourceLoader(eng)
+            resourceLoader = resLoader
+
+            val key = FlutterInjector.instance().flutterLoader()
+                .getLookupKeyForAsset("assets/models/seiko_small.glb")
+            val bytes = context.assets.open(key).use { it.readBytes() }
+            val buf = ByteBuffer.allocateDirect(bytes.size)
+            buf.put(bytes)
+            buf.flip()
+
+            val asset = loader.createAsset(buf)
+            if (asset == null) {
+                Log.e(tag, "Failed to create watch asset")
+                return
+            }
+            resLoader.loadResources(asset)
+            asset.releaseSourceData()
+            watchAsset = asset
+        } catch (e: Throwable) {
+            Log.e(tag, "Could not load watch: ${e.message}")
+        }
+    }
+
+    /**
+     * Depth-only elliptical cylinder filling the strap ring's opening (model units), so the far
+     * side of the strap is hidden behind the "wrist". Priority 0 => drawn before the watch.
+     */
+    private fun loadOccluder(eng: Engine) {
+        try {
+            val matBytes = context.assets.open("occluder.filamat").use { it.readBytes() }
+            val matBuf = ByteBuffer.allocateDirect(matBytes.size)
+            matBuf.put(matBytes)
+            matBuf.flip()
+            val material = Material.Builder().payload(matBuf, matBuf.remaining()).build(eng)
+            occluderMaterial = material
+
+            val segs = 48
+            val halfLen = 0.42f                         // along the forearm axis (watch is +-0.3 wide)
+            val rx = (holeHalfX * 0.985).toFloat()      // a hair inside the strap to avoid z-fighting
+            val ry = (holeHalfY * 0.985).toFloat()
+            val cx = holeCx.toFloat()
+
+            val verts = FloatArray(segs * 2 * 3)
+            for (i in 0 until segs) {
+                val a = (2.0 * Math.PI * i / segs)
+                val x = cx + rx * cos(a).toFloat()
+                val y = ry * sin(a).toFloat()
+                verts[(i * 2) * 3 + 0] = x
+                verts[(i * 2) * 3 + 1] = y
+                verts[(i * 2) * 3 + 2] = -halfLen
+                verts[(i * 2 + 1) * 3 + 0] = x
+                verts[(i * 2 + 1) * 3 + 1] = y
+                verts[(i * 2 + 1) * 3 + 2] = halfLen
+            }
+            val idx = ShortArray(segs * 6)
+            for (i in 0 until segs) {
+                val a0 = i * 2
+                val a1 = i * 2 + 1
+                val b0 = ((i + 1) % segs) * 2
+                val b1 = b0 + 1
+                idx[i * 6 + 0] = a0.toShort(); idx[i * 6 + 1] = b0.toShort(); idx[i * 6 + 2] = a1.toShort()
+                idx[i * 6 + 3] = b0.toShort(); idx[i * 6 + 4] = b1.toShort(); idx[i * 6 + 5] = a1.toShort()
+            }
+
+            val vbData = ByteBuffer.allocateDirect(verts.size * 4).order(ByteOrder.nativeOrder())
+            vbData.asFloatBuffer().put(verts)
+            val ibData = ByteBuffer.allocateDirect(idx.size * 2).order(ByteOrder.nativeOrder())
+            ibData.asShortBuffer().put(idx)
+
+            val vb = VertexBuffer.Builder()
+                .bufferCount(1)
+                .vertexCount(segs * 2)
+                .attribute(VertexBuffer.VertexAttribute.POSITION, 0, VertexBuffer.AttributeType.FLOAT3, 0, 12)
+                .build(eng)
+            vb.setBufferAt(eng, 0, vbData)
+            val ib = IndexBuffer.Builder()
+                .indexCount(idx.size)
+                .bufferType(IndexBuffer.Builder.IndexType.USHORT)
+                .build(eng)
+            ib.setBuffer(eng, ibData)
+            occluderVb = vb
+            occluderIb = ib
+
+            val e = EntityManager.get().create()
+            RenderableManager.Builder(1)
+                .boundingBox(Box(cx, 0f, 0f, rx, ry, halfLen))
+                .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, vb, ib)
+                .material(0, material.defaultInstance)
+                .culling(false)
+                .castShadows(false)
+                .receiveShadows(false)
+                .priority(0)
+                .build(eng, e)
+            occluderEntity = e
+        } catch (e: Throwable) {
+            Log.e(tag, "Could not create occluder: ${e.message}")
+        }
+    }
+
+    // ======================================================================
+    // Per-frame
+    // ======================================================================
+
+    private fun renderFrame(frameTimeNanos: Long) {
+        val rend = renderer ?: return
+        val v = view ?: return
+        val sc = swapChain ?: return
+        val cam = camera ?: return
+        if (viewportW == 0 || viewportH == 0 || imgW == 0 || focalPx <= 0.0) return
+
+        val dt = if (lastFrameNs == 0L) 0.016 else ((frameTimeNanos - lastFrameNs) / 1e9).coerceIn(0.001, 0.1)
+        lastFrameNs = frameTimeNanos
+
+        // Projection matching the preview's FILL_CENTER crop of the analysis image.
+        val s = max(viewportW.toDouble() / imgW, viewportH.toDouble() / imgH)
+        val a = 2.0 * s * focalPx / viewportW
+        val b = 2.0 * s * focalPx / viewportH
+        val near = 0.02
+        val far = 3.0
+        val p = DoubleArray(16)
+        p[0] = a
+        p[5] = b
+        p[10] = -(far + near) / (far - near)
+        p[11] = -1.0
+        p[14] = -2.0 * far * near / (far - near)
+        if (a != lastProjA || b != lastProjB) {
+            cam.setCustomProjection(p, near, far)
+            lastProjA = a
+            lastProjB = b
+            needsRender = true
+        }
+
+        // Ease the fit ratio toward its target (1.0 when auto-fit is off).
+        val ratioTarget = if (autoFit) fitTargetRatio else 1.0
+        fitRatio += (ratioTarget - fitRatio) * (1.0 - exp(-dt / fitTauSec))
+
+        updateWatch(target, dt, frameTimeNanos / 1e9)
+
+        val force = frameTimeNanos - lastRenderNs > 1_000_000_000L
+        if (!needsRender && !force) return
+        if (rend.beginFrame(sc, frameTimeNanos)) {
+            rend.render(v)
+            rend.endFrame()
+            needsRender = false
+            lastRenderNs = frameTimeNanos
+        }
+    }
+
+    private fun updateWatch(t: Target?, dt: Double, nowSec: Double) {
+        if (t == null || !t.visible) {
+            setShown(false)
+            return
+        }
+
+        // Predict where the wrist is NOW: the measurement's age plus the lead. Extrapolation fades in
+        // only above a small speed, otherwise measurement jitter would be amplified while the hand is still.
+        val horizon = ((nowSec - t.tArrSec) + leadSec).coerceIn(0.0, 0.25)
+        val speed = sqrt(t.vel[0] * t.vel[0] + t.vel[1] * t.vel[1] + t.vel[2] * t.vel[2])
+        val fv = smoothstep(0.06, 0.20, speed) // m/s
+        val predPos = DoubleArray(3) { t.posGl[it] + t.vel[it] * horizon * fv }
+
+        val wn = sqrt(t.omega[0] * t.omega[0] + t.omega[1] * t.omega[1] + t.omega[2] * t.omega[2])
+        val fw = smoothstep(0.60, 1.60, wn) // rad/s
+        val predQ = rotateQuat(t.q, t.omega, wn, horizon * fw)
+
+        if (!shown) {
+            System.arraycopy(predPos, 0, curPos, 0, 3)
+            System.arraycopy(predQ, 0, curQ, 0, 4)
+            setShown(true)
+        } else {
+            // Position: the further the displayed pose is from the target, the faster it follows.
+            val ex = predPos[0] - curPos[0]
+            val ey = predPos[1] - curPos[1]
+            val ez = predPos[2] - curPos[2]
+            val dPos = sqrt(ex * ex + ey * ey + ez * ez)
+            val tauP = tauRestSec + (tauMoveSec - tauRestSec) * smoothstep(0.0005, 0.004, dPos) // 0.5 .. 4 mm
+            val kP = 1.0 - exp(-dt / tauP)
+            for (i in 0 until 3) curPos[i] += (predPos[i] - curPos[i]) * kP
+
+            // Rotation: same idea on the angle between the two orientations.
+            val dot = kotlin.math.abs(
+                curQ[0] * predQ[0] + curQ[1] * predQ[1] + curQ[2] * predQ[2] + curQ[3] * predQ[3]
+            ).coerceAtMost(1.0)
+            val dAng = 2.0 * kotlin.math.acos(dot)
+            val tauR = tauRestSec + (tauMoveSec - tauRestSec) * smoothstep(0.005, 0.045, dAng) // 0.3 .. 2.6 deg
+            nlerpInto(curQ, predQ, 1.0 - exp(-dt / tauR))
+        }
+        applyTransform()
+    }
+
+    private fun smoothstep(e0: Double, e1: Double, x: Double): Double {
+        val t = ((x - e0) / (e1 - e0)).coerceIn(0.0, 1.0)
+        return t * t * (3 - 2 * t)
+    }
+
+    /** q advanced by angular velocity omega (magnitude wn, rad/s) for h seconds (world frame). */
+    private fun rotateQuat(q: DoubleArray, omega: DoubleArray, wn: Double, h: Double): DoubleArray {
+        val angle = (wn * h).coerceAtMost(0.4) // never swing more than ~23 deg ahead
+        if (angle < 1e-6 || wn < 1e-9) return q
+        val sh = sin(angle / 2) / wn
+        val dx = omega[0] * sh
+        val dy = omega[1] * sh
+        val dz = omega[2] * sh
+        val dw = cos(angle / 2)
+        // result = dq * q
+        val rx = dw * q[0] + dx * q[3] + dy * q[2] - dz * q[1]
+        val ry = dw * q[1] - dx * q[2] + dy * q[3] + dz * q[0]
+        val rz = dw * q[2] + dx * q[1] - dy * q[0] + dz * q[3]
+        val rw = dw * q[3] - dx * q[0] - dy * q[1] - dz * q[2]
+        val len = sqrt(rx * rx + ry * ry + rz * rz + rw * rw)
+        return doubleArrayOf(rx / len, ry / len, rz / len, rw / len)
+    }
+
+    private fun setShown(show: Boolean) {
+        if (show == shown) return
+        shown = show
+        needsRender = true
+        val sc = scene ?: return
+        watchAsset?.let { if (show) sc.addEntities(it.entities) else sc.removeEntities(it.entities) }
+        if (occluderEntity != 0) {
+            if (show) sc.addEntity(occluderEntity) else sc.removeEntity(occluderEntity)
+        }
+    }
+
+    private fun applyTransform() {
+        val eng = engine ?: return
+        val scale = (wristWidthM / modelHoleWidth) * userScale * fitRatio
+
+        // Rotation from quaternion (x, y, z, w).
+        val x = curQ[0]; val y = curQ[1]; val z = curQ[2]; val w = curQ[3]
+        val r00 = 1 - 2 * (y * y + z * z); val r01 = 2 * (x * y - z * w); val r02 = 2 * (x * z + y * w)
+        val r10 = 2 * (x * y + z * w); val r11 = 1 - 2 * (x * x + z * z); val r12 = 2 * (y * z - x * w)
+        val r20 = 2 * (x * z - y * w); val r21 = 2 * (y * z + x * w); val r22 = 1 - 2 * (x * x + y * y)
+
+        // M = T(position) * R * S(scale) * T(-holeCentre); the hole centre is (holeCx, 0, 0).
+        val tx = curPos[0] - r00 * scale * holeCx
+        val ty = curPos[1] - r10 * scale * holeCx
+        val tz = curPos[2] - r20 * scale * holeCx
+
+        val m = floatArrayOf(
+            (r00 * scale).toFloat(), (r10 * scale).toFloat(), (r20 * scale).toFloat(), 0f,
+            (r01 * scale).toFloat(), (r11 * scale).toFloat(), (r21 * scale).toFloat(), 0f,
+            (r02 * scale).toFloat(), (r12 * scale).toFloat(), (r22 * scale).toFloat(), 0f,
+            tx.toFloat(), ty.toFloat(), tz.toFloat(), 1f,
+        )
+
+        var changed = false
+        for (i in 0 until 16) {
+            if (kotlin.math.abs(m[i] - lastM[i]) > 2e-5f) { changed = true; break }
+        }
+        if (!changed) return // identical to what is on screen: nothing for Filament to do
+        System.arraycopy(m, 0, lastM, 0, 16)
+        needsRender = true
+
+        val tm = eng.transformManager
+        watchAsset?.let {
+            val inst = tm.getInstance(it.root)
+            if (inst != 0) tm.setTransform(inst, m)
+        }
+        if (occluderEntity != 0) {
+            // The occluder's entity needs a transform component the first time.
+            if (tm.getInstance(occluderEntity) == 0) tm.create(occluderEntity)
+            val inst = tm.getInstance(occluderEntity)
+            if (inst != 0) tm.setTransform(inst, m)
+        }
+    }
+
+    // ======================================================================
+    // Quaternion helpers
+    // ======================================================================
+
+    /** Quaternion (x,y,z,w) of the rotation whose columns are c0, c1, c2. */
+    private fun quatFromColumns(c0: DoubleArray, c1: DoubleArray, c2: DoubleArray): DoubleArray {
+        val r00 = c0[0]; val r10 = c0[1]; val r20 = c0[2]
+        val r01 = c1[0]; val r11 = c1[1]; val r21 = c1[2]
+        val r02 = c2[0]; val r12 = c2[1]; val r22 = c2[2]
+        val tr = r00 + r11 + r22
+        val qx: Double; val qy: Double; val qz: Double; val qw: Double
+        if (tr > 0) {
+            val s = sqrt(tr + 1.0) * 2
+            qw = 0.25 * s; qx = (r21 - r12) / s; qy = (r02 - r20) / s; qz = (r10 - r01) / s
+        } else if (r00 > r11 && r00 > r22) {
+            val s = sqrt(1.0 + r00 - r11 - r22) * 2
+            qw = (r21 - r12) / s; qx = 0.25 * s; qy = (r01 + r10) / s; qz = (r02 + r20) / s
+        } else if (r11 > r22) {
+            val s = sqrt(1.0 + r11 - r00 - r22) * 2
+            qw = (r02 - r20) / s; qx = (r01 + r10) / s; qy = 0.25 * s; qz = (r12 + r21) / s
+        } else {
+            val s = sqrt(1.0 + r22 - r00 - r11) * 2
+            qw = (r10 - r01) / s; qx = (r02 + r20) / s; qy = (r12 + r21) / s; qz = 0.25 * s
+        }
+        val len = sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+        return doubleArrayOf(qx / len, qy / len, qz / len, qw / len)
+    }
+
+    /** cur = normalize(lerp(cur, target, k)) taking the shortest path. */
+    private fun nlerpInto(cur: DoubleArray, tgt: DoubleArray, k: Double) {
+        val dot = cur[0] * tgt[0] + cur[1] * tgt[1] + cur[2] * tgt[2] + cur[3] * tgt[3]
+        val sgn = if (dot < 0) -1.0 else 1.0
+        var len = 0.0
+        for (i in 0 until 4) {
+            cur[i] = cur[i] * (1 - k) + tgt[i] * sgn * k
+            len += cur[i] * cur[i]
+        }
+        len = sqrt(len)
+        if (len > 1e-9) for (i in 0 until 4) cur[i] /= len
+    }
+}

@@ -82,6 +82,24 @@ android {
 dependencies {
     // Required by flutter_local_notifications v22+ (isCoreLibraryDesugaringEnabled above).
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // ---- AR try-on (native pipeline: CameraX -> MediaPipe hand tracking -> Filament) ----
+    // CameraX: camera feed + frame analysis. No ARCore.
+    val cameraX = "1.4.2"
+    implementation("androidx.camera:camera-core:$cameraX")
+    implementation("androidx.camera:camera-camera2:$cameraX")
+    implementation("androidx.camera:camera-lifecycle:$cameraX")
+    implementation("androidx.camera:camera-view:$cameraX")
+
+    // Filament renders the watch. KEEP THIS VERSION IN SYNC with the prebuilt
+    // android/app/src/main/assets/occluder.filamat and studio_ibl.ktx, which were built
+    // with matc/cmgen 1.68.4. Upgrading Filament means rebuilding both files.
+    implementation("com.google.android.filament:filament-android:1.68.4")
+    implementation("com.google.android.filament:gltfio-android:1.68.4")
+    implementation("com.google.android.filament:filament-utils-android:1.68.4")
+
+    // Hand tracking (same pin that is proven in the AR lab).
+    implementation("com.google.mediapipe:tasks-vision:0.10.35")
 }
 
 flutter {

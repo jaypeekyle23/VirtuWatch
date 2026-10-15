@@ -3,6 +3,7 @@ import 'dart:math' show max, min;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+import '../../utils/ar_readiness.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
@@ -84,7 +85,7 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
   Widget _content(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final data = [for (final d in docs) d.data()];
     final listed = data.where((d) => d['listedInCatalog'] == true).length;
-    final arReady = data.where((d) => d['has3DModel'] == true).length;
+    final arReady = data.where(isArReady).length;
 
     final prices = [
       for (final d in data)

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.7+1
+version: 1.1.8+1
 
 environment:
   sdk: ^3.11.0
@@ -47,14 +47,6 @@ dependencies:
   palette_generator_plus: ^1.0.0
   google_mlkit_subject_segmentation: ^0.0.3
   camera: ^0.12.1
-  hand_landmarker: ^3.0.0
-  # AR try-on: renders merchant-uploaded .glb/.gltf watch models, driven
-  # frame-by-frame by hand_landmarker output (see ArAnchorService).
-  # Pin exact versions after `flutter pub get` resolves them once —
-  # check pub.dev for the latest three_js / three_js_advanced_loaders
-  # releases, this package churns its API between versions.
-  three_js: ^0.2.7
-  three_js_advanced_loaders: ^0.2.5
   path_provider: ^2.1.4
   # Persists a "seen onboarding" flag across app restarts (see
   # OnboardingScreen / AuthGate) — plain key-value, not Firestore, since
@@ -96,6 +88,7 @@ flutter:
     - assets/icons/google_logo.svg
     - assets/images/onboarding/
     - assets/images/branding/
+    - assets/models/seiko_small.glb
 
   # To add assets to your application, add an assets section, like this:
   # assets:

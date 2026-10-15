@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/ar_readiness.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/delete_watch.dart';
 import '../../widgets/luxe.dart';
@@ -28,6 +29,7 @@ class MerchantWatchDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final listed = data['listedInCatalog'] as bool? ?? false;
     final has3D = data['has3DModel'] as bool? ?? false;
+    final arReady = isArReady(data);
     final missing = missingWatchFields(data);
 
     return Scaffold(
@@ -65,10 +67,12 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         _line(
-                            has3D,
-                            has3D
+                            arReady,
+                            arReady
                                 ? 'AR try-on is available'
-                                : 'No 3D model, so AR try-on is unavailable'),
+                                : has3D
+                                    ? '3D model uploaded, AR fit pending review'
+                                    : 'No 3D model, so AR try-on is unavailable'),
                         _line(
                             missing.isEmpty,
                             missing.isEmpty

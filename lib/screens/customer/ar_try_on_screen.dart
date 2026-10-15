@@ -2,18 +2,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/ar_readiness.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
+import '../../widgets/tryon_camera_view.dart';
 import 'watch_detail_screen.dart';
 
-/// Placeholder for AR Try-On while the real camera + MediaPipe hand
-/// tracking + three_js implementation is being built and tested in a
-/// separate Flutter project.
+/// Live AR Try-On. The camera, hand tracking and 3D rendering all run in
+/// a native Android view (see TryOnCameraView / TryOnPlatformView.kt);
+/// this screen only hosts it and owns the carousel, size slider and
+/// camera controls.
 ///
-/// Keeps the same watch-selection carousel and scale slider so the tab
-/// still looks and feels complete, but has no camera/ML/3D code. Nothing
-/// here starts a camera, runs inference, or renders a 3D scene, so it's
-/// safe to keep mounted without any performance or crash risk.
+/// Only AR-ready watches are listed (see isArReady in utils/ar_readiness.dart):
+/// a .glb model plus valid fit numbers measured for that model. Anything
+/// else is hidden here, and the camera doesn't start if there are none.
+///
+/// NOTE: the native renderer still draws the bundled Seiko; loading the
+/// selected watch's own model is the next step.
 class ArTryOnScreen extends StatefulWidget {
   final String? initialWatchId;
   final Map<String, dynamic>? initialWatchData;
@@ -30,6 +35,7 @@ class ArTryOnScreen extends StatefulWidget {
 
 class _ArTryOnScreenState extends State<ArTryOnScreen> {
   final _watchService = WatchService();
+  final _tryOn = TryOnController();
 
   // Created once. A new stream on every build made the carousel reset to a
   // spinner each time the slider moved or a watch was selected.
@@ -61,52 +67,113 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(child: _buildPlaceholderArea()),
-          _buildControlPanel(),
-        ],
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _watchesStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return _emptyState(
+              title: "Couldn't load watches",
+              message: 'Check your connection and try again.',
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(
+                child: CircularProgressIndicator(strokeWidth: 2));
+          }
+
+          // Only watches that can actually be rendered are offered.
+          final docs = [
+            for (final d in snapshot.data!.docs)
+              if (isArReady(d.data())) d,
+          ];
+          if (docs.isEmpty) {
+            return _emptyState(
+              title: 'No AR watches yet',
+              message: 'Watches appear here once they have a 3D model '
+                  'set up for AR try-on.',
+            );
+          }
+
+          _ensureSelection(docs);
+          return Column(
+            children: [
+              Expanded(child: _buildCameraArea()),
+              _buildControlPanel(docs),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildPlaceholderArea() {
+  /// Keeps the selection pointing at a watch that is still AR-ready. Covers
+  /// the first load, a watch opened from elsewhere that has no AR model
+  /// (initialWatchId), and a selected watch that gets unlisted or loses
+  /// its model while the screen is open.
+  void _ensureSelection(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final stillThere =
+        _selectedWatchId != null && docs.any((d) => d.id == _selectedWatchId);
+    if (stillThere) return;
+    final first = docs.first;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _selectedWatchId = first.id;
+        _selectedWatchData = first.data();
+      });
+    });
+  }
+
+  Widget _emptyState({required String title, required String message}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.view_in_ar_outlined,
+                size: 40, color: AppTheme.textSecondary),
+            const SizedBox(height: 16),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: AppTheme.serif(size: 24)),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 13, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCameraArea() {
     return Stack(
       fit: StackFit.expand,
       children: [
-        ColoredBox(
-          color: AppTheme.surface,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('AR preview coming soon',
-                      textAlign: TextAlign.center,
-                      style: AppTheme.serif(size: 26)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Point your camera at your wrist to try on watches.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 13, height: 1.4),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        TryOnCameraView(controller: _tryOn),
         Positioned(
           right: 16,
           top: 16,
           child: Column(
             children: [
-              _floatingIcon(Icons.flash_off_outlined),
+              _floatingIcon(
+                Icons.cameraswitch_outlined,
+                tooltip: 'Switch camera',
+                onTap: _tryOn.switchCamera,
+              ),
               const SizedBox(height: 10),
-              _floatingIcon(Icons.cameraswitch_outlined),
-              const SizedBox(height: 10),
-              _floatingIcon(Icons.photo_camera_outlined),
+              // MediaPipe's left/right label can be inverted; this flips the
+              // wrist the watch is placed on if it lands on the wrong side.
+              _floatingIcon(
+                Icons.swap_horiz,
+                tooltip: 'Swap wrist',
+                onTap: _tryOn.swapHand,
+              ),
             ],
           ),
         ),
@@ -114,7 +181,8 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     );
   }
 
-  Widget _buildControlPanel() {
+  Widget _buildControlPanel(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: kTopRule,
@@ -142,67 +210,31 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
               value: _userScaleAdjust,
               min: -20,
               max: 20,
-              onChanged: (v) => setState(() => _userScaleAdjust = v),
+              onChanged: (v) {
+                setState(() => _userScaleAdjust = v);
+                _tryOn.setWatchScale(1 + v / 100);
+              },
             ),
           ),
           const SizedBox(height: 8),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _watchesStream,
-            builder: (context, snapshot) {
-              final docs = snapshot.data?.docs ?? [];
-
-              if (_selectedWatchId == null && docs.isNotEmpty) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _selectedWatchId == null) {
-                    setState(() {
-                      _selectedWatchId = docs.first.id;
-                      _selectedWatchData = docs.first.data();
-                    });
-                  }
-                });
-              }
-
-              if (snapshot.connectionState == ConnectionState.waiting &&
-                  !snapshot.hasData) {
-                return const SizedBox(
-                  height: 130,
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(
+            height: 130,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: docs.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final doc = docs[index];
+                return _ArWatchCard(
+                  data: doc.data(),
+                  selected: doc.id == _selectedWatchId,
+                  onTap: () => setState(() {
+                    _selectedWatchId = doc.id;
+                    _selectedWatchData = doc.data();
+                  }),
                 );
-              }
-              if (docs.isEmpty) {
-                return SizedBox(
-                  height: 130,
-                  child: Center(
-                    child: Text(
-                      'No watches available yet.',
-                      style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 13),
-                    ),
-                  ),
-                );
-              }
-
-              return SizedBox(
-                height: 130,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: docs.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final doc = docs[index];
-                    return _ArWatchCard(
-                      data: doc.data(),
-                      selected: doc.id == _selectedWatchId,
-                      onTap: () => setState(() {
-                        _selectedWatchId = doc.id;
-                        _selectedWatchData = doc.data();
-                      }),
-                    );
-                  },
-                ),
-              );
-            },
+              },
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -226,15 +258,23 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     );
   }
 
-  Widget _floatingIcon(IconData icon) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
-        shape: BoxShape.circle,
+  Widget _floatingIcon(IconData icon,
+      {required VoidCallback onTap, required String tooltip}) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 24,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.4),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.white, size: 20),
+        ),
       ),
-      child: Icon(icon, color: Colors.white, size: 18),
     );
   }
 
@@ -278,7 +318,6 @@ class _ArWatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = data['imageUrl'] as String? ?? '';
-    final hasModel = data['has3DModel'] as bool? ?? false;
     final fallback = Center(
       child: Icon(Icons.watch, color: AppTheme.textSecondary, size: 32),
     );
@@ -310,22 +349,6 @@ class _ArWatchCard extends StatelessWidget {
                         ? fallback
                         : NetworkPhoto(url: imageUrl, errorWidget: fallback),
                   ),
-                  if (!hasModel)
-                    Positioned(
-                      bottom: 6,
-                      right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text('No AR model',
-                            style:
-                                TextStyle(color: Colors.white70, fontSize: 8)),
-                      ),
-                    ),
                 ],
               ),
             ),

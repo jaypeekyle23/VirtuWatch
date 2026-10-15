@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../utils/ar_readiness.dart';
 import '../../services/user_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
@@ -83,7 +84,7 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
         luxeBand([
           _stat('WATCHES', count((_) => true)),
           _stat('LISTED', count((d) => d['listedInCatalog'] == true)),
-          _stat('AR READY', count((d) => d['has3DModel'] == true)),
+          _stat('AR READY', count(isArReady)),
         ]),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 20),
