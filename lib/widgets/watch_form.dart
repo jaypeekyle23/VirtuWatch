@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../constants/watch_colors.dart';
 import '../services/cloudinary_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/ar_readiness.dart';
 import '../utils/form_validators.dart';
 import 'luxe.dart';
 import 'network_photo.dart';
@@ -25,7 +28,17 @@ class WatchForm extends StatefulWidget {
   /// Shown above everything else, e.g. the admin's merchant picker.
   final Widget? header;
 
-  const WatchForm({super.key, this.initialData = const {}, this.header});
+  /// Shows the AR fit section (admin only). The numbers it holds decide how
+  /// the 3D model sits on the wrist; Firestore rules also block non-admins
+  /// from writing them, so this flag is a convenience, not the security.
+  final bool showArFit;
+
+  const WatchForm({
+    super.key,
+    this.initialData = const {},
+    this.header,
+    this.showArFit = false,
+  });
 
   @override
   State<WatchForm> createState() => WatchFormState();
@@ -90,6 +103,24 @@ class WatchFormState extends State<WatchForm> {
   bool _uploadingModel = false;
   String? _modelError;
 
+  // AR fit (admin only): measured strap-opening numbers for THIS model file.
+  // Prefilled only when the saved fit belongs to the model that is attached
+  // now (ArFit.tryParse checks that), so numbers measured for an old model
+  // are never carried over to a replacement.
+  late final ArFit? _savedFit = ArFit.tryParse(widget.initialData);
+  late final _fitCx = TextEditingController(text: _fitText(_savedFit?.holeCx));
+  late final _fitHalfX =
+      TextEditingController(text: _fitText(_savedFit?.holeHalfX));
+  late final _fitHalfY =
+      TextEditingController(text: _fitText(_savedFit?.holeHalfY));
+  // Blank means the default of 1.0.
+  late final _fitScale = TextEditingController(
+      text: (_savedFit != null && _savedFit!.scale != 1.0)
+          ? _text(_savedFit!.scale)
+          : '');
+
+  static String _fitText(double? v) => v == null ? '' : _text(v);
+
   int get _photoCount => _imageUrls.length + _newImages.length;
   bool get _hasModel => _modelFile != null || _modelUrl.isNotEmpty;
 
@@ -98,6 +129,10 @@ class WatchFormState extends State<WatchForm> {
     for (final c in _fields.values) {
       c.dispose();
     }
+    _fitCx.dispose();
+    _fitHalfX.dispose();
+    _fitHalfY.dispose();
+    _fitScale.dispose();
     super.dispose();
   }
 
@@ -133,7 +168,7 @@ class WatchFormState extends State<WatchForm> {
     String t(String key) => _fields[key]!.text.trim();
     double? n(String key) => double.tryParse(t(key));
 
-    return {
+    final data = <String, dynamic>{
       'name': t('name'),
       'brand': t('brand'),
       'price': double.parse(t('price')),
@@ -155,6 +190,22 @@ class WatchFormState extends State<WatchForm> {
       'modelUrl': modelUrl,
       'has3DModel': modelUrl.isNotEmpty,
     };
+
+    // Only the admin form writes arFit. For anyone else the key is left out,
+    // so an edit never touches it. (If a merchant replaces the model, the saved
+    // fit no longer matches the new file and the watch drops out of AR until an
+    // admin enters numbers for the new file.)
+    if (widget.showArFit) {
+      final fit = _buildArFit(modelUrl);
+      if (fit != null) {
+        data['arFit'] = fit;
+      } else if (widget.initialData.containsKey('arFit')) {
+        // Cleared (or stale after a model change): remove it. Only edits ever
+        // have initialData, and those use update(), where delete() is valid.
+        data['arFit'] = FieldValue.delete();
+      }
+    }
+    return data;
   }
 
   Future<void> _pickImages() async {
@@ -173,6 +224,11 @@ class WatchFormState extends State<WatchForm> {
         setState(() {
           _modelFile = file;
           _modelError = null;
+          // Whatever was entered described the previous model file.
+          _fitCx.clear();
+          _fitHalfX.clear();
+          _fitHalfY.clear();
+          _fitScale.clear();
         });
       }
     } catch (e) {
@@ -227,6 +283,8 @@ class WatchFormState extends State<WatchForm> {
             trailing: Text('$_photoCount / $_maxPhotos', style: kLabelStyle),
           ),
           luxeSection('3D MODEL', _modelRow()),
+          if (widget.showArFit && _hasModel)
+            luxeSection('AR FIT', _arFitEditor()),
           luxeSection(
             'DETAILS',
             Column(
@@ -439,6 +497,223 @@ class WatchFormState extends State<WatchForm> {
     );
   }
 
+  // ---------------------------------------------------------------------
+  // AR fit (admin only)
+  // ---------------------------------------------------------------------
+
+  bool get _fitAnyFilled => [_fitCx, _fitHalfX, _fitHalfY, _fitScale]
+      .any((c) => c.text.trim().isNotEmpty);
+
+  static double? _inRange(TextEditingController c, double min, double max) {
+    final d = double.tryParse(c.text.trim());
+    return (d != null && d.isFinite && d >= min && d <= max) ? d : null;
+  }
+
+  /// Three required numbers in range, and the size multiplier blank or in range.
+  bool get _fitComplete =>
+      _inRange(_fitCx, arHoleCxMin, arHoleCxMax) != null &&
+      _inRange(_fitHalfX, arHalfXMin, arHalfXMax) != null &&
+      _inRange(_fitHalfY, arHalfYMin, arHalfYMax) != null &&
+      (_fitScale.text.trim().isEmpty ||
+          _inRange(_fitScale, arScaleMin, arScaleMax) != null);
+
+  /// The map stored on the watch, tied to [modelUrl]. Null when the fit is blank.
+  Map<String, dynamic>? _buildArFit(String modelUrl) {
+    if (modelUrl.isEmpty || !_fitComplete) return null;
+    final scale = double.tryParse(_fitScale.text.trim());
+    return {
+      'modelUrl': modelUrl,
+      'holeCx': double.parse(_fitCx.text.trim()),
+      'holeHalfX': double.parse(_fitHalfX.text.trim()),
+      'holeHalfY': double.parse(_fitHalfY.text.trim()),
+      'scale': ?scale,
+    };
+  }
+
+  String? _fitValidator(String? v, double min, double max,
+      {required bool isRequired}) {
+    final text = v?.trim() ?? '';
+    if (text.isEmpty) return isRequired ? 'Required' : null;
+    final d = double.tryParse(text);
+    if (d == null || !d.isFinite) return 'Enter a number';
+    if (d < min || d > max) return 'Between $min and $max';
+    return null;
+  }
+
+  Widget _fitField(String label, TextEditingController controller,
+      {required String hint,
+      required double min,
+      required double max,
+      required bool Function() isRequired}) {
+    return TextFormField(
+      controller: controller,
+      style: const TextStyle(fontSize: 15),
+      // signed: holeCx is negative for every measured model.
+      keyboardType:
+          const TextInputType.numberWithOptions(decimal: true, signed: true),
+      validator: (v) => _fitValidator(v, min, max, isRequired: isRequired()),
+      onChanged: (_) => setState(() {}), // refreshes the status line
+      decoration: luxeFieldDecoration(hint: hint).copyWith(
+        labelText: label,
+        labelStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+      ),
+    );
+  }
+
+  Widget _arFitEditor() {
+    final complete = _fitComplete;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Measured strap-opening numbers for this exact model file, in the "
+          "model's own units. Leave all blank to keep the watch out of AR. "
+          "Replacing the model clears them.",
+          style: _muted,
+        ),
+        const SizedBox(height: 14),
+        _fitField('Opening centre (holeCx)', _fitCx,
+            hint: 'e.g. -0.057',
+            min: arHoleCxMin,
+            max: arHoleCxMax,
+            isRequired: () => _fitAnyFilled),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _fitField('Half-thickness (holeHalfX)', _fitHalfX,
+                  hint: 'e.g. 0.25',
+                  min: arHalfXMin,
+                  max: arHalfXMax,
+                  isRequired: () => _fitAnyFilled),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _fitField('Half-width (holeHalfY)', _fitHalfY,
+                  hint: 'e.g. 0.435',
+                  min: arHalfYMin,
+                  max: arHalfYMax,
+                  isRequired: () => _fitAnyFilled),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _fitField('Size multiplier (optional)', _fitScale,
+            hint: 'blank = 1.0',
+            min: arScaleMin,
+            max: arScaleMax,
+            isRequired: () => false),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Icon(complete ? Icons.check_circle_outline : Icons.info_outline,
+                size: 16,
+                color: complete ? AppTheme.textPrimary : AppTheme.textSecondary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                complete
+                    ? 'AR-ready once saved.'
+                    : 'Not in AR yet: fit incomplete.',
+                style: _muted,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _pasteFitJson,
+              icon: const Icon(Icons.content_paste, size: 16),
+              label: const Text('Paste JSON'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Fills the fields from JSON such as
+  /// {"holeCx": -0.058, "holeHalfX": 0.226, "holeHalfY": 0.432, "scale": 1.0}
+  /// (an object wrapped in {"arFit": {...}} also works).
+  Map<String, double>? _parseFitJson(String text) {
+    try {
+      dynamic decoded = jsonDecode(text.trim());
+      if (decoded is Map && decoded['arFit'] is Map) decoded = decoded['arFit'];
+      if (decoded is! Map) return null;
+      double? number(String key) {
+        final v = decoded[key];
+        return (v is num && v.isFinite) ? v.toDouble() : null;
+      }
+
+      final cx = number('holeCx');
+      final hx = number('holeHalfX');
+      final hy = number('holeHalfY');
+      if (cx == null || hx == null || hy == null) return null;
+      return {'holeCx': cx, 'holeHalfX': hx, 'holeHalfY': hy, 'scale': ?number('scale')};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _pasteFitJson() async {
+    // Not disposed: the dialog is still animating out when showDialog returns,
+    // and a controller with no listeners is simply garbage collected.
+    final input = TextEditingController();
+    String? error;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Paste AR fit JSON'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: input,
+                autofocus: true,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  hintText:
+                      '{"holeCx": -0.058, "holeHalfX": 0.226, "holeHalfY": 0.432}',
+                ),
+              ),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(error!,
+                      style: const TextStyle(
+                          color: Colors.redAccent, fontSize: 12)),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final parsed = _parseFitJson(input.text);
+                if (parsed == null) {
+                  setLocal(() => error =
+                      'Could not read that. It needs numbers for holeCx, holeHalfX and holeHalfY.');
+                  return;
+                }
+                setState(() {
+                  _fitCx.text = _fitText(parsed['holeCx']);
+                  _fitHalfX.text = _fitText(parsed['holeHalfX']);
+                  _fitHalfY.text = _fitText(parsed['holeHalfY']);
+                  _fitScale.text = _fitText(parsed['scale']);
+                });
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _modelRow() {
     final title = _uploadingModel
         ? 'Uploading model...'
@@ -480,7 +755,10 @@ class WatchFormState extends State<WatchForm> {
                                 ? AppTheme.textPrimary
                                 : AppTheme.textSecondary,
                             fontSize: 14)),
-                    Text('A .glb or .gltf file enables AR try-on.',
+                    Text(
+                        widget.showArFit
+                            ? 'A .glb file. Add its AR fit below to enable try-on.'
+                            : 'A .glb file. AR try-on goes live once the model has been reviewed.',
                         style: _muted),
                   ],
                 ),

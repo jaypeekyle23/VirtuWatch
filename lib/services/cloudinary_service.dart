@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import '../utils/glb_header.dart';
+
 /// Handles picking an image from the device and uploading it to Cloudinary,
 /// returning the resulting hosted URL to store in Firestore (e.g. a watch's
 /// imageUrl or a user's profile photo URL).
@@ -67,28 +69,44 @@ class CloudinaryService {
     }
   }
 
-  /// Opens the device's file picker filtered to 3D model formats
-  /// (.glb / .gltf). Returns null if the user cancels without selecting
-  /// anything. Throws a readable error string if the selected file isn't
-  /// actually a .glb/.gltf — the OS picker's extension filter is only a
-  /// hint and isn't strictly enforced on every platform, so this check
-  /// is the real gatekeeper.
+  /// Opens the device's file picker filtered to .glb 3D models. Returns null
+  /// if the user cancels. Throws a readable error string if the file isn't a
+  /// real .glb.
+  ///
+  /// Only .glb is accepted: a .gltf comes as several separate files (JSON plus
+  /// .bin and textures), which a single-file upload can't carry. The OS
+  /// picker's extension filter is only a hint, so the file name and then its
+  /// first bytes (the "glTF" magic) are checked here. That also catches a file
+  /// that was simply renamed to .glb.
   Future<File?> pickModelFile() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: ['glb', 'gltf'],
+      allowedExtensions: ['glb'],
     );
     if (file == null || file.path == null) return null;
 
     final extension = file.name.split('.').last.toLowerCase();
-    if (extension != 'glb' && extension != 'gltf') {
-      throw 'Please select a .glb or .gltf 3D model file (you picked a .$extension file).';
+    if (extension != 'glb') {
+      throw 'Please select a .glb 3D model file (you picked a .$extension file). '
+          '.gltf files are not supported because they come as several separate files.';
     }
 
-    return File(file.path!);
+    final model = File(file.path!);
+    final raf = await model.open();
+    final List<int> header;
+    try {
+      header = await raf.read(4);
+    } finally {
+      await raf.close();
+    }
+    if (!isGlbHeader(header)) {
+      throw 'This file is not a valid .glb model. Re-export it as a binary glTF (.glb).';
+    }
+
+    return model;
   }
 
-  /// Uploads a 3D model file (.glb / .gltf) to Cloudinary and returns the
+  /// Uploads a 3D model file (.glb) to Cloudinary and returns the
   /// hosted URL. Models are uploaded as a "raw" resource type since
   /// Cloudinary's image/video pipelines don't apply here.
   ///

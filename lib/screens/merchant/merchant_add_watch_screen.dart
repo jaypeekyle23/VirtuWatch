@@ -10,7 +10,14 @@ class MerchantAddWatchScreen extends StatefulWidget {
   /// instead of the signed-in account.
   final bool isAdminMode;
 
-  const MerchantAddWatchScreen({super.key, this.isAdminMode = false});
+  /// True when an admin is adding: shows the AR fit section.
+  final bool showArFit;
+
+  const MerchantAddWatchScreen({
+    super.key,
+    this.isAdminMode = false,
+    this.showArFit = false,
+  });
 
   @override
   State<MerchantAddWatchScreen> createState() => _MerchantAddWatchScreenState();
@@ -116,6 +123,7 @@ class _MerchantAddWatchScreenState extends State<MerchantAddWatchScreen> {
             WatchForm(
               key: _form,
               header: widget.isAdminMode ? _merchantPicker() : null,
+              showArFit: widget.showArFit,
             ),
             if (_errorMessage != null)
               Padding(

@@ -54,10 +54,19 @@ service cloud.firestore {
       // watch on behalf of a merchant from the admin panel).
       allow create: if isSignedIn()
                     && (request.resource.data.merchantId == request.auth.uid
-                        || isAdmin());
-      // Only the owning merchant (or an Admin) can update/delete their watch.
-      allow update, delete: if isSignedIn()
-                             && (resource.data.merchantId == request.auth.uid || isAdmin());
+                        || isAdmin())
+                    // arFit (how the 3D model sits on the wrist) is measured per
+                    // model and reviewed by an admin; a merchant can't set it.
+                    && (isAdmin() || !('arFit' in request.resource.data));
+      // Only the owning merchant (or an Admin) can update their watch, and
+      // only an Admin can add, change or remove its arFit.
+      allow update: if isSignedIn()
+                    && (resource.data.merchantId == request.auth.uid || isAdmin())
+                    && (isAdmin()
+                        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['arFit']));
+      // Only the owning merchant (or an Admin) can delete their watch.
+      allow delete: if isSignedIn()
+                    && (resource.data.merchantId == request.auth.uid || isAdmin());
 
       // Per-watch engagement summary (which customers saved/viewed it).
       // Kept out of the watch document above — which any signed-in user

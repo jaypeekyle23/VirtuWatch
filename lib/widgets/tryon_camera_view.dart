@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/ar_readiness.dart';
 
 /// Typed handle to the native AR try-on view (Android only).
 ///
@@ -15,9 +18,25 @@ class TryOnController {
   MethodChannel? _channel;
   double _scale = 1.0;
 
+  /// The most recent loadModel request. A native view that gets recreated
+  /// (e.g. after retrying the camera permission) starts with no watch, so
+  /// this is re-sent on every attach.
+  Map<String, Object?>? _lastModel;
+
+  /// Completed when the native view first attaches, for a loadModel call
+  /// that was made before the view existed.
+  Completer<void>? _attachWaiter;
+
   void _attach(MethodChannel channel) {
     _channel = channel;
-    if (_scale != 1.0) _invoke('setWatchScale', _scale);
+    if (_scale != 1.0) _invoke<void>('setWatchScale', _scale);
+    final waiter = _attachWaiter;
+    _attachWaiter = null;
+    if (waiter != null) {
+      waiter.complete();
+    } else if (_lastModel != null) {
+      _invoke<bool>('loadModel', _lastModel);
+    }
   }
 
   void _detach() => _channel = null;
@@ -39,6 +58,20 @@ class TryOnController {
   Future<void> setWatchScale(double scale) {
     _scale = scale;
     return _invoke<void>('setWatchScale', scale);
+  }
+
+  /// Shows the .glb at [path] on the wrist, placed using [fit]. If the native
+  /// view isn't ready yet this waits for it. Returns false if the file could
+  /// not be loaded (the previous watch stays on screen) or if a newer
+  /// request replaced this one while it waited.
+  Future<bool> loadModel(String path, ArFit fit) async {
+    final args = <String, Object?>{'path': path, 'fit': fit.toChannelMap()};
+    _lastModel = args;
+    if (_channel == null) {
+      await (_attachWaiter ??= Completer<void>()).future;
+    }
+    if (!identical(_lastModel, args)) return false;
+    return await _invoke<bool>('loadModel', args) ?? false;
   }
 
   /// Toggle between front and back camera.

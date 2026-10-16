@@ -69,9 +69,30 @@ void main() {
       );
     });
 
-    test('.glb is detected despite a query string or upper-case extension', () {
+    test('a query string or upper-case extension makes no difference', () {
       const q = 'https://example.com/m/WATCH.GLB?v=3';
       expect(isArReady(_watch(modelUrl: q, arFit: _fit(modelUrl: q))), isTrue);
+    });
+
+    test('a link with no file extension is accepted (format is checked on the bytes)', () {
+      // How the host names an uploaded raw file is out of our hands.
+      const bare = 'https://res.cloudinary.com/demo/raw/upload/v1700000000/abc123xyz';
+      expect(
+        isArReady(_watch(modelUrl: bare, arFit: _fit(modelUrl: bare))),
+        isTrue,
+      );
+    });
+
+    test('a .gltf is rejected even with a query string', () {
+      const g = 'https://example.com/m/watch.gltf?v=2';
+      expect(isArReady(_watch(modelUrl: g, arFit: _fit(modelUrl: g))), isFalse);
+    });
+
+    test('non-http(s) links are rejected', () {
+      for (final bad in ['ftp://example.com/a.glb', 'file:///sdcard/a.glb', 'a.glb']) {
+        expect(isArReady(_watch(modelUrl: bad, arFit: _fit(modelUrl: bad))),
+            isFalse, reason: bad);
+      }
     });
 
     test('false when arFit is missing or not a map', () {
@@ -139,6 +160,18 @@ void main() {
 
     test('present but not a number makes the watch not AR-ready', () {
       expect(ArFit.tryParse(_watch(arFit: _fit(scale: 'big'))), isNull);
+    });
+
+    test('equal fits compare equal; any difference does not', () {
+      ArFit? parse(Object? scale) => ArFit.tryParse(_watch(arFit: _fit(scale: scale)));
+      expect(parse(null), parse(null));
+      expect(parse(1.1), parse(1.1));
+      expect(parse(1.1).hashCode, parse(1.1).hashCode);
+      expect(parse(1.1), isNot(parse(1.2)));
+      expect(
+        ArFit.tryParse(_watch(arFit: _fit(halfX: 0.26))),
+        isNot(ArFit.tryParse(_watch())),
+      );
     });
 
     test('toChannelMap carries exactly what the renderer needs', () {

@@ -103,7 +103,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton(
-                          onPressed: () => _open(const MerchantAddWatchScreen()),
+                          onPressed: () => _open(const MerchantAddWatchScreen(showArFit: true)),
                           style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 18, vertical: 12)),

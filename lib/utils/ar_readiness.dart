@@ -27,9 +27,9 @@ library;
 /// (holeCx -0.058..-0.010, halfX 0.226..0.338, halfY 0.422..0.438); anything
 /// outside is treated as a typo, not clamped, because a silently "corrected"
 /// hole size would render a wrong-looking watch.
-const double _cxMin = -0.3, _cxMax = 0.3;
-const double _halfXMin = 0.1, _halfXMax = 0.6;
-const double _halfYMin = 0.3, _halfYMax = 0.6;
+const double arHoleCxMin = -0.3, arHoleCxMax = 0.3;
+const double arHalfXMin = 0.1, arHalfXMax = 0.6;
+const double arHalfYMin = 0.3, arHalfYMax = 0.6;
 
 /// Optional per-watch size multiplier. Out-of-range values are clamped.
 const double arScaleMin = 0.7;
@@ -56,7 +56,7 @@ class ArFit {
     if (watchData['has3DModel'] != true) return null;
 
     final modelUrl = watchData['modelUrl'];
-    if (modelUrl is! String || !_isGlbUrl(modelUrl)) return null;
+    if (modelUrl is! String || !_isSupportedModelUrl(modelUrl)) return null;
 
     final raw = watchData['arFit'];
     if (raw is! Map) return null;
@@ -64,9 +64,9 @@ class ArFit {
     // The fit must have been measured for the model that is attached now.
     if (raw['modelUrl'] != modelUrl) return null;
 
-    final cx = _num(raw['holeCx'], _cxMin, _cxMax);
-    final halfX = _num(raw['holeHalfX'], _halfXMin, _halfXMax);
-    final halfY = _num(raw['holeHalfY'], _halfYMin, _halfYMax);
+    final cx = _num(raw['holeCx'], arHoleCxMin, arHoleCxMax);
+    final halfX = _num(raw['holeHalfX'], arHalfXMin, arHalfXMax);
+    final halfY = _num(raw['holeHalfY'], arHalfYMin, arHalfYMax);
     if (cx == null || halfX == null || halfY == null) return null;
 
     // scale is optional: missing means 1.0. Present-but-not-a-number is
@@ -87,6 +87,19 @@ class ArFit {
     );
   }
 
+  @override
+  bool operator ==(Object other) =>
+      other is ArFit &&
+      other.modelUrl == modelUrl &&
+      other.holeCx == holeCx &&
+      other.holeHalfX == holeHalfX &&
+      other.holeHalfY == holeHalfY &&
+      other.scale == scale;
+
+  @override
+  int get hashCode =>
+      Object.hash(modelUrl, holeCx, holeHalfX, holeHalfY, scale);
+
   /// Plain map for the native renderer's method channel.
   Map<String, double> toChannelMap() => {
         'holeCx': holeCx,
@@ -96,17 +109,24 @@ class ArFit {
       };
 }
 
-/// True when [watchData] has a usable .glb AND valid fit numbers for it.
+/// True when [watchData] has a usable model link AND valid fit numbers for it.
 bool isArReady(Map<String, dynamic> watchData) =>
     ArFit.tryParse(watchData) != null;
 
-/// Only .glb is supported: a .gltf is usually JSON plus separate .bin/texture
-/// files, which a single-file upload cannot carry. Checks the URL's path so a
-/// query string (?v=...) doesn't hide the extension.
-bool _isGlbUrl(String url) {
+/// A usable http(s) link that isn't a .gltf. A .gltf is usually JSON plus
+/// separate .bin/texture files, which a single-file upload cannot carry.
+///
+/// This deliberately does NOT insist on a ".glb" suffix: how a host names
+/// an uploaded file is out of our hands, and the real format check happens
+/// on the bytes (uploads must pass isGlbHeader; downloads are checked again
+/// before the renderer sees them). The path is inspected, so a query string
+/// (?v=...) can't hide the extension.
+bool _isSupportedModelUrl(String url) {
   final uri = Uri.tryParse(url);
-  if (uri == null || !uri.hasScheme) return false;
-  return uri.path.toLowerCase().endsWith('.glb');
+  if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+    return false;
+  }
+  return !uri.path.toLowerCase().endsWith('.gltf');
 }
 
 double? _num(Object? v, double min, double max) {

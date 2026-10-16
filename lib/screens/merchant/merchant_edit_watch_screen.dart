@@ -7,10 +7,14 @@ class MerchantEditWatchScreen extends StatefulWidget {
   final String watchId;
   final Map<String, dynamic> data;
 
+  /// True when an admin is editing: shows the AR fit section.
+  final bool showArFit;
+
   const MerchantEditWatchScreen({
     super.key,
     required this.watchId,
     required this.data,
+    this.showArFit = false,
   });
 
   @override
@@ -59,7 +63,11 @@ class _MerchantEditWatchScreenState extends State<MerchantEditWatchScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            WatchForm(key: _form, initialData: widget.data),
+            WatchForm(
+              key: _form,
+              initialData: widget.data,
+              showArFit: widget.showArFit,
+            ),
             if (_errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),

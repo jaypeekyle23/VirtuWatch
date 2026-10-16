@@ -126,7 +126,7 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
               IconButton(
                 icon: const Icon(Icons.add),
                 tooltip: 'Add watch',
-                onPressed: () => _open(const MerchantAddWatchScreen()),
+                onPressed: () => _open(const MerchantAddWatchScreen(showArFit: true)),
               ),
             ],
           ),
@@ -204,7 +204,8 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
     final id = doc.id;
     final data = doc.data();
     void open(String heroTag) => _open(
-        MerchantWatchDetailScreen(watchId: id, data: data, heroTag: heroTag));
+        MerchantWatchDetailScreen(
+            watchId: id, data: data, heroTag: heroTag, showArFit: true));
     final footer = _footer(id, data);
 
     return _isMultiColumn
@@ -265,7 +266,11 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
               onSelected: (action) {
                 switch (action) {
                   case 'edit':
-                    _open(MerchantEditWatchScreen(watchId: id, data: data));
+                    _open(MerchantEditWatchScreen(
+                      watchId: id,
+                      data: data,
+                      showArFit: true,
+                    ));
                   case 'toggle':
                     _toggleListed(id, data);
                   default:

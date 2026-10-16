@@ -18,11 +18,16 @@ class MerchantWatchDetailScreen extends StatelessWidget {
   /// into this screen's first photo. Null means no animation.
   final String? heroTag;
 
+  /// True when an admin is viewing: the Edit button opens the form with its
+  /// AR fit section, and the AR status line says what to do.
+  final bool showArFit;
+
   const MerchantWatchDetailScreen({
     super.key,
     required this.watchId,
     required this.data,
     this.heroTag,
+    this.showArFit = false,
   });
 
   @override
@@ -71,7 +76,9 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                             arReady
                                 ? 'AR try-on is available'
                                 : has3D
-                                    ? '3D model uploaded, AR fit pending review'
+                                    ? (showArFit
+                                        ? 'Needs AR fit: add it under Edit details'
+                                        : '3D model uploaded, AR fit pending review')
                                     : 'No 3D model, so AR try-on is unavailable'),
                         _line(
                             missing.isEmpty,
@@ -95,7 +102,9 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                             onPressed: () => Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => MerchantEditWatchScreen(
-                                    watchId: watchId, data: data),
+                                    watchId: watchId,
+                                    data: data,
+                                    showArFit: showArFit),
                               ),
                             ),
                             icon: const Icon(Icons.edit_outlined),

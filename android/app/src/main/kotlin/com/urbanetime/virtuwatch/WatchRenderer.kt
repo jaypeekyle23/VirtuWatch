@@ -29,7 +29,7 @@ import com.google.android.filament.gltfio.ResourceLoader
 import com.google.android.filament.gltfio.UbershaderProvider
 import com.google.android.filament.utils.KTX1Loader
 import com.google.android.filament.utils.Utils
-import io.flutter.FlutterInjector
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.cos
@@ -39,15 +39,16 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Draws the watch (seiko_small.glb) on the tracked wrist with Filament, on a transparent
- * TextureView stacked over the camera preview.
+ * Draws a watch on the tracked wrist with Filament, on a transparent TextureView stacked over the
+ * camera preview. The model is supplied at runtime through [loadModel]; until then nothing is drawn.
  *
- * Model frame (measured from the GLB's geometry): the strap is a closed ring.
+ * Model frame every watch must follow (each model's strap opening is described by a [ModelFit]):
+ * the strap is a closed ring.
  *   +X = out of the wrist (watch face normal)
  *   +Z = ring axis = along the forearm, toward the elbow (crown points to -Z, toward the hand)
  *   +Y = across the wrist (12 o'clock direction)
- * The ring's inner opening (where the wrist goes) is centred at (-0.057, 0, 0) with half-sizes
- * 0.25 (x) by 0.435 (y) model units.
+ * The ring's inner opening (where the wrist goes) is centred at (holeCx, 0, 0) with half-sizes
+ * holeHalfX (x) by holeHalfY (y) model units.
  *
  * A depth-only elliptical cylinder fills that opening, so the part of the strap that passes
  * *behind* the wrist is hidden, like a real watch.
@@ -75,10 +76,14 @@ class WatchRenderer(
     private var fitRatio = 1.0                // main thread only
 
     private val wristWidthM = 0.058           // average adult wrist width
-    private val holeCx = -0.057               // model units
-    private val holeHalfX = 0.25
-    private val holeHalfY = 0.435
-    private val modelHoleWidth = 2 * holeHalfY
+
+    /**
+     * Strap-opening geometry of the watch currently loaded, in that model's own units. It is
+     * replaced as ONE immutable object by [loadModel] (main thread) and read by [submit] (MediaPipe
+     * thread), so a swap can never be seen half-applied. Before the first model loads nothing is
+     * drawn and these values are unused.
+     */
+    @Volatile private var fit = ModelFit.SEIKO
     /**
      * How far ahead (seconds) to push the pose beyond the age it already has when drawn. The pose
      * is ~60-100 ms old on arrival (camera + inference + filtering), so without this the watch
@@ -185,8 +190,9 @@ class WatchRenderer(
         val fw = frame.fitWidthPx
         if (autoFit && !fw.isNaN()) {
             val zc = pose.origin[2]
-            val metresPerUnit = fw * zc / (pose.focalPx * modelHoleWidth)
-            fitTargetRatio = (metresPerUnit / (wristWidthM / modelHoleWidth)).coerceIn(fitMin, fitMax)
+            val holeWidth = fit.holeWidth // read once: a model swap may happen on the main thread
+            val metresPerUnit = fw * zc / (pose.focalPx * holeWidth)
+            fitTargetRatio = (metresPerUnit / (wristWidthM / holeWidth)).coerceIn(fitMin, fitMax)
             shiftX = frame.fitShiftX * zc / pose.focalPx // centre on the arm, sideways
             shiftY = frame.fitShiftY * zc / pose.focalPx
         }
@@ -269,8 +275,7 @@ class WatchRenderer(
         }
 
         setupLighting(eng)
-        loadWatch(eng)
-        loadOccluder(eng)
+        createLoaders(eng)
 
         val helper = UiHelper(UiHelper.ContextErrorPolicy.DONT_CHECK)
         helper.isOpaque = false
@@ -398,53 +403,95 @@ class WatchRenderer(
         sc.addEntity(sunEntity)
     }
 
-    private fun loadWatch(eng: Engine) {
-        try {
-            val prov = UbershaderProvider(eng)
-            provider = prov
-            val loader = AssetLoader(eng, prov, EntityManager.get())
-            assetLoader = loader
-            val resLoader = ResourceLoader(eng)
-            resourceLoader = resLoader
-
-            val key = FlutterInjector.instance().flutterLoader()
-                .getLookupKeyForAsset("assets/models/seiko_small.glb")
-            val bytes = context.assets.open(key).use { it.readBytes() }
-            val buf = ByteBuffer.allocateDirect(bytes.size)
-            buf.put(bytes)
-            buf.flip()
-
-            val asset = loader.createAsset(buf)
-            if (asset == null) {
-                Log.e(tag, "Failed to create watch asset")
-                return
-            }
-            resLoader.loadResources(asset)
-            asset.releaseSourceData()
-            watchAsset = asset
-        } catch (e: Throwable) {
-            Log.e(tag, "Could not load watch: ${e.message}")
-        }
+    private fun createLoaders(eng: Engine) {
+        val prov = UbershaderProvider(eng)
+        provider = prov
+        assetLoader = AssetLoader(eng, prov, EntityManager.get())
+        resourceLoader = ResourceLoader(eng)
     }
 
     /**
-     * Depth-only elliptical cylinder filling the strap ring's opening (model units), so the far
-     * side of the strap is hidden behind the "wrist". Priority 0 => drawn before the watch.
+     * Replaces the watch with the GLB at [path], placed according to [newFit]. Main thread only.
+     *
+     * The new model is built BEFORE the old one is touched, so a corrupt or unreadable file returns
+     * false and leaves whatever was showing intact.
      */
-    private fun loadOccluder(eng: Engine) {
+    fun loadModel(path: String, newFit: ModelFit): Boolean {
+        val eng = engine ?: return false
+        val loader = assetLoader ?: return false
+        val resLoader = resourceLoader ?: return false
+
+        val newAsset: FilamentAsset = try {
+            val bytes = File(path).readBytes()
+            val buf = ByteBuffer.allocateDirect(bytes.size)
+            buf.put(bytes)
+            buf.flip()
+            val asset = loader.createAsset(buf) ?: run {
+                Log.e(tag, "Filament could not parse $path")
+                return false
+            }
+            try {
+                resLoader.loadResources(asset)
+            } catch (t: Throwable) {
+                loader.destroyAsset(asset)
+                throw t
+            }
+            asset.releaseSourceData()
+            asset
+        } catch (e: Throwable) {
+            Log.e(tag, "Could not load model $path: ${e.message}")
+            return false
+        }
+
+        // Swap. Hide first (takes the old watch and occluder out of the scene), wait for the GPU to
+        // finish with them, then destroy.
+        setShown(false)
+        eng.flushAndWait()
+        watchAsset?.let { loader.destroyAsset(it) }
+        watchAsset = newAsset
+        fit = newFit
+        rebuildOccluder(eng, newFit)
+
+        // The new asset has no transform yet, and applyTransform() skips matrices equal to the last
+        // one it sent, so invalidate that cache. updateWatch() re-shows the watch on the next frame.
+        lastM.fill(Float.MAX_VALUE)
+        needsRender = true
+        return true
+    }
+
+    /**
+     * (Re)builds the depth-only elliptical cylinder that fills the strap ring's opening (model units),
+     * so the far side of the strap is hidden behind the "wrist". Priority 0 => drawn before the watch.
+     * Its size comes from [f], so it is rebuilt for every model; the material is created once.
+     */
+    private fun rebuildOccluder(eng: Engine, f: ModelFit) {
+        // Drop the previous one. Callers hide the watch first, so it is no longer in the scene.
+        if (occluderEntity != 0) {
+            eng.destroyEntity(occluderEntity)
+            EntityManager.get().destroy(occluderEntity)
+            occluderEntity = 0
+        }
+        occluderVb?.let { eng.destroyVertexBuffer(it) }
+        occluderIb?.let { eng.destroyIndexBuffer(it) }
+        occluderVb = null
+        occluderIb = null
+
         try {
-            val matBytes = context.assets.open("occluder.filamat").use { it.readBytes() }
-            val matBuf = ByteBuffer.allocateDirect(matBytes.size)
-            matBuf.put(matBytes)
-            matBuf.flip()
-            val material = Material.Builder().payload(matBuf, matBuf.remaining()).build(eng)
-            occluderMaterial = material
+            var material = occluderMaterial
+            if (material == null) {
+                val matBytes = context.assets.open("occluder.filamat").use { it.readBytes() }
+                val matBuf = ByteBuffer.allocateDirect(matBytes.size)
+                matBuf.put(matBytes)
+                matBuf.flip()
+                material = Material.Builder().payload(matBuf, matBuf.remaining()).build(eng)
+                occluderMaterial = material
+            }
 
             val segs = 48
-            val halfLen = 0.42f                         // along the forearm axis (watch is +-0.3 wide)
-            val rx = (holeHalfX * 0.985).toFloat()      // a hair inside the strap to avoid z-fighting
-            val ry = (holeHalfY * 0.985).toFloat()
-            val cx = holeCx.toFloat()
+            val halfLen = 0.42f                          // along the forearm axis (watch is +-0.3 wide)
+            val rx = (f.holeHalfX * 0.985).toFloat()     // a hair inside the strap to avoid z-fighting
+            val ry = (f.holeHalfY * 0.985).toFloat()
+            val cx = f.holeCx.toFloat()
 
             val verts = FloatArray(segs * 2 * 3)
             for (i in 0 until segs) {
@@ -630,7 +677,8 @@ class WatchRenderer(
 
     private fun applyTransform() {
         val eng = engine ?: return
-        val scale = (wristWidthM / modelHoleWidth) * userScale * fitRatio
+        val f = fit
+        val scale = (wristWidthM / f.holeWidth) * userScale * fitRatio * f.scale
 
         // Rotation from quaternion (x, y, z, w).
         val x = curQ[0]; val y = curQ[1]; val z = curQ[2]; val w = curQ[3]
@@ -639,9 +687,9 @@ class WatchRenderer(
         val r20 = 2 * (x * z - y * w); val r21 = 2 * (y * z + x * w); val r22 = 1 - 2 * (x * x + y * y)
 
         // M = T(position) * R * S(scale) * T(-holeCentre); the hole centre is (holeCx, 0, 0).
-        val tx = curPos[0] - r00 * scale * holeCx
-        val ty = curPos[1] - r10 * scale * holeCx
-        val tz = curPos[2] - r20 * scale * holeCx
+        val tx = curPos[0] - r00 * scale * f.holeCx
+        val ty = curPos[1] - r10 * scale * f.holeCx
+        val tz = curPos[2] - r20 * scale * f.holeCx
 
         val m = floatArrayOf(
             (r00 * scale).toFloat(), (r10 * scale).toFloat(), (r20 * scale).toFloat(), 0f,
@@ -710,5 +758,36 @@ class WatchRenderer(
         }
         len = sqrt(len)
         if (len > 1e-9) for (i in 0 until 4) cur[i] /= len
+    }
+}
+
+/**
+ * Where one watch model's strap opening is, in that model's own units: the centre along X, and the
+ * half-sizes in X (thickness) and Y (width). Immutable, so it can be handed between threads safely.
+ * [scale] is an optional per-watch size multiplier on top of the fit to the wearer's wrist.
+ */
+class ModelFit(
+    val holeCx: Double,
+    val holeHalfX: Double,
+    val holeHalfY: Double,
+    val scale: Double = 1.0,
+) {
+    val holeWidth: Double get() = 2 * holeHalfY
+
+    companion object {
+        /** The original Seiko measurements. Only a placeholder until a model is loaded. */
+        val SEIKO = ModelFit(-0.057, 0.25, 0.435)
+
+        /** Parses the map sent from Dart; null if anything is missing, non-finite or non-positive. */
+        fun fromMap(m: Map<*, *>?): ModelFit? {
+            if (m == null) return null
+            fun num(key: String) = (m[key] as? Number)?.toDouble()?.takeIf { it.isFinite() }
+            val cx = num("holeCx") ?: return null
+            val hx = num("holeHalfX") ?: return null
+            val hy = num("holeHalfY") ?: return null
+            val sc = num("scale") ?: 1.0
+            if (hx <= 0.0 || hy <= 0.0 || sc <= 0.0) return null
+            return ModelFit(cx, hx, hy, sc)
+        }
     }
 }

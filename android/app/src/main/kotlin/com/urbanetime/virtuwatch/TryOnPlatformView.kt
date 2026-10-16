@@ -75,6 +75,15 @@ class TryOnPlatformView(
                     tracker.armDetect = call.arguments as? Boolean ?: true
                     result.success(null)
                 }
+                "loadModel" -> {
+                    val path = call.argument<String>("path")
+                    val fit = ModelFit.fromMap(call.argument<Map<*, *>>("fit"))
+                    if (path == null || fit == null) {
+                        result.error("bad_args", "loadModel needs a path and a valid fit", null)
+                    } else {
+                        result.success(watch.loadModel(path, fit))
+                    }
+                }
                 "swapHand" -> {
                     tracker.swapHand = !tracker.swapHand
                     result.success(tracker.swapHand)
