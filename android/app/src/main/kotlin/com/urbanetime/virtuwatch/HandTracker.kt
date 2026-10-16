@@ -18,6 +18,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
@@ -75,7 +76,11 @@ class HandTracker(
     private var delegateName = "?"
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
-    private var useFront = false
+
+    /** Set by [stop]. Late callbacks (camera provider future, frames, results) must not touch anything after this. */
+    @Volatile private var stopped = false
+    /** Only the use cases THIS tracker bound; the camera provider is shared by the whole process. */
+    private var boundUseCases: Array<UseCase> = emptyArray()
 
     @Volatile var smoothingEnabled = true
 
@@ -135,11 +140,24 @@ class HandTracker(
     private var latencyMs = 0L
 
     fun start() {
-        initLandmarker()
+        // If the hand model can't be built the camera preview still works (no tracking), instead of
+        // the whole screen crashing.
+        try {
+            initLandmarker()
+        } catch (e: Throwable) {
+            Log.e(tag, "Hand tracking unavailable: ${e.message}", e)
+            landmarker = null
+        }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
-            provider = future.get()
-            bind()
+            // The view may have been closed while the camera provider was still starting up.
+            if (stopped) return@addListener
+            try {
+                provider = future.get()
+                bind()
+            } catch (e: Throwable) {
+                Log.e(tag, "Camera could not start: ${e.message}", e)
+            }
         }, ContextCompat.getMainExecutor(context))
     }
 
@@ -163,17 +181,31 @@ class HandTracker(
         }
     }
 
-    fun switchCamera() {
-        useFront = !useFront
-        filter.reset()
-        bind()
+    fun stop() {
+        stopped = true
+        try {
+            unbindOwnUseCases()
+        } catch (e: Throwable) {
+            Log.w(tag, "unbind failed: ${e.message}")
+        }
+        // Close the landmarker on the analysis thread, after any frame already being processed, so
+        // native MediaPipe is never closed while it is in use. Already-queued work still runs after
+        // shutdown().
+        try {
+            analysisExecutor.execute {
+                try { landmarker?.close() } catch (e: Throwable) { Log.w(tag, "close failed: ${e.message}") }
+                landmarker = null
+            }
+        } catch (e: Throwable) {
+            Log.w(tag, "could not queue landmarker close: ${e.message}")
+        }
+        analysisExecutor.shutdown()
     }
 
-    fun stop() {
-        provider?.unbindAll()
-        analysisExecutor.shutdown()
-        landmarker?.close()
-        landmarker = null
+    private fun unbindOwnUseCases() {
+        val p = provider ?: return
+        if (boundUseCases.isNotEmpty()) p.unbind(*boundUseCases)
+        boundUseCases = emptyArray()
     }
 
     // ---- MediaPipe -------------------------------------------------------
@@ -209,10 +241,12 @@ class HandTracker(
 
     @SuppressLint("UnsafeOptInUsageError")
     private fun bind() {
+        if (stopped) return
         val p = provider ?: return
-        p.unbindAll()
+        unbindOwnUseCases()
 
-        val selector = if (useFront) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+        // AR try-on only uses the back camera.
+        val selector = CameraSelector.DEFAULT_BACK_CAMERA
         val ratio43 = AspectRatioStrategy(AspectRatio.RATIO_4_3, AspectRatioStrategy.FALLBACK_RULE_AUTO)
 
         val preview = Preview.Builder()
@@ -236,6 +270,7 @@ class HandTracker(
             .also { it.setAnalyzer(analysisExecutor, ::analyze) }
 
         camera = p.bindToLifecycle(owner, selector, preview, analysis)
+        boundUseCases = arrayOf(preview, analysis)
         focalPx = 0.0 // recomputed on first frame once we know the upright size
     }
 
@@ -282,6 +317,7 @@ class HandTracker(
 
     private fun analyze(proxy: ImageProxy) {
         try {
+            if (stopped) return
             val t0 = SystemClock.elapsedRealtimeNanos()
             val rotation = proxy.imageInfo.rotationDegrees
             val rw = proxy.width
@@ -341,6 +377,16 @@ class HandTracker(
     // ---- results ---------------------------------------------------------
 
     private fun onResult(result: HandLandmarkerResult) {
+        if (stopped) return
+        // This runs on MediaPipe's own thread: an exception escaping from here would kill the app.
+        try {
+            processResult(result)
+        } catch (e: Throwable) {
+            Log.e(tag, "onResult failed: ${e.message}", e)
+        }
+    }
+
+    private fun processResult(result: HandLandmarkerResult) {
         val now = SystemClock.elapsedRealtime()
         latencyMs = now - result.timestampMs()
         windowCount++
@@ -483,6 +529,6 @@ class HandTracker(
         val hud = "delegate=$delegateName  landmarks/s=$resultFps  latency=${latencyMs}ms  prep=${prepMs}ms arm=${armMs}ms\n" +
             "hand=$side(label $rawLabel)  depth=$depth  smoothing=${if (smoothingEnabled) "on" else "off"}  f=%.0fpx (${focalSource})".format(focalPx) + "\n$armInfo  $fitInfo"
 
-        onFrame(TrackingFrame(w, h, useFront, lm, raw, smooth, hud, stableLeft, fitW, fitSx, fitSy))
+        onFrame(TrackingFrame(w, h, false, lm, raw, smooth, hud, stableLeft, fitW, fitSx, fitSy))
     }
 }

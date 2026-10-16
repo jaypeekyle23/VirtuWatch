@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../constants/watch_colors.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/user_service.dart';
+import '../../services/watch_model_cache.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
 import '../../utils/match_score_color.dart';
@@ -55,6 +56,16 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
     // should never interrupt someone looking at a watch.
     _userService.recordRecentlyViewed(widget.watchId).catchError((_) {});
     _loadMatch();
+    _prefetchArModel();
+  }
+
+  /// If this watch can be tried on in AR, start fetching its 3D model now, so
+  /// it is usually already on the phone by the time "Try on in AR" is tapped.
+  /// Best effort: a failure here just means it downloads when it's needed.
+  void _prefetchArModel() {
+    if (!isArReady(widget.data)) return;
+    final fit = ArFit.tryParse(widget.data);
+    if (fit != null) WatchModelCache.instance.prefetch(fit.modelUrl);
   }
 
   Future<void> _loadMatch() async {

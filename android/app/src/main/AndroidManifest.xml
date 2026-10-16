@@ -14,6 +14,10 @@
     <!-- Lets the app hand the downloaded update APK to the system
          package installer (see UpdateCheckerService.downloadAndInstall). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Saving an AR try-on photo to Pictures/ on Android 7-9 only. Android 10+
+         saves through MediaStore and needs no permission. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
     <application
         android:label="VirtuWatch"
         android:name="${applicationName}"

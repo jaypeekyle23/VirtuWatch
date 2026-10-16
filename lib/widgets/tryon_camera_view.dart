@@ -7,6 +7,58 @@ import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../utils/ar_readiness.dart';
 
+/// Where the native camera view is in its start-up. The AR screen uses this
+/// to tell the user what it is actually waiting for.
+enum TryOnViewPhase {
+  /// Asking for (or about to ask for) the camera permission.
+  waitingForPermission,
+
+  /// The user said no. The view itself explains how to fix it.
+  permissionDenied,
+
+  /// Permission granted; the native view is being created.
+  starting,
+
+  /// The native view exists and can be sent a watch.
+  ready,
+
+  /// The native view did not come up in time.
+  failed,
+
+  /// Not an Android device, so there is no native view at all.
+  unsupported,
+}
+
+/// What happened to a [TryOnController.loadModel] request.
+enum TryOnLoadResult {
+  /// The watch is on screen.
+  loaded,
+
+  /// The renderer refused the file (corrupt or unsupported model).
+  rejected,
+
+  /// The native view never answered within [TryOnController.nativeLoadTimeout].
+  noResponse,
+
+  /// There is no native view right now (still starting, or it was torn down).
+  viewNotReady,
+}
+
+/// What happened to a [TryOnController.capturePhoto] request.
+enum TryOnCaptureResult {
+  /// The photo is in the gallery (Pictures/VirtuWatch).
+  saved,
+
+  /// The user refused the storage permission (Android 7-9 only).
+  storageDenied,
+
+  /// The photo couldn't be taken or written.
+  failed,
+
+  /// There is no native view right now.
+  viewNotReady,
+}
+
 /// Typed handle to the native AR try-on view (Android only).
 ///
 /// The native side (TryOnPlatformView.kt) runs CameraX -> MediaPipe hand
@@ -15,31 +67,74 @@ import '../utils/ar_readiness.dart';
 /// deal with raw MethodChannels. Calls made before the view exists are
 /// safely ignored (the scale is remembered and applied once it attaches).
 class TryOnController {
+  /// How long the native view gets to appear once the camera permission is
+  /// granted before [phase] becomes [TryOnViewPhase.failed].
+  static const viewStartTimeout = Duration(seconds: 25);
+
+  /// How long a loadModel call may take before it is reported as not answered.
+  static const nativeLoadTimeout = Duration(seconds: 30);
+
+  /// How long taking and saving a photo may take.
+  static const captureTimeout = Duration(seconds: 20);
+
+  static const _permissions = MethodChannel('tryon/permissions');
+
   MethodChannel? _channel;
   double _scale = 1.0;
+  bool _disposed = false;
+  Timer? _startTimer;
 
-  /// The most recent loadModel request. A native view that gets recreated
-  /// (e.g. after retrying the camera permission) starts with no watch, so
-  /// this is re-sent on every attach.
-  Map<String, Object?>? _lastModel;
+  /// Start-up state of the native view. Listeners are never notified in the
+  /// middle of a build, so it is safe to call setState from one.
+  final ValueNotifier<TryOnViewPhase> phase =
+      ValueNotifier(TryOnViewPhase.waitingForPermission);
 
-  /// Completed when the native view first attaches, for a loadModel call
-  /// that was made before the view existed.
-  Completer<void>? _attachWaiter;
-
-  void _attach(MethodChannel channel) {
-    _channel = channel;
-    if (_scale != 1.0) _invoke<void>('setWatchScale', _scale);
-    final waiter = _attachWaiter;
-    _attachWaiter = null;
-    if (waiter != null) {
-      waiter.complete();
-    } else if (_lastModel != null) {
-      _invoke<bool>('loadModel', _lastModel);
-    }
+  void _setPhase(TryOnViewPhase next) {
+    // These calls come from the camera view's initState/build. Notifying
+    // right there would make listeners rebuild widgets mid-build, so the
+    // change is delivered on a microtask (in order) instead.
+    scheduleMicrotask(() {
+      if (!_disposed) phase.value = next;
+    });
   }
 
-  void _detach() => _channel = null;
+  void _permissionRequested() {
+    _startTimer?.cancel();
+    _setPhase(TryOnViewPhase.waitingForPermission);
+  }
+
+  void _permissionResult(bool granted) {
+    _startTimer?.cancel();
+    if (!granted) {
+      _setPhase(TryOnViewPhase.permissionDenied);
+      return;
+    }
+    _setPhase(TryOnViewPhase.starting);
+    _startTimer = Timer(viewStartTimeout, () {
+      if (!_disposed && _channel == null) _setPhase(TryOnViewPhase.failed);
+    });
+  }
+
+  void _markUnsupported() => _setPhase(TryOnViewPhase.unsupported);
+
+  void _attach(MethodChannel channel) {
+    _startTimer?.cancel();
+    _channel = channel;
+    if (_scale != 1.0) _invoke<void>('setWatchScale', _scale);
+    _setPhase(TryOnViewPhase.ready);
+  }
+
+  void _detach() {
+    _startTimer?.cancel();
+    _channel = null;
+  }
+
+  /// Call once, when the owning screen is disposed.
+  void dispose() {
+    _disposed = true;
+    _startTimer?.cancel();
+    phase.dispose();
+  }
 
   Future<T?> _invoke<T>(String method, [Object? args]) async {
     final ch = _channel;
@@ -60,22 +155,53 @@ class TryOnController {
     return _invoke<void>('setWatchScale', scale);
   }
 
-  /// Shows the .glb at [path] on the wrist, placed using [fit]. If the native
-  /// view isn't ready yet this waits for it. Returns false if the file could
-  /// not be loaded (the previous watch stays on screen) or if a newer
-  /// request replaced this one while it waited.
-  Future<bool> loadModel(String path, ArFit fit) async {
+  /// Shows the .glb at [path] on the wrist, placed using [fit].
+  ///
+  /// Does not wait for the native view: when it is not there yet this returns
+  /// [TryOnLoadResult.viewNotReady] immediately, and the caller tries again
+  /// when [phase] becomes [TryOnViewPhase.ready]. On [TryOnLoadResult.rejected]
+  /// or [TryOnLoadResult.noResponse] the previous watch (if any) stays on
+  /// screen.
+  Future<TryOnLoadResult> loadModel(String path, ArFit fit) async {
+    final ch = _channel;
+    if (ch == null) return TryOnLoadResult.viewNotReady;
     final args = <String, Object?>{'path': path, 'fit': fit.toChannelMap()};
-    _lastModel = args;
-    if (_channel == null) {
-      await (_attachWaiter ??= Completer<void>()).future;
+    try {
+      final ok =
+          await ch.invokeMethod<bool>('loadModel', args).timeout(nativeLoadTimeout);
+      return ok == true ? TryOnLoadResult.loaded : TryOnLoadResult.rejected;
+    } on TimeoutException {
+      return TryOnLoadResult.noResponse;
+    } on PlatformException {
+      return TryOnLoadResult.rejected;
+    } on MissingPluginException {
+      // View was torn down between the call and its delivery.
+      return TryOnLoadResult.viewNotReady;
     }
-    if (!identical(_lastModel, args)) return false;
-    return await _invoke<bool>('loadModel', args) ?? false;
   }
 
-  /// Toggle between front and back camera.
-  Future<void> switchCamera() => _invoke<void>('switchCamera');
+  /// Saves a photo of the camera picture with the watch on it to the gallery.
+  /// Only the back camera is used, so the picture is never mirrored.
+  Future<TryOnCaptureResult> capturePhoto() async {
+    final ch = _channel;
+    if (ch == null) return TryOnCaptureResult.viewNotReady;
+    try {
+      final allowed =
+          await _permissions.invokeMethod<bool>('requestStorage') ?? false;
+      if (!allowed) return TryOnCaptureResult.storageDenied;
+      final ok = await ch
+          .invokeMethod<bool>('capturePhoto')
+          .timeout(captureTimeout);
+      return ok == true ? TryOnCaptureResult.saved : TryOnCaptureResult.failed;
+    } on TimeoutException {
+      return TryOnCaptureResult.failed;
+    } on PlatformException {
+      return TryOnCaptureResult.failed;
+    } on MissingPluginException {
+      // View was torn down between the call and its delivery.
+      return TryOnCaptureResult.viewNotReady;
+    }
+  }
 
   /// Flip which wrist the watch is placed on. MediaPipe's left/right label can
   /// be inverted on some cameras. Returns the new swapped state.
@@ -108,6 +234,7 @@ class _TryOnCameraViewState extends State<TryOnCameraView> {
       _requestPermission();
     } else {
       _requesting = false;
+      widget.controller._markUnsupported();
     }
   }
 
@@ -118,6 +245,7 @@ class _TryOnCameraViewState extends State<TryOnCameraView> {
   }
 
   Future<void> _requestPermission() async {
+    widget.controller._permissionRequested();
     setState(() => _requesting = true);
     var granted = false;
     try {
@@ -126,6 +254,7 @@ class _TryOnCameraViewState extends State<TryOnCameraView> {
       granted = false;
     }
     if (!mounted) return;
+    widget.controller._permissionResult(granted);
     setState(() {
       _granted = granted;
       _requesting = false;

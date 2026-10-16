@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_model_cache.dart';
@@ -20,7 +23,7 @@ import 'watch_detail_screen.dart';
 ///
 /// Selecting a watch downloads its .glb (cached on the device) and hands it to
 /// the native renderer together with that model's fit numbers.
-enum _ModelStatus { idle, loading, error }
+enum _Stage { idle, downloading, preparing, error }
 
 class ArTryOnScreen extends StatefulWidget {
   final String? initialWatchId;
@@ -39,7 +42,9 @@ class ArTryOnScreen extends StatefulWidget {
 class _ArTryOnScreenState extends State<ArTryOnScreen> {
   final _watchService = WatchService();
   final _tryOn = TryOnController();
-  final _modelCache = WatchModelCache();
+  // App-wide cache: a download keeps going, and is kept, after this screen
+  // is closed, so leaving and coming back never restarts it from zero.
+  final _modelCache = WatchModelCache.instance;
 
   // Created once. A new stream on every build made the carousel reset to a
   // spinner each time the slider moved or a watch was selected.
@@ -49,18 +54,31 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   Map<String, dynamic>? _selectedWatchData;
   double _userScaleAdjust = 0;
 
-  // Model loading. Only one load runs at a time; if the selection changes
-  // meanwhile, the loop in _syncModel picks up the latest choice afterwards.
+  // Photo capture.
+  bool _capturing = false;
+  bool _flash = false; // brief white flash so the shutter feels responsive
+
+  // Model loading. Each _syncModel call takes a new ticket (_loadToken); a
+  // call that has been overtaken by a newer one (another watch picked, the
+  // camera view became ready, a retry) stands down at its next checkpoint.
+  // Nothing ever waits in line behind an older download.
   ArFit? _appliedFit; // what the native view is showing
-  _ModelStatus _modelStatus = _ModelStatus.idle;
-  bool _syncing = false;
-  bool _resync = false;
+  _Stage _stage = _Stage.idle;
+  double? _downloadFraction; // 0..1 while downloading; null = unknown
+  String? _errorMessage;
+  int _loadToken = 0;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _arDocs = const [];
+
+  // Changing this key makes Flutter build a brand-new camera view, which asks
+  // for the permission and starts the native view again (used by "retry").
+  Key _cameraKey = UniqueKey();
 
   @override
   void initState() {
     super.initState();
     _selectedWatchId = widget.initialWatchId;
     _selectedWatchData = widget.initialWatchData;
+    _tryOn.phase.addListener(_onViewPhase);
     // A watch opened from its detail page is already selected, so nothing else
     // would trigger its first load. (If it isn't AR-ready this is a no-op and
     // _ensureSelection picks the first valid watch instead.)
@@ -71,7 +89,8 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
 
   @override
   void dispose() {
-    _modelCache.dispose();
+    _tryOn.phase.removeListener(_onViewPhase);
+    _tryOn.dispose();
     super.dispose();
   }
 
@@ -84,8 +103,8 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         scrolledUnderElevation: 0,
         actions: [
           IconButton(
-            tooltip: 'About sharing',
-            icon: const Icon(Icons.ios_share_outlined),
+            tooltip: 'About photos',
+            icon: const Icon(Icons.info_outline),
             onPressed: () => _showShareInfoDialog(context),
           ),
         ],
@@ -136,6 +155,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   /// is open.
   void _ensureSelection(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    _arDocs = docs;
     final current = docs.where((d) => d.id == _selectedWatchId).firstOrNull;
     if (current != null) {
       if (ArFit.tryParse(current.data()) !=
@@ -160,86 +180,243 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     _syncModel();
   }
 
-  /// Makes the native view show the selected watch's model. Downloads it first
-  /// (or takes it from the cache). Safe to call repeatedly: calls made while a
-  /// load is running just ask it to re-check the latest selection afterwards.
-  Future<void> _syncModel({bool force = false}) async {
-    if (_syncing) {
-      _resync = true;
-      return;
-    }
-    _syncing = true;
-    try {
-      do {
-        _resync = false;
-        final fit = ArFit.tryParse(_selectedWatchData ?? const {});
-        if (fit == null) break;
-        if (!force && fit == _appliedFit) {
-          if (_modelStatus != _ModelStatus.idle) {
-            setState(() => _modelStatus = _ModelStatus.idle);
-          }
-          break;
-        }
-        force = false;
+  void _log(String message) => debugPrint('[ArTryOn] $message');
 
-        setState(() => _modelStatus = _ModelStatus.loading);
-        var ok = false;
-        try {
-          final file = await _modelCache.getModel(fit.modelUrl);
-          ok = await _tryOn.loadModel(file.path, fit);
-        } catch (_) {
-          // ModelDownloadException, or anything unexpected: show the retry pill.
-          ok = false;
-        }
-        if (!mounted) return;
-        if (ok) _appliedFit = fit;
-        // If the selection changed meanwhile, the loop goes round again, so don't
-        // flash a result for a watch that is no longer selected.
-        if (!_resync) {
-          setState(
-              () => _modelStatus = ok ? _ModelStatus.idle : _ModelStatus.error);
-        }
-      } while (_resync);
-    } finally {
-      _syncing = false;
+  /// The native view just started (or restarted). It shows no watch yet, so
+  /// the selected one is sent to it; the file is normally already on disk by
+  /// now, which makes this instant. Any other phase only needs a new pill.
+  void _onViewPhase() {
+    if (!mounted) return;
+    setState(() {});
+    if (_tryOn.phase.value == TryOnViewPhase.ready) {
+      _appliedFit = null;
+      _syncModel();
     }
   }
 
-  Widget _statusPill() {
-    final Widget content;
-    VoidCallback? onTap;
-    switch (_modelStatus) {
-      case _ModelStatus.idle:
-        return const SizedBox.shrink();
-      case _ModelStatus.loading:
-        content = const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white),
-            ),
-            SizedBox(width: 10),
-            Text('Loading watch…',
-                style: TextStyle(color: Colors.white, fontSize: 12)),
-          ],
-        );
-      case _ModelStatus.error:
-        onTap = () => _syncModel(force: true);
-        content = const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.refresh, size: 16, color: Colors.white),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text("Couldn't load this watch. Tap to retry",
-                  style: TextStyle(color: Colors.white, fontSize: 12)),
-            ),
-          ],
-        );
+  void _setLoad(_Stage stage, {String? message}) {
+    if (!mounted) return;
+    setState(() {
+      _stage = stage;
+      _errorMessage = message;
+      _downloadFraction = null;
+    });
+  }
+
+  /// Makes the native view show the selected watch's model: fetches the file
+  /// (from the cache, resuming a partial download, or fresh), then hands it
+  /// to the renderer. Safe to call repeatedly; a newer call overtakes an
+  /// older one. The pill shows the real stage, and every failure says which
+  /// stage failed.
+  Future<void> _syncModel({bool force = false}) async {
+    final fit = ArFit.tryParse(_selectedWatchData ?? const {});
+    if (fit == null) return;
+
+    final token = ++_loadToken;
+    bool current() => mounted && token == _loadToken;
+
+    if (!force && fit == _appliedFit) {
+      _setLoad(_Stage.idle);
+      return;
     }
+    if (_tryOn.phase.value == TryOnViewPhase.unsupported) return;
+
+    final clock = Stopwatch()..start();
+    try {
+      // 1) The file.
+      _setLoad(_Stage.downloading);
+      final download = _modelCache.start(fit.modelUrl);
+      void onProgress() {
+        if (current()) {
+          setState(
+              () => _downloadFraction = download.progress.value.fraction);
+        }
+      }
+
+      download.progress.addListener(onProgress);
+      final File file;
+      try {
+        file = await download.file;
+      } on ModelDownloadException catch (e) {
+        _log('download failed after ${clock.elapsedMilliseconds} ms: '
+            '${e.message}');
+        if (current()) _setLoad(_Stage.error, message: e.message);
+        return;
+      } finally {
+        download.progress.removeListener(onProgress);
+      }
+      if (!current()) return;
+      _log('model on disk after ${clock.elapsedMilliseconds} ms');
+
+      // 2) The native view. If it isn't up yet there is nothing to wait on:
+      // _onViewPhase starts this again the moment it is, and by then the file
+      // is on disk.
+      if (_tryOn.phase.value != TryOnViewPhase.ready) {
+        _log('camera view not ready (${_tryOn.phase.value.name}); '
+            'will load when it is');
+        _setLoad(_Stage.idle);
+        return;
+      }
+
+      // 3) The renderer.
+      _setLoad(_Stage.preparing);
+      final result = await _tryOn.loadModel(file.path, fit);
+      _log('loadModel -> ${result.name}, '
+          '${clock.elapsedMilliseconds} ms in total');
+      // Record what the view really shows, even if the user has moved on.
+      if (result == TryOnLoadResult.loaded) _appliedFit = fit;
+      if (!current()) return;
+
+      switch (result) {
+        case TryOnLoadResult.loaded:
+          _setLoad(_Stage.idle);
+          _prefetchNeighbours();
+        case TryOnLoadResult.rejected:
+          // Don't keep serving a file the renderer can't read.
+          unawaited(_modelCache.remove(fit.modelUrl));
+          _setLoad(_Stage.error,
+              message: "This watch's 3D model couldn't be read.");
+        case TryOnLoadResult.noResponse:
+          _setLoad(_Stage.error,
+              message: 'The AR view stopped responding.');
+        case TryOnLoadResult.viewNotReady:
+          // The view went away mid-call; _onViewPhase retries when it's back.
+          _setLoad(_Stage.idle);
+      }
+    } catch (e, st) {
+      _log('unexpected error: $e\n$st');
+      if (current()) {
+        _setLoad(_Stage.error, message: "Couldn't load this watch.");
+      }
+    }
+  }
+
+  /// Warms the cache for the watches either side of the selected one, so
+  /// flicking through the carousel is instant. Only runs once the selected
+  /// watch is on screen, so it never competes with it for bandwidth.
+  void _prefetchNeighbours() {
+    final i = _arDocs.indexWhere((d) => d.id == _selectedWatchId);
+    if (i < 0) return;
+    for (final j in [i - 1, i + 1]) {
+      if (j < 0 || j >= _arDocs.length) continue;
+      final fit = ArFit.tryParse(_arDocs[j].data());
+      if (fit != null) _modelCache.prefetch(fit.modelUrl);
+    }
+  }
+
+  void _restartCameraView() => setState(() => _cameraKey = UniqueKey());
+
+  /// The native view is up and the selected watch is actually on screen, so a
+  /// photo would show the watch.
+  bool get _canCapture =>
+      _tryOn.phase.value == TryOnViewPhase.ready &&
+      _appliedFit != null &&
+      _stage == _Stage.idle;
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _capturePhoto() async {
+    if (_capturing) return;
+    if (!_canCapture) {
+      _snack('Wait for the watch to finish loading, then try again.');
+      return;
+    }
+    setState(() {
+      _capturing = true;
+      _flash = true;
+    });
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) setState(() => _flash = false);
+    });
+
+    final result = await _tryOn.capturePhoto();
+    if (!mounted) return;
+    setState(() => _capturing = false);
+    _snack(switch (result) {
+      TryOnCaptureResult.saved => 'Photo saved to your gallery.',
+      TryOnCaptureResult.storageDenied =>
+        'Allow storage access to save photos to your device.',
+      TryOnCaptureResult.failed => "Couldn't save the photo. Please try again.",
+      TryOnCaptureResult.viewNotReady => 'The camera isn\'t ready yet.',
+    });
+  }
+
+  Widget _shutterButton() {
+    return Opacity(
+      opacity: _canCapture ? 1.0 : 0.5,
+      child: GestureDetector(
+        onTap: _capturePhoto,
+        child: Container(
+          width: 44,
+          height: 44,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: 0.25),
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+                shape: BoxShape.circle, color: Colors.white),
+            child: _capturing
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black),
+                  )
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _downloadText() {
+    final f = _downloadFraction;
+    return f == null
+        ? 'Downloading watch…'
+        : 'Downloading watch ${(f * 100).floor()}%';
+  }
+
+  /// One pill that says what the screen is actually waiting for: the camera,
+  /// the download (with a percentage), or the renderer. Failures name the
+  /// stage that failed and can be tapped to retry.
+  Widget _statusPill() {
+    final phase = _tryOn.phase.value;
+    // No pill when the camera view itself already explains the situation.
+    if (phase == TryOnViewPhase.unsupported ||
+        phase == TryOnViewPhase.permissionDenied) {
+      return const SizedBox.shrink();
+    }
+
+    final String text;
+    VoidCallback? onTap;
+    var busy = true;
+    if (phase == TryOnViewPhase.failed) {
+      text = "The camera view didn't start. Tap to retry";
+      busy = false;
+      onTap = _restartCameraView;
+    } else if (_stage == _Stage.error) {
+      text = '${_errorMessage ?? "Couldn't load this watch."} Tap to retry';
+      busy = false;
+      onTap = () => _syncModel(force: true);
+    } else {
+      final parts = <String>[
+        if (phase == TryOnViewPhase.waitingForPermission ||
+            phase == TryOnViewPhase.starting)
+          'Starting camera…',
+        if (_stage == _Stage.downloading) _downloadText(),
+        if (_stage == _Stage.preparing) 'Preparing watch…',
+      ];
+      if (parts.isEmpty) return const SizedBox.shrink();
+      text = parts.join('  ·  ');
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -248,7 +425,27 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
           color: Colors.black.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: content,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (busy)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            else
+              const Icon(Icons.refresh, size: 16, color: Colors.white),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -283,7 +480,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        TryOnCameraView(controller: _tryOn),
+        TryOnCameraView(key: _cameraKey, controller: _tryOn),
         Positioned(
           left: 16,
           right: 72, // clear of the camera buttons
@@ -298,12 +495,6 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
           top: 16,
           child: Column(
             children: [
-              _floatingIcon(
-                Icons.cameraswitch_outlined,
-                tooltip: 'Switch camera',
-                onTap: _tryOn.switchCamera,
-              ),
-              const SizedBox(height: 10),
               // MediaPipe's left/right label can be inverted; this flips the
               // wrist the watch is placed on if it lands on the wrong side.
               _floatingIcon(
@@ -312,6 +503,21 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                 onTap: _tryOn.swapHand,
               ),
             ],
+          ),
+        ),
+        if (_tryOn.phase.value == TryOnViewPhase.ready)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: _shutterButton(),
+          ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _flash ? 0.7 : 0.0,
+              duration: const Duration(milliseconds: 120),
+              child: const ColoredBox(color: Colors.white),
+            ),
           ),
         ),
       ],
@@ -417,11 +623,11 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: Text('Share your try-on', style: AppTheme.serif(size: 22)),
+        title: Text('Save your try-on', style: AppTheme.serif(size: 22)),
         content: Text(
-          'This button lets you save or share a photo of the watch overlaid '
-          'on your wrist, so you can send it to a friend, post it, or compare '
-          'a few favorites before deciding.',
+          'Tap the round camera button to save a photo of the watch on your '
+          'wrist to your gallery (Pictures/VirtuWatch), so you can send it to '
+          'a friend or compare a few favorites before deciding.',
           style: TextStyle(
               color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
         ),

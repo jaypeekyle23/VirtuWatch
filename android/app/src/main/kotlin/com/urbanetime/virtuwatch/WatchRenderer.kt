@@ -310,7 +310,12 @@ class WatchRenderer(
         choreographer = choreo
         frameCallback = object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
-                renderFrame(frameTimeNanos)
+                // An exception here would crash the whole app from the main-thread frame loop.
+                try {
+                    renderFrame(frameTimeNanos)
+                } catch (e: Throwable) {
+                    Log.e(tag, "renderFrame failed: ${e.message}", e)
+                }
                 choreographer?.postFrameCallback(this)
             }
         }
@@ -318,6 +323,15 @@ class WatchRenderer(
     }
 
     fun stop() {
+        try {
+            teardown()
+        } catch (e: Throwable) {
+            // Cleanup problems must never take the app down while leaving the screen.
+            Log.e(tag, "teardown failed: ${e.message}", e)
+        }
+    }
+
+    private fun teardown() {
         frameCallback?.let { choreographer?.removeFrameCallback(it) }
         frameCallback = null
         choreographer = null
@@ -326,6 +340,7 @@ class WatchRenderer(
 
         val eng = engine ?: return
         val sc = scene
+        eng.flushAndWait() // the GPU must be done with everything before it is destroyed
 
         watchAsset?.let {
             sc?.removeEntities(it.entities)
@@ -349,9 +364,11 @@ class WatchRenderer(
             sunEntity = 0
         }
 
-        resourceLoader?.destroy()
+        // Same order as Filament's own ModelViewer: loader, then the provider's materials, then the rest.
         assetLoader?.destroy()
+        provider?.destroyMaterials()
         provider?.destroy()
+        resourceLoader?.destroy()
 
         renderer?.let { eng.destroyRenderer(it) }
         view?.let { eng.destroyView(it) }
@@ -420,6 +437,7 @@ class WatchRenderer(
         val eng = engine ?: return false
         val loader = assetLoader ?: return false
         val resLoader = resourceLoader ?: return false
+        val startedAt = System.nanoTime()
 
         val newAsset: FilamentAsset = try {
             val bytes = File(path).readBytes()
@@ -443,6 +461,8 @@ class WatchRenderer(
             return false
         }
 
+        val parsedAt = System.nanoTime()
+
         // Swap. Hide first (takes the old watch and occluder out of the scene), wait for the GPU to
         // finish with them, then destroy.
         setShown(false)
@@ -456,6 +476,12 @@ class WatchRenderer(
         // one it sent, so invalidate that cache. updateWatch() re-shows the watch on the next frame.
         lastM.fill(Float.MAX_VALUE)
         needsRender = true
+        // Timing, so a slow load can be told apart from a slow download in logcat.
+        Log.i(
+            tag,
+            "loadModel ${File(path).name}: parsed in ${(parsedAt - startedAt) / 1_000_000} ms, " +
+                "swapped in ${(System.nanoTime() - parsedAt) / 1_000_000} ms"
+        )
         return true
     }
 

@@ -21,8 +21,8 @@ Map<String, dynamic> _watch({
         'holeHalfX': 0.25,
         'holeHalfY': 0.435,
       }
-    else if (arFit != null)
-      'arFit': arFit,
+    else
+      'arFit': ?arFit,
   };
 }
 
@@ -42,7 +42,7 @@ Map<String, dynamic> _fit({
       'holeCx': cx,
       'holeHalfX': halfX,
       'holeHalfY': halfY,
-      if (scale != null) 'scale': scale,
+      'scale': ?scale,
     };
 
 void main() {

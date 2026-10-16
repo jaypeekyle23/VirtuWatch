@@ -2,6 +2,7 @@ package com.urbanetime.virtuwatch
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -10,6 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var pendingStorageResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -36,6 +38,22 @@ class MainActivity : FlutterActivity() {
                         )
                     }
                 }
+                // Saving a photo to the gallery needs no permission on Android 10+ (MediaStore);
+                // Android 7-9 still needs WRITE_EXTERNAL_STORAGE.
+                "requestStorage" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        result.success(true)
+                    } else {
+                        pendingStorageResult?.success(false)
+                        pendingStorageResult = result
+                        ActivityCompat.requestPermissions(
+                            this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), STORAGE_PERMISSION_REQUEST
+                        )
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -51,9 +69,16 @@ class MainActivity : FlutterActivity() {
             )
             pendingPermissionResult = null
         }
+        if (requestCode == STORAGE_PERMISSION_REQUEST) {
+            pendingStorageResult?.success(
+                grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+            )
+            pendingStorageResult = null
+        }
     }
 
     private companion object {
         const val CAMERA_PERMISSION_REQUEST = 1001
+        const val STORAGE_PERMISSION_REQUEST = 1002
     }
 }

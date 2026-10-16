@@ -67,6 +67,12 @@ android {
 
     buildTypes {
         release {
+            // Keep rules for Filament / MediaPipe (see proguard-rules.pro): without them R8 strips
+            // classes the native code needs and the AR screen crashes in release builds.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = if (hasReleaseKeystore) {
                 signingConfigs.getByName("release")
             } else {

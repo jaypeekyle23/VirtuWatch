@@ -115,8 +115,8 @@ class WatchFormState extends State<WatchForm> {
       TextEditingController(text: _fitText(_savedFit?.holeHalfY));
   // Blank means the default of 1.0.
   late final _fitScale = TextEditingController(
-      text: (_savedFit != null && _savedFit!.scale != 1.0)
-          ? _text(_savedFit!.scale)
+      text: (_savedFit != null && _savedFit.scale != 1.0)
+          ? _text(_savedFit.scale)
           : '');
 
   static String _fitText(double? v) => v == null ? '' : _text(v);
