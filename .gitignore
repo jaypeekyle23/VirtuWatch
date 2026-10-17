@@ -41,3 +41,9 @@ android/key.properties
 *.keystore
 admin-web/
 admin-web.zip
+
+linux/flutter/generated_plugin_registrant.*
+linux/flutter/generated_plugins.cmake
+macos/Flutter/GeneratedPluginRegistrant.swift
+windows/flutter/generated_plugin_registrant.*
+windows/flutter/generated_plugins.cmake
