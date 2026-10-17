@@ -44,6 +44,27 @@ enum TryOnLoadResult {
   viewNotReady,
 }
 
+/// A photo that was just taken. It is already saved in the gallery.
+class TryOnPhoto {
+  /// The gallery (MediaStore) entry. Needed to delete the photo again.
+  final String? uri;
+
+  /// A copy in the app cache: what the preview shows and what gets shared.
+  final String path;
+
+  const TryOnPhoto({required this.uri, required this.path});
+}
+
+/// What [TryOnController.capturePhoto] returns: the outcome, and the photo
+/// when there is one to show. [photo] is null if the picture reached the
+/// gallery but no preview copy could be made.
+class TryOnCapture {
+  final TryOnCaptureResult result;
+  final TryOnPhoto? photo;
+
+  const TryOnCapture(this.result, [this.photo]);
+}
+
 /// What happened to a [TryOnController.capturePhoto] request.
 enum TryOnCaptureResult {
   /// The photo is in the gallery (Pictures/VirtuWatch).
@@ -78,6 +99,7 @@ class TryOnController {
   static const captureTimeout = Duration(seconds: 20);
 
   static const _permissions = MethodChannel('tryon/permissions');
+  static const _photos = MethodChannel('tryon/photos');
 
   MethodChannel? _channel;
   double _scale = 1.0;
@@ -182,24 +204,52 @@ class TryOnController {
 
   /// Saves a photo of the camera picture with the watch on it to the gallery.
   /// Only the back camera is used, so the picture is never mirrored.
-  Future<TryOnCaptureResult> capturePhoto() async {
+  ///
+  /// On success the result also carries a [TryOnPhoto] for the preview, share
+  /// and delete actions.
+  Future<TryOnCapture> capturePhoto() async {
     final ch = _channel;
-    if (ch == null) return TryOnCaptureResult.viewNotReady;
+    if (ch == null) return const TryOnCapture(TryOnCaptureResult.viewNotReady);
     try {
       final allowed =
           await _permissions.invokeMethod<bool>('requestStorage') ?? false;
-      if (!allowed) return TryOnCaptureResult.storageDenied;
-      final ok = await ch
-          .invokeMethod<bool>('capturePhoto')
+      if (!allowed) return const TryOnCapture(TryOnCaptureResult.storageDenied);
+      final reply = await ch
+          .invokeMapMethod<String, Object?>('capturePhoto')
           .timeout(captureTimeout);
-      return ok == true ? TryOnCaptureResult.saved : TryOnCaptureResult.failed;
+      if (reply == null) return const TryOnCapture(TryOnCaptureResult.failed);
+      final path = reply['path'] as String?;
+      return TryOnCapture(
+        TryOnCaptureResult.saved,
+        path == null
+            ? null
+            : TryOnPhoto(uri: reply['uri'] as String?, path: path),
+      );
     } on TimeoutException {
-      return TryOnCaptureResult.failed;
+      return const TryOnCapture(TryOnCaptureResult.failed);
     } on PlatformException {
-      return TryOnCaptureResult.failed;
+      return const TryOnCapture(TryOnCaptureResult.failed);
     } on MissingPluginException {
       // View was torn down between the call and its delivery.
-      return TryOnCaptureResult.viewNotReady;
+      return const TryOnCapture(TryOnCaptureResult.viewNotReady);
+    }
+  }
+
+  /// Deletes [photo] from the gallery and removes its cache copy. Returns
+  /// false if the photo could not be removed from the gallery. Static because
+  /// it does not need the camera view, so it still works if the user has
+  /// already left the AR screen.
+  static Future<bool> deletePhoto(TryOnPhoto photo) async {
+    try {
+      final ok = await _photos.invokeMethod<bool>('deletePhoto', {
+        'uri': photo.uri,
+        'path': photo.path,
+      });
+      return ok == true;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 

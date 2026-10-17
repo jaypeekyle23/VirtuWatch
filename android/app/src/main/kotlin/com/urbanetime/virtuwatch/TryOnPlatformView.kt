@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
@@ -21,6 +22,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -138,7 +140,9 @@ class TryOnPlatformView(
     /**
      * Saves what the user sees (camera picture + the watch drawn on top, without the debug overlay)
      * to the gallery. The two views are grabbed here on the main thread; stacking them, encoding and
-     * writing the file happen on a background thread. [result] is answered on the main thread.
+     * writing the files happen on a background thread. [result] is answered on the main thread with
+     * a map: "uri" (the gallery entry, used to delete it later) and "path" (a copy in the app's cache
+     * that Flutter can show and share; null if that copy couldn't be written).
      */
     private fun capturePhoto(result: MethodChannel.Result) {
         val camera = previewView.bitmap
@@ -157,9 +161,20 @@ class TryOnPlatformView(
                 if (watchLayer != null) canvas.drawBitmap(watchLayer, null, Rect(0, 0, w, h), null)
                 camera.recycle()
                 watchLayer?.recycle()
-                saveToGallery(photo)
+                val jpeg = ByteArrayOutputStream().use { out ->
+                    if (!photo.compress(Bitmap.CompressFormat.JPEG, 95, out)) {
+                        throw IllegalStateException("Couldn't encode the photo")
+                    }
+                    out.toByteArray()
+                }
                 photo.recycle()
-                mainHandler.post { result.success(true) }
+                val uri = saveToGallery(jpeg)
+                // The preview/share copy is a bonus: if it fails the photo is still safely in the gallery.
+                val cachePath = try { writeCacheCopy(jpeg) } catch (e: Throwable) {
+                    Log.e("TryOnPlatformView", "cache copy failed: ${e.message}", e)
+                    null
+                }
+                mainHandler.post { result.success(mapOf("uri" to uri.toString(), "path" to cachePath)) }
             } catch (e: Throwable) {
                 Log.e("TryOnPlatformView", "save failed: ${e.message}", e)
                 mainHandler.post { result.error("capture_failed", e.message, null) }
@@ -167,9 +182,12 @@ class TryOnPlatformView(
         }
     }
 
-    /** Writes [bmp] as a JPEG into Pictures/VirtuWatch, visible in the gallery app. */
+    /**
+     * Writes the encoded [jpeg] into Pictures/VirtuWatch, visible in the gallery app. Returns the
+     * MediaStore entry, which [PhotoFiles.delete] can remove again.
+     */
     @Suppress("DEPRECATION")
-    private fun saveToGallery(bmp: Bitmap) {
+    private fun saveToGallery(jpeg: ByteArray): Uri {
         val name = "VirtuWatch_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".jpg"
         val resolver = ctx.contentResolver
         val values = ContentValues().apply {
@@ -189,11 +207,7 @@ class TryOnPlatformView(
             ?: throw IllegalStateException("Couldn't create the image file")
         try {
             val out = resolver.openOutputStream(uri) ?: throw IllegalStateException("Couldn't open the image file")
-            out.use {
-                if (!bmp.compress(Bitmap.CompressFormat.JPEG, 95, it)) {
-                    throw IllegalStateException("Couldn't encode the photo")
-                }
-            }
+            out.use { it.write(jpeg) }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
                 resolver.update(uri, done, null, null)
@@ -202,6 +216,19 @@ class TryOnPlatformView(
             try { resolver.delete(uri, null, null) } catch (ignored: Throwable) {}
             throw e
         }
+        return uri
+    }
+
+    /**
+     * Writes a copy of the photo into the app cache so Flutter can display it and hand it to the
+     * share sheet. Copies older than an hour are cleared first so the cache never piles up.
+     */
+    private fun writeCacheCopy(jpeg: ByteArray): String {
+        val dir = PhotoFiles.cacheDir(ctx)
+        PhotoFiles.purgeOld(dir)
+        val file = File(dir, "tryon_" + System.currentTimeMillis() + ".jpg")
+        file.writeBytes(jpeg)
+        return file.absolutePath
     }
 
     override fun dispose() {

@@ -476,6 +476,8 @@ class WatchModelCache {
     } catch (_) {}
   }
 
+  static String _name(File file) => file.uri.pathSegments.last;
+
   /// Keeps the cache bounded: removes the least recently used models beyond
   /// [maxFiles], and partial downloads that were abandoned long ago.
   Future<void> _evict(Directory dir, {required File keep}) async {
@@ -486,7 +488,10 @@ class WatchModelCache {
         if (entity.path.endsWith('.part')) {
           final age = DateTime.now().difference(await entity.lastModified());
           if (age > _stalePartAge) await _deleteQuietly(entity);
-        } else if (entity.path.endsWith('.glb') && entity.path != keep.path) {
+        } else if (entity.path.endsWith('.glb') && _name(entity) != _name(keep)) {
+          // Compared by file name, not by path string. dir.list() and the
+          // path built in _fetch can use different separators on Windows, so
+          // the same file would look different and `keep` could be evicted.
           models.add(entity);
         }
       }

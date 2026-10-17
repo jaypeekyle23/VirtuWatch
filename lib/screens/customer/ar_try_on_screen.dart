@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/watch_model_cache.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
@@ -10,6 +12,7 @@ import '../../utils/ar_readiness.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
 import '../../widgets/tryon_camera_view.dart';
+import '../../widgets/tryon_photo_preview.dart';
 import 'watch_detail_screen.dart';
 
 /// Live AR Try-On. The camera, hand tracking and 3D rendering all run in
@@ -72,6 +75,9 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   // Changing this key makes Flutter build a brand-new camera view, which asks
   // for the permission and starts the native view again (used by "retry").
   Key _cameraKey = UniqueKey();
+
+  // The photo currently shown in the post-capture preview, if any.
+  TryOnPhoto? _photo;
 
   @override
   void initState() {
@@ -326,6 +332,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
       _snack('Wait for the watch to finish loading, then try again.');
       return;
     }
+    HapticFeedback.mediumImpact();
     setState(() {
       _capturing = true;
       _flash = true;
@@ -334,16 +341,54 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
       if (mounted) setState(() => _flash = false);
     });
 
-    final result = await _tryOn.capturePhoto();
+    final capture = await _tryOn.capturePhoto();
     if (!mounted) return;
-    setState(() => _capturing = false);
-    _snack(switch (result) {
+    setState(() {
+      _capturing = false;
+      // The preview replaces the "saved" message; it only appears when there
+      // is a photo to show.
+      if (capture.photo != null) _photo = capture.photo;
+    });
+    if (capture.photo != null) return;
+    _snack(switch (capture.result) {
       TryOnCaptureResult.saved => 'Photo saved to your gallery.',
       TryOnCaptureResult.storageDenied =>
         'Allow storage access to save photos to your device.',
       TryOnCaptureResult.failed => "Couldn't save the photo. Please try again.",
       TryOnCaptureResult.viewNotReady => 'The camera isn\'t ready yet.',
     });
+  }
+
+  /// Opens the system share sheet, which lists whatever the person has
+  /// installed (Facebook, Instagram, Telegram, email, ...).
+  Future<void> _sharePhoto(TryOnPhoto photo) async {
+    final data = _selectedWatchData;
+    final watch = [
+      (data?['brand'] as String?)?.trim() ?? '',
+      (data?['name'] as String?)?.trim() ?? '',
+    ].where((s) => s.isNotEmpty).join(' ');
+    final text = watch.isEmpty
+        ? 'Trying on a watch with VirtuWatch'
+        : 'Trying on the $watch with VirtuWatch';
+    try {
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(photo.path, mimeType: 'image/jpeg')],
+        text: text,
+        subject: 'My VirtuWatch try-on',
+      ));
+    } catch (_) {
+      _snack("Couldn't open the share sheet. Please try again.");
+    }
+  }
+
+  /// Deletes the photo from the gallery. Returns true if it is gone.
+  Future<bool> _deletePhoto(TryOnPhoto photo) async {
+    final deleted = await TryOnController.deletePhoto(photo);
+    _snack(deleted
+        ? 'Photo deleted.'
+        : "Couldn't delete the photo. You can remove it from your gallery "
+            '(Pictures/VirtuWatch).');
+    return deleted;
   }
 
   Widget _shutterButton() {
@@ -511,6 +556,21 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
             bottom: 16,
             child: _shutterButton(),
           ),
+        if (_photo case final photo?)
+          Positioned.fill(
+            child: TryOnPhotoPreview(
+              // A new photo gets a fresh preview with its own animation.
+              key: ValueKey(photo.path),
+              photo: photo,
+              onShare: () => _sharePhoto(photo),
+              onDelete: () => _deletePhoto(photo),
+              onDismissed: () {
+                if (mounted && _photo?.path == photo.path) {
+                  setState(() => _photo = null);
+                }
+              },
+            ),
+          ),
         Positioned.fill(
           child: IgnorePointer(
             child: AnimatedOpacity(
@@ -625,9 +685,11 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         backgroundColor: AppTheme.surface,
         title: Text('Save your try-on', style: AppTheme.serif(size: 22)),
         content: Text(
-          'Tap the round camera button to save a photo of the watch on your '
-          'wrist to your gallery (Pictures/VirtuWatch), so you can send it to '
-          'a friend or compare a few favorites before deciding.',
+          'Tap the round camera button to take a photo of the watch on your '
+          'wrist. It is saved to your gallery (Pictures/VirtuWatch) and a '
+          'preview pops up: tap it to share the photo with a friend, delete '
+          'it, or close it. Handy for comparing a few favorites before '
+          'deciding.',
           style: TextStyle(
               color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
         ),

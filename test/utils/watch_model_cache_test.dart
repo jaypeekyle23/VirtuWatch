@@ -235,8 +235,11 @@ void main() {
       expect(await partFor(url).length(), 4000);
       expect(fileFor(url).existsSync(), isFalse);
 
-      // Connection is back (think: the user reopens the AR screen).
-      server.dropEveryTime = false;
+      // Connection is back (think: the user reopens the AR screen). Clear
+      // dropAfter too, or the next response is still cut off once.
+      server
+        ..dropEveryTime = false
+        ..dropAfter = null;
       final file = await cache.getModel(url);
 
       expect(await file.readAsBytes(), body);

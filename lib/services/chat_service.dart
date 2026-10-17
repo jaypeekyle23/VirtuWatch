@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../constants/app_knowledge.dart';
 import '../constants/watch_colors.dart';
+import '../utils/ar_readiness.dart';
 import '../utils/match_score_color.dart';
 import 'recommendation_service.dart';
 
@@ -135,7 +136,10 @@ class ChatService {
       'different watches, asks for photos, or asks to set '
       'something up in the app. Greetings, thanks, small talk, and general '
       'or app questions need no card. Answering a question, even about a '
-      'watch already on screen, needs no card.]';
+      'watch already on screen, needs no card. Only offer a "try_on" button '
+      'for a watch whose line says "AR try-on: available"; if it says '
+      '"NOT available", say it has no 3D model yet and send no try_on '
+      'button.]';
 
   /// The most action buttons one reply can show.
   static const int _maxActionsPerReply = 2;
@@ -304,6 +308,26 @@ class ChatService {
     return gender ?? 'Not specified';
   }
 
+  /// Whether a watch can be tried on in AR, as one phrase for the prompts.
+  /// Uses [isArReady], the same check behind the Try On buttons and the AR
+  /// carousel, so the assistant can never promise a try-on the app can't
+  /// deliver. "Available" means the watch has a 3D model with valid fit data.
+  static String _arLine(Map<String, dynamic> watchData) => isArReady(watchData)
+      ? 'AR try-on: available'
+      : 'AR try-on: NOT available (no 3D model set up for this watch yet)';
+
+  /// Whether the watch with [watchId] in the current recommendation list can
+  /// be tried on in AR. A watch that isn't in the list counts as not ready,
+  /// matching the chat sheet, which shows no Try On button for it either.
+  bool _isArReadyWatch(String? watchId) {
+    final recs = _result?.recommendations;
+    if (watchId == null || recs == null) return false;
+    for (final r in recs) {
+      if (r.watchId == watchId) return isArReady(r.data);
+    }
+    return false;
+  }
+
   static String _buildWatchPrompt(
     Map<String, dynamic> watchData,
     Map<String, dynamic>? userProfile,
@@ -384,6 +408,7 @@ Here is the ONLY factual data you know about THIS watch — never invent specs, 
 - Water resistance: $waterResistance
 - Band material: $bandMaterial
 - Case material: $caseMaterial
+- ${_arLine(watchData)}
 
 What you know about the CUSTOMER you're talking to (use this — don't ask for info you already have here):
 ${userContextLines.join('\n')}
@@ -391,6 +416,7 @@ ${userContextLines.join('\n')}
 Rules:
 - If the customer's wrist width is known, use it directly to answer fit questions (e.g. compare it to the lug-to-lug measurement above) instead of asking them for it.
 - If asked HOW fit was determined: it's based on the lug-to-lug measurement as a proportion of the customer's wrist width, NOT a flat millimeter difference — roughly 75-95% of wrist width is the well-proportioned "classic" sweet spot and scores highest; below ~60% the watch reads as running small/dainty; 95-105% is a "bold" fit that fills the wrist with barely any overhang; past ~105% the lugs start to overhang the wrist edge, more noticeably past ~120%. Explain it this way if asked — don't invent a flat millimeter cutoff or a different method.
+- AR try-on: only say this watch can be tried on in AR if its data above says "AR try-on: available". If it says NOT available, tell the customer plainly that this watch doesn't have a 3D model for AR try-on yet, never imply or promise that they can try it on, and offer to help with fit instead (its lug-to-lug size against their wrist width and its match score). Never say "Yes" to a try-on request for a watch that is not available.
 - If asked about this watch's color, answer using the Color(s) listed above exactly — never guess or invent a color that isn't listed there.
 - Describe colors in plain language only (e.g. "burgundy", "teal") — never state a hex code like "#6F1011" to the customer, even if they ask for one; explain you don't expose technical color codes and give the plain-language name instead.
 - If asked whether this watch is for men, women, or unisex, answer using "Suited for" above exactly. If it says "Not specified", say plainly that the merchant hasn't categorized it yet — never guess based on the name, size, or color.
@@ -452,7 +478,8 @@ Rules:
           'Match score: ${rec.matchPercent}% (${matchVerdictLabel(rec.matchPercent, signalCount: rec.signalCount)})'
           '${rec.confidenceNote != null ? ' (${rec.confidenceNote})' : ''}. '
           'Fit: ${rec.fitNote}.'
-          '${rec.colorNote != null ? ' Color match: ${rec.colorNote}.' : ''}';
+          '${rec.colorNote != null ? ' Color match: ${rec.colorNote}.' : ''} '
+          '${_arLine(data)}.';
     }).join('\n');
 
     return '''
@@ -477,6 +504,7 @@ HOW THE MATCH SCORE ACTUALLY WORKS (explain this accurately if asked "why is thi
 Rules:
 - Each watch's "Specs:" part is its spec sheet (case thickness, band width, movement, water resistance, case and band material), together with the case size and lug-to-lug given earlier in its line. Answer spec questions from these exactly. If a spec is not in a watch's line, it is not on file: say you don't have it for that watch rather than guessing.
 - Only discuss specific watches from the list above — never invent specs/prices for a watch not on this list. If asked about a specific watch not on this list, say you can only discuss their current recommendations and suggest they browse the full catalog or search for it directly. Questions about the app itself or the general domain (see above) are welcome, not off-topic.
+- AR try-on: each watch's line ends with "AR try-on: available" or "AR try-on: NOT available". Only say a watch can be tried on in AR if it is marked available. If it is NOT available, say plainly that this watch doesn't have a 3D model for AR try-on yet, never imply or promise that they can try it on, and offer to help with fit instead. If asked which watches can be tried on in AR, answer from these marks exactly.
 - If asked about color (e.g. "do you have a red watch", "which ones are rose gold"), check the color(s) listed with each watch above and answer from that exactly — if none match, say so plainly rather than guessing or suggesting the closest thing as if it matched.
 - Describe colors in plain language only (e.g. "burgundy", "teal") — never state a hex code like "#6F1011" to the customer, even if they ask for one; explain you don't expose technical color codes and give the plain-language name instead.
 - If asked which watches are for men, women, or unisex, use each watch's "suited for" value exactly. If it says "Not specified", say plainly that watch hasn't been categorized yet — never guess based on its name, size, or color.
@@ -505,7 +533,7 @@ Rules for "actions" (the customer taps these buttons themselves; you only offer 
 - "measure_wrist": opens the wrist measurement screen. Offer it when wrist width is "not provided" and the customer asks about fit, or asks how to measure or re-measure their wrist.
 - "scan_outfit": opens the outfit scan screen. Offer it when the outfit scan is "not done yet" and the customer asks about color matching, or asks to scan or redo their outfit.
 - "edit_preferences": opens their profile to change style preferences and budget. Offer it when style preferences are "not set yet" and the customer asks about style, or asks to change their style or budget.
-- "try_on" (needs "watchId"): opens AR try-on with that watch. Offer it when the customer asks to try a watch on, see it on their wrist, or use AR.
+- "try_on" (needs "watchId"): opens AR try-on with that watch. Offer it when the customer asks to try a watch on, see it on their wrist, or use AR, but ONLY for a watch marked "AR try-on: available". Never offer it for a watch marked NOT available.
 - "save_watch" (needs "watchId"): saves that watch to their wishlist. Offer it when the customer says they like a watch or want to save, shortlist, or keep it.
 - "view_saved": opens their saved watches. Offer it when they ask about their saved or wishlist watches.
 - If wrist width is "not provided" and the customer asks which watches fit (or will fit) their wrist, do NOT show any watch cards and do not rank or name watches by fit. Every fit score is only a neutral placeholder until the wrist is measured. Say you need their wrist measurement first, and offer "measure_wrist".
@@ -523,7 +551,8 @@ EXAMPLES (customer message, then your JSON reply):
 - Customer: "show me a rose gold watch" -> {"text": "<names the watch>, shown below.", "watchIds": ["<ID copied from the list>"], "actions": []}
 - Customer: "will these fit me?" while wrist width is "not provided" -> {"text": "<explain you need their wrist width>", "watchIds": [], "actions": [{"type": "measure_wrist"}]}
 - Customer: "i like the first one" -> {"text": "<short reply naming that watch>", "watchIds": [], "actions": [{"type": "save_watch", "watchId": "<ID copied from the list>"}]}
-- Customer: "can I try it on?" -> {"text": "Yes! Tap the button below to try it on in AR.", "watchIds": [], "actions": [{"type": "try_on", "watchId": "<ID copied from the list>"}]}
+- Customer: "can I try it on?" (the watch is marked "AR try-on: available") -> {"text": "Yes! Tap the button below to try it on in AR.", "watchIds": [], "actions": [{"type": "try_on", "watchId": "<ID copied from the list>"}]}
+- Customer: "can I try it on?" (the watch is marked "AR try-on: NOT available") -> {"text": "<say plainly this watch doesn't have a 3D model for AR try-on yet, and offer to help with its fit instead>", "watchIds": [], "actions": []}
 - Customer: "can I save it?" -> {"text": "Tap the Save button below to add it to your wishlist.", "watchIds": [], "actions": [{"type": "save_watch", "watchId": "<ID copied from the list>"}]}
 You cannot save, measure, scan, or open anything yourself. Never say "I have saved it" or similar. Say to tap the button below instead.
 ''';
@@ -657,20 +686,22 @@ You cannot save, measure, scan, or open anything yourself. Never say "I have sav
       }
       final parsed = allowed == null
           ? ChatReply(text: reply)
-          : _withIntentActions(
-              _withFitGuard(
-                _resolveActionWatches(
-                  _withoutRepeatedCards(
-                    _withoutCardsOnSmallTalk(
-                      _parseStructuredReply(reply, allowed),
+          : _withoutUnavailableTryOn(
+              _withIntentActions(
+                _withFitGuard(
+                  _resolveActionWatches(
+                    _withoutRepeatedCards(
+                      _withoutCardsOnSmallTalk(
+                        _parseStructuredReply(reply, allowed),
+                        userText,
+                      ),
                       userText,
                     ),
-                    userText,
                   ),
+                  userText,
                 ),
                 userText,
               ),
-              userText,
             );
       _history.add(ChatMessage(
         role: 'model',
@@ -876,6 +907,24 @@ You cannot save, measure, scan, or open anything yourself. Never say "I have sav
     return ChatReply(text: reply.text, actions: actions);
   }
 
+  /// Last line of defense behind the prompt rules: drops any "Try on in AR"
+  /// button for a watch that has no AR try-on. The chat sheet would hide that
+  /// button anyway, but removing it here keeps it from using up one of the
+  /// reply's button slots, and keeps the saved chat history truthful. The
+  /// reply text is the model's to write; the prompt tells it not to promise
+  /// a try-on for these watches.
+  ChatReply _withoutUnavailableTryOn(ChatReply reply) {
+    final kept = reply.actions
+        .where((a) => a.type != ChatAction.tryOn || _isArReadyWatch(a.watchId))
+        .toList();
+    if (kept.length == reply.actions.length) return reply;
+    return ChatReply(
+      text: reply.text,
+      watchIds: reply.watchIds,
+      actions: kept,
+    );
+  }
+
   /// Safety net for action buttons. A small model sometimes says "tap the
   /// button below" without actually sending one. When the model sent no
   /// buttons at all, the app looks at the customer's own message for a
@@ -912,7 +961,9 @@ You cannot save, measure, scan, or open anything yourself. Never say "I have sav
     final wantsSave = !asksForSavedList && _saveIntent.hasMatch(userText);
     if (wantsTryOn || wantsSave) {
       for (final id in _watchesInContext(reply, userText)) {
-        if (wantsTryOn) add(ChatAction(type: ChatAction.tryOn, watchId: id));
+        if (wantsTryOn && _isArReadyWatch(id)) {
+          add(ChatAction(type: ChatAction.tryOn, watchId: id));
+        }
         if (wantsSave) add(ChatAction(type: ChatAction.saveWatch, watchId: id));
       }
     }

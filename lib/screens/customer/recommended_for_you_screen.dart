@@ -7,6 +7,7 @@ import '../../constants/watch_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/ar_readiness.dart';
 import '../../utils/format.dart';
 import '../../utils/match_score_color.dart';
 import '../../widgets/network_photo.dart';
@@ -25,7 +26,13 @@ class RecommendedForYouScreen extends StatefulWidget {
 }
 
 class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
-  static const _filters = ['All', 'Best Fit', 'Newest', 'Your Style'];
+  static const _filters = [
+    'All',
+    'Best Fit',
+    'Newest',
+    'Your Style',
+    'AR Try-On',
+  ];
   static BoxDecoration get _rowDivider =>
       BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.hairline)));
 
@@ -113,6 +120,10 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
           });
       case 'Your Style':
         return all.where((r) => r.styleScore == 1.0).toList();
+      case 'AR Try-On':
+        // Same definition of "AR-ready" as the Try On buttons and the AR
+        // carousel. Keeps the best-match-first order of the full list.
+        return all.where((r) => isArReady(r.data)).toList();
       default:
         return all;
     }
@@ -260,9 +271,11 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
             else if (_loadError != null)
               _message(_loadError!, retry: true)
             else if (list.isEmpty)
-              _message(_selectedFilter == 'Your Style'
-                  ? 'No watches match your style preferences yet.'
-                  : 'No watches in the catalog yet.')
+              _message(switch (_selectedFilter) {
+                'Your Style' => 'No watches match your style preferences yet.',
+                'AR Try-On' => 'No watches with AR try-on yet.',
+                _ => 'No watches in the catalog yet.',
+              })
             else
               for (final rec in list) _row(rec),
           ],
