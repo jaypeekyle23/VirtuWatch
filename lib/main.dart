@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
@@ -20,8 +22,40 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await _activateAppCheck();
   await NotificationService.instance.init(onNotificationTap: _handleNotificationTap);
   runApp(const MyApp());
+}
+
+/// The chat assistant (Firebase AI Logic) only accepts requests that carry
+/// an App Check token, so App Check must start right after Firebase does.
+///
+/// Debug builds use the debug provider. Its token is printed in the run
+/// logs the first time, and must be added in the Firebase console under
+/// App Check > Apps > Manage debug tokens. Release builds use Play
+/// Integrity on Android. Web and desktop are skipped here.
+Future<void> _activateAppCheck() async {
+  if (kIsWeb) return;
+  final platform = defaultTargetPlatform;
+  final isAndroid = platform == TargetPlatform.android;
+  final isApple =
+      platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
+  if (!isAndroid && !isApple) return;
+
+  try {
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: kDebugMode
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
+      providerApple: kDebugMode
+          ? const AppleDebugProvider()
+          : const AppleDeviceCheckProvider(),
+    );
+  } catch (e) {
+    // Chat will be rejected without a token, but the rest of the app
+    // should still open.
+    debugPrint('App Check could not start: $e');
+  }
 }
 
 /// Routes a tapped notification's payload to whatever it should do.

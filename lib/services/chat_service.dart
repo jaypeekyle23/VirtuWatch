@@ -1,6 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:firebase_ai/firebase_ai.dart'
+    show
+        Content,
+        FirebaseAI,
+        FirebaseAIException,
+        GenerateContentResponse,
+        GenerationConfig,
+        QuotaExceeded,
+        Schema,
+        ServerException,
+        TextPart;
 import '../constants/app_knowledge.dart';
 import '../constants/watch_colors.dart';
 import '../utils/ar_readiness.dart';
@@ -103,22 +113,12 @@ class ChatReply {
 /// list (via [ChatService.forRecommendations]) — so the model answers
 /// from actual specs/scores instead of guessing or inventing details.
 ///
-/// SECURITY NOTE: this calls the Gemini API directly from the client with
-/// an API key embedded below. That is only safe because the key MUST be
-/// restricted in Google Cloud Console to:
-///   1. API restriction -> Generative Language API only
-///   2. Application restriction -> your Android package name (+ SHA-1)
-///      and/or iOS bundle ID
-/// Do not ship this with an unrestricted key.
+/// Gemini is called through Firebase AI Logic, so no API key lives in this
+/// app. The key is held on Google's side and tied to the Firebase project.
+/// To stop other apps from using the project's chat endpoint, turn on
+/// Firebase App Check for Firebase AI Logic in the Firebase console.
 class ChatService {
-  // Injected at build/run time via --dart-define-from-file=.env
-  // (see env.example for the expected format). Never hardcode the real
-  // key here — that's exactly what this mechanism avoids.
-  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
-
   static const String _model = 'gemini-3.5-flash-lite';
-  static const String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models';
 
   /// How many ranked watches the recommendations prompt includes. Also
   /// the set of watches the assistant is allowed to show as cards.
@@ -143,6 +143,39 @@ class ChatService {
 
   /// The most action buttons one reply can show.
   static const int _maxActionsPerReply = 2;
+
+  /// The shape of a structured reply, sent to Gemini so it answers in JSON.
+  static final Schema _replySchema = Schema.object(
+    properties: {
+      'text': Schema.string(
+        description: 'Your short, friendly reply to the customer.',
+      ),
+      'watchIds': Schema.array(
+        description: 'Watch IDs to show as cards. Use an empty '
+            'list unless the latest customer message itself asks '
+            'to see, open, find, or get photos of a watch, asks for '
+            'a recommendation, or asks for another, more, or '
+            'different watches (use watches not shown yet). '
+            'Greetings, thanks, small talk, questions about a '
+            'watch already shown, and general questions always '
+            'get an empty list.',
+        items: Schema.string(),
+      ),
+      'actions': Schema.array(
+        description: 'Buttons to offer. Use an empty list unless '
+            'a button directly helps with what the customer just '
+            'asked.',
+        items: Schema.object(
+          properties: {
+            'type': Schema.string(),
+            'watchId': Schema.string(),
+          },
+          optionalProperties: ['watchId'],
+        ),
+      ),
+    },
+    optionalProperties: ['watchIds', 'actions'],
+  );
 
   final String Function() _buildSystemPrompt;
   final List<ChatMessage> _history = [];
@@ -561,120 +594,52 @@ You cannot save, measure, scan, or open anything yourself. Never say "I have sav
   /// Sends [userText] and returns the model's reply, appending both to
   /// the in-memory conversation history.
   Future<ChatReply> sendMessage(String userText) async {
-    if (_apiKey.isEmpty) {
-      throw 'Chat is not configured. Run with '
-          '--dart-define-from-file=.env (see env.example).';
-    }
-
     _history.add(ChatMessage(role: 'user', text: userText));
 
-    final uri = Uri.parse(
-      '$_baseUrl/$_model:generateContent?key=$_apiKey',
+    final model = FirebaseAI.googleAI().generativeModel(
+      model: _model,
+      systemInstruction: Content.system(_buildSystemPrompt()),
+      generationConfig: _allowedWatchIds != null
+          ? GenerationConfig(
+              responseMimeType: 'application/json',
+              responseSchema: _replySchema,
+            )
+          : null,
     );
 
-    final body = {
-      'system_instruction': {
-        'parts': [
-          {'text': _buildSystemPrompt()},
-        ],
-      },
-      'contents': [
-        for (var i = 0; i < _history.length; i++)
-          {
-            'role': _history[i].role,
-            'parts': [
-              {
-                'text': _historyText(_history[i]) +
-                    // Restated on the latest message only: a small model
-                    // follows the most recent text far more closely than
-                    // the system prompt, and tends to copy the card
-                    // pattern of its own earlier replies otherwise.
-                    (_allowedWatchIds != null && i == _history.length - 1
-                        ? _formatReminder
-                        : ''),
-              },
-            ],
-          },
-      ],
-      if (_allowedWatchIds != null)
-        'generationConfig': {
-          'responseMimeType': 'application/json',
-          'responseSchema': {
-            'type': 'OBJECT',
-            'properties': {
-              'text': {
-                'type': 'STRING',
-                'description': 'Your short, friendly reply to the customer.',
-              },
-              'watchIds': {
-                'type': 'ARRAY',
-                'description': 'Watch IDs to show as cards. Use an empty '
-                    'list unless the latest customer message itself asks '
-                    'to see, open, find, or get photos of a watch, asks for '
-                    'a recommendation, or asks for another, more, or '
-                    'different watches (use watches not shown yet). '
-                    'Greetings, thanks, small talk, questions about a '
-                    'watch already shown, and general questions always '
-                    'get an empty list.',
-                'items': {'type': 'STRING'},
-              },
-              'actions': {
-                'type': 'ARRAY',
-                'description': 'Buttons to offer. Use an empty list unless '
-                    'a button directly helps with what the customer just '
-                    'asked.',
-                'items': {
-                  'type': 'OBJECT',
-                  'properties': {
-                    'type': {'type': 'STRING'},
-                    'watchId': {'type': 'STRING'},
-                  },
-                  'required': ['type'],
-                },
-              },
-            },
-            'required': ['text'],
-          },
-        },
-    };
+    final contents = <Content>[
+      for (var i = 0; i < _history.length; i++)
+        Content(_history[i].role, [
+          TextPart(
+            _historyText(_history[i]) +
+                // Restated on the latest message only: a small model
+                // follows the most recent text far more closely than
+                // the system prompt, and tends to copy the card
+                // pattern of its own earlier replies otherwise.
+                (_allowedWatchIds != null && i == _history.length - 1
+                    ? _formatReminder
+                    : ''),
+          ),
+        ]),
+    ];
 
     try {
-      http.Response? response;
-      // Gemini occasionally returns a transient 503 (model overloaded).
-      // Retry a couple of times with a short backoff before giving up.
+      GenerateContentResponse? response;
+      // Gemini occasionally returns a transient server error (model
+      // overloaded). Retry a couple of times with a short backoff before
+      // giving up.
       for (var attempt = 0; attempt < 3; attempt++) {
-        response = await http.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(body),
-        );
-        if (response.statusCode != 503) break;
-        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
-      }
-
-      if (response!.statusCode != 200) {
-        // ignore: avoid_print
-        debugPrint('Gemini API error ${response.statusCode}: ${response.body}');
-        if (response.statusCode == 429) {
-          throw 'You\'re sending messages a bit fast — please wait a '
-              'moment and try again.';
+        try {
+          response = await model.generateContent(contents);
+          break;
+        } on ServerException catch (e) {
+          debugPrint('Gemini server error (attempt ${attempt + 1}): ${e.message}');
+          if (attempt == 2) rethrow;
+          await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
         }
-        throw 'The assistant is unavailable right now (${response.statusCode}). Please try again.';
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final candidates = data['candidates'] as List?;
-      if (candidates == null || candidates.isEmpty) {
-        throw 'The assistant didn\'t return a response. Please try again.';
-      }
-
-      final parts = (candidates.first
-          as Map<String, dynamic>)['content']?['parts'] as List?;
-      final reply = parts
-              ?.map((p) => (p as Map<String, dynamic>)['text'] as String? ?? '')
-              .join()
-              .trim() ??
-          '';
+      final reply = response?.text?.trim() ?? '';
 
       if (reply.isEmpty) {
         throw 'The assistant didn\'t return a response. Please try again.';
@@ -715,6 +680,14 @@ You cannot save, measure, scan, or open anything yourself. Never say "I have sav
       // history sent on the next attempt.
       _history.removeLast();
       if (e is String) rethrow;
+      if (e is QuotaExceeded) {
+        throw 'You\'re sending messages a bit fast — please wait a '
+            'moment and try again.';
+      }
+      if (e is FirebaseAIException) {
+        debugPrint('Gemini error: ${e.message}');
+        throw 'The assistant is unavailable right now. Please try again.';
+      }
       throw 'Could not reach the assistant. Check your connection and try again.';
     }
   }

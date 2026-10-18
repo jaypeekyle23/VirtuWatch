@@ -22,7 +22,7 @@ AI-assisted virtual watch try-on and fit-recommendation app, built for Urbane Ti
 
 - **Flutter** (mobile targets; also builds for web/desktop)
 - **Firebase** — Authentication and Firestore (data is read/written as raw `Map<String, dynamic>`; there's no separate model layer)
-- **Google Gemini** — powers the in-app chat assistant
+- **Google Gemini (via Firebase AI Logic)** — powers the in-app chat assistant
 - **MediaPipe (`hand_landmarker`)** — on-device hand tracking for AR try-on
 - **Cloudinary** — merchant-uploaded watch image hosting
 
@@ -31,15 +31,17 @@ AI-assisted virtual watch try-on and fit-recommendation app, built for Urbane Ti
 ### Prerequisites
 - Flutter SDK (Dart `^3.11.0` per `pubspec.yaml`)
 - A Firebase project with Authentication and Firestore enabled, and `google-services.json` placed under `android/app/`
-- A Gemini API key
+- Firebase AI Logic turned on for your Firebase project, using the Gemini Developer API (no API key goes in this app)
 
 ### Setup
 1. Clone the repo and run `flutter pub get`.
-2. Copy `env.example` to `.env` and fill in `GEMINI_API_KEY`.
-3. Run with the env file loaded, e.g.:
+2. In the Firebase console, open Firebase AI Logic, choose the Gemini Developer API, and finish the setup. The key stays on Google's side.
+3. Run the app:
    ```
-   flutter run --dart-define-from-file=.env
+   flutter run
    ```
+
+App Check is required for the chat assistant. On the first debug run, look in the run logs for the App Check debug token, then add it in the Firebase console under App Check > Apps > Manage debug tokens. Without it, chat requests are rejected. Release builds use Play Integrity, so the app must be registered with App Check before real users get it.
 
 ### Building a release APK
 
@@ -54,9 +56,8 @@ and fill in the passwords, alias, and the path to the `.jks` file you just
 created. `android/key.properties` is gitignored, so it stays local.
 
 ```
-flutter build apk --release --dart-define-from-file=.env
+flutter build apk --release
 ```
-`--dart-define-from-file=.env` is required — without it, the chat assistant builds fine but silently has no API key at runtime.
 
 If `android/key.properties` isn't present yet, the release build falls back to the debug keystore so the command above still works while you're setting things up — just not suitable for real distribution until the keystore is in place.
 
