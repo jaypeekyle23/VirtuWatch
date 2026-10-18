@@ -47,3 +47,6 @@ linux/flutter/generated_plugins.cmake
 macos/Flutter/GeneratedPluginRegistrant.swift
 windows/flutter/generated_plugin_registrant.*
 windows/flutter/generated_plugins.cmake
+
+# Local App Check demo token (never commit)
+app_check.local.json

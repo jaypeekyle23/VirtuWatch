@@ -27,13 +27,23 @@ void main() async {
   runApp(const MyApp());
 }
 
+/// Optional fixed App Check debug token for release builds that are
+/// installed outside Google Play (for example a demo APK). Play Integrity
+/// rejects those installs. Pass it at build time with
+/// --dart-define-from-file=app_check.local.json (kept out of git) and add
+/// the same token in the Firebase console under App Check > Apps >
+/// Manage debug tokens. Revoke it there when the demo is over.
+const String _appCheckDebugToken =
+    String.fromEnvironment('APP_CHECK_DEBUG_TOKEN');
+
 /// The chat assistant (Firebase AI Logic) only accepts requests that carry
 /// an App Check token, so App Check must start right after Firebase does.
 ///
 /// Debug builds use the debug provider. Its token is printed in the run
 /// logs the first time, and must be added in the Firebase console under
 /// App Check > Apps > Manage debug tokens. Release builds use Play
-/// Integrity on Android. Web and desktop are skipped here.
+/// Integrity on Android, unless a fixed demo token is supplied (see
+/// above). Web and desktop are skipped here.
 Future<void> _activateAppCheck() async {
   if (kIsWeb) return;
   final platform = defaultTargetPlatform;
@@ -46,7 +56,9 @@ Future<void> _activateAppCheck() async {
     await FirebaseAppCheck.instance.activate(
       providerAndroid: kDebugMode
           ? const AndroidDebugProvider()
-          : const AndroidPlayIntegrityProvider(),
+          : (_appCheckDebugToken.isNotEmpty
+              ? const AndroidDebugProvider(debugToken: _appCheckDebugToken)
+              : const AndroidPlayIntegrityProvider()),
       providerApple: kDebugMode
           ? const AppleDebugProvider()
           : const AppleDeviceCheckProvider(),

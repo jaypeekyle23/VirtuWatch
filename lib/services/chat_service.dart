@@ -688,6 +688,7 @@ You cannot save, measure, scan, or open anything yourself. Never say "I have sav
         debugPrint('Gemini error: ${e.message}');
         throw 'The assistant is unavailable right now. Please try again.';
       }
+      debugPrint('Chat error: $e');
       throw 'Could not reach the assistant. Check your connection and try again.';
     }
   }
