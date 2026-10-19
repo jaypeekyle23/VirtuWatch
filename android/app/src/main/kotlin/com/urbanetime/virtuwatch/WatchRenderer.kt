@@ -76,6 +76,17 @@ class WatchRenderer(
     private var fitRatio = 1.0                // main thread only
 
     private val wristWidthM = 0.058           // average adult wrist width
+    /** Everything is drawn this much bigger than the measured fit: the plain fit looked ~10 % small on real wrists. */
+    private val sizeBoost = 1.10
+
+    // ---- inspect mode (wrist tracking off) --------------------------------------------------
+    // The watch is shown whole (no wrist occluder), centred on screen, and the person turns and
+    // zooms it with their fingers. All of this runs on the main thread.
+    @Volatile private var inspectMode = false
+    private val inspectQ = doubleArrayOf(0.0, 0.0, 0.0, 1.0)
+    private var inspectScale = INSPECT_DEFAULT_SCALE
+    private var inspectPanX = 0.0
+    private var inspectPanY = 0.0
 
     /**
      * Strap-opening geometry of the watch currently loaded, in that model's own units. It is
@@ -109,8 +120,10 @@ class WatchRenderer(
     )
 
     @Volatile private var target: Target? = null
-    @Volatile private var imgW = 0
-    @Volatile private var imgH = 0
+    // Sensible defaults (portrait 4:3 analysis image, ~68 deg lens) so the renderer can draw before the
+    // tracker has reported anything, e.g. when tracking is switched off right away (inspect mode).
+    @Volatile private var imgW = 480
+    @Volatile private var imgH = 640
     @Volatile private var focalPx = 0.0
 
     // ---- Filament objects ---------------------------------------------------
@@ -160,6 +173,11 @@ class WatchRenderer(
 
     /** Called from the MediaPipe thread with each new tracking result. */
     fun submit(frame: TrackingFrame) {
+        if (inspectMode) return // tracking is off: the watch stays where the person put it
+        if (frame.imgW > 0 && frame.imgH > 0) {
+            imgW = frame.imgW
+            imgH = frame.imgH
+        }
         val pose = frame.pose
         val isLeft = frame.isLeftHand
         if (pose == null || isLeft == null) {
@@ -440,7 +458,8 @@ class WatchRenderer(
         val startedAt = System.nanoTime()
 
         val newAsset: FilamentAsset = try {
-            val bytes = File(path).readBytes()
+            // The strap is made a little bigger than the case (see StrapScaler); the file on disk is untouched.
+            val bytes = StrapScaler.apply(File(path).readBytes(), newFit, STRAP_SCALE)
             val buf = ByteBuffer.allocateDirect(bytes.size)
             buf.put(bytes)
             buf.flip()
@@ -455,6 +474,12 @@ class WatchRenderer(
                 throw t
             }
             asset.releaseSourceData()
+            // The reshaped strap can reach past the bounding box stored in the file; never cull the watch.
+            val rm = eng.renderableManager
+            for (e in asset.renderableEntities) {
+                val inst = rm.getInstance(e)
+                if (inst != 0) rm.setCulling(inst, false)
+            }
             asset
         } catch (e: Throwable) {
             Log.e(tag, "Could not load model $path: ${e.message}")
@@ -515,8 +540,8 @@ class WatchRenderer(
 
             val segs = 48
             val halfLen = 0.42f                          // along the forearm axis (watch is +-0.3 wide)
-            val rx = (f.holeHalfX * 0.985).toFloat()     // a hair inside the strap to avoid z-fighting
-            val ry = (f.holeHalfY * 0.985).toFloat()
+            val rx = (f.holeHalfX * STRAP_SCALE * 0.985).toFloat() // a hair inside the (enlarged) strap to avoid z-fighting
+            val ry = (f.holeHalfY * STRAP_SCALE * 0.985).toFloat()
             val cx = f.holeCx.toFloat()
 
             val verts = FloatArray(segs * 2 * 3)
@@ -585,15 +610,16 @@ class WatchRenderer(
         val v = view ?: return
         val sc = swapChain ?: return
         val cam = camera ?: return
-        if (viewportW == 0 || viewportH == 0 || imgW == 0 || focalPx <= 0.0) return
+        val fpx = effectiveFocalPx()
+        if (viewportW == 0 || viewportH == 0 || imgW == 0 || fpx <= 0.0) return
 
         val dt = if (lastFrameNs == 0L) 0.016 else ((frameTimeNanos - lastFrameNs) / 1e9).coerceIn(0.001, 0.1)
         lastFrameNs = frameTimeNanos
 
         // Projection matching the preview's FILL_CENTER crop of the analysis image.
         val s = max(viewportW.toDouble() / imgW, viewportH.toDouble() / imgH)
-        val a = 2.0 * s * focalPx / viewportW
-        val b = 2.0 * s * focalPx / viewportH
+        val a = 2.0 * s * fpx / viewportW
+        val b = 2.0 * s * fpx / viewportH
         val near = 0.02
         val far = 3.0
         val p = DoubleArray(16)
@@ -613,7 +639,7 @@ class WatchRenderer(
         val ratioTarget = if (autoFit) fitTargetRatio else 1.0
         fitRatio += (ratioTarget - fitRatio) * (1.0 - exp(-dt / fitTauSec))
 
-        updateWatch(target, dt, frameTimeNanos / 1e9)
+        if (inspectMode) updateInspect() else updateWatch(target, dt, frameTimeNanos / 1e9)
 
         val force = frameTimeNanos - lastRenderNs > 1_000_000_000L
         if (!needsRender && !force) return
@@ -697,14 +723,20 @@ class WatchRenderer(
         val sc = scene ?: return
         watchAsset?.let { if (show) sc.addEntities(it.entities) else sc.removeEntities(it.entities) }
         if (occluderEntity != 0) {
-            if (show) sc.addEntity(occluderEntity) else sc.removeEntity(occluderEntity)
+            if (show && !inspectMode) sc.addEntity(occluderEntity) else sc.removeEntity(occluderEntity)
         }
     }
 
     private fun applyTransform() {
         val eng = engine ?: return
         val f = fit
-        val scale = (wristWidthM / f.holeWidth) * userScale * fitRatio * f.scale
+        // Inspect mode: size comes from pinch-zoom, and the model turns about its own middle, not the strap opening's.
+        val scale = if (inspectMode) {
+            (wristWidthM / f.holeWidth) * f.scale * sizeBoost * inspectScale
+        } else {
+            (wristWidthM / f.holeWidth) * userScale * fitRatio * f.scale * sizeBoost
+        }
+        val pivotX = if (inspectMode) 0.0 else f.holeCx
 
         // Rotation from quaternion (x, y, z, w).
         val x = curQ[0]; val y = curQ[1]; val z = curQ[2]; val w = curQ[3]
@@ -713,9 +745,9 @@ class WatchRenderer(
         val r20 = 2 * (x * z - y * w); val r21 = 2 * (y * z + x * w); val r22 = 1 - 2 * (x * x + y * y)
 
         // M = T(position) * R * S(scale) * T(-holeCentre); the hole centre is (holeCx, 0, 0).
-        val tx = curPos[0] - r00 * scale * f.holeCx
-        val ty = curPos[1] - r10 * scale * f.holeCx
-        val tz = curPos[2] - r20 * scale * f.holeCx
+        val tx = curPos[0] - r00 * scale * pivotX
+        val ty = curPos[1] - r10 * scale * pivotX
+        val tz = curPos[2] - r20 * scale * pivotX
 
         val m = floatArrayOf(
             (r00 * scale).toFloat(), (r10 * scale).toFloat(), (r20 * scale).toFloat(), 0f,
@@ -746,8 +778,107 @@ class WatchRenderer(
     }
 
     // ======================================================================
+    // Inspect mode (wrist tracking off). Main thread only.
+    // ======================================================================
+
+    private fun effectiveFocalPx(): Double {
+        val f = focalPx
+        if (f > 0.0) return f
+        val long = max(imgW, imgH).toDouble()
+        return (long / 2.0) / kotlin.math.tan(Math.toRadians(68.0) / 2) // same default the tracker falls back to
+    }
+
+    /** Turns inspect mode on (tracking off) or off (back to following the wrist). */
+    fun setInspectMode(on: Boolean) {
+        if (inspectMode == on) return
+        inspectMode = on
+        if (on) {
+            resetInspectView()
+            // The wrist-shaped occluder would hide the far side of the strap; inspecting shows the whole watch.
+            val sc = scene
+            if (shown && sc != null && occluderEntity != 0) sc.removeEntity(occluderEntity)
+        } else {
+            // Back to live tracking: hidden until the hand is seen again, then it snaps onto the wrist.
+            target = null
+            setShown(false)
+        }
+        lastM.fill(Float.MAX_VALUE)
+        needsRender = true
+    }
+
+    /** Centres the watch, faces it to the camera with a slight tilt, and resets the zoom. */
+    fun resetInspectView() {
+        // Face toward the camera, 12 o'clock up, crown to the right.
+        val base = quatFromColumns(
+            doubleArrayOf(0.0, 0.0, 1.0),
+            doubleArrayOf(0.0, 1.0, 0.0),
+            doubleArrayOf(-1.0, 0.0, 0.0),
+        )
+        val tilt = qMul(qAxisAngle(0.0, 1.0, 0.0, 0.45), qAxisAngle(1.0, 0.0, 0.0, -0.25))
+        val q = qMul(tilt, base)
+        System.arraycopy(q, 0, inspectQ, 0, 4)
+        inspectScale = INSPECT_DEFAULT_SCALE
+        inspectPanX = 0.0
+        inspectPanY = 0.0
+        lastM.fill(Float.MAX_VALUE)
+        needsRender = true
+    }
+
+    /** One-finger drag: turn the watch like a trackball. */
+    fun inspectRotateBy(dxPx: Float, dyPx: Float) {
+        if (!inspectMode) return
+        val k = 0.01
+        val dq = qMul(qAxisAngle(0.0, 1.0, 0.0, dxPx * k), qAxisAngle(1.0, 0.0, 0.0, dyPx * k))
+        val q = qMul(dq, inspectQ)
+        val len = sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
+        if (len < 1e-9) return
+        for (i in 0 until 4) inspectQ[i] = q[i] / len
+        needsRender = true
+    }
+
+    /** Pinch: multiply the zoom by [factor]. */
+    fun inspectZoomBy(factor: Double) {
+        if (!inspectMode || !factor.isFinite() || factor <= 0.0) return
+        inspectScale = (inspectScale * factor).coerceIn(INSPECT_MIN_SCALE, INSPECT_MAX_SCALE)
+        needsRender = true
+    }
+
+    /** Two-finger drag: slide the watch across the screen (so a zoomed-in detail can be brought to the middle). */
+    fun inspectPanBy(dxPx: Float, dyPx: Float) {
+        if (!inspectMode || viewportW == 0 || viewportH == 0) return
+        val s = max(viewportW.toDouble() / imgW, viewportH.toDouble() / imgH)
+        val metresPerPx = INSPECT_DEPTH_M / (s * effectiveFocalPx())
+        inspectPanX = (inspectPanX + dxPx * metresPerPx).coerceIn(-0.3, 0.3)
+        inspectPanY = (inspectPanY - dyPx * metresPerPx).coerceIn(-0.3, 0.3) // screen y grows downward, GL y upward
+        needsRender = true
+    }
+
+    private fun updateInspect() {
+        if (watchAsset == null) return
+        if (!shown) setShown(true)
+        curPos[0] = inspectPanX
+        curPos[1] = inspectPanY
+        curPos[2] = -INSPECT_DEPTH_M
+        System.arraycopy(inspectQ, 0, curQ, 0, 4)
+        applyTransform()
+    }
+
+    // ======================================================================
     // Quaternion helpers
     // ======================================================================
+
+    /** a * b for quaternions (x, y, z, w). */
+    private fun qMul(a: DoubleArray, b: DoubleArray): DoubleArray = doubleArrayOf(
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    )
+
+    private fun qAxisAngle(ax: Double, ay: Double, az: Double, angle: Double): DoubleArray {
+        val s = sin(angle / 2)
+        return doubleArrayOf(ax * s, ay * s, az * s, cos(angle / 2))
+    }
 
     /** Quaternion (x,y,z,w) of the rotation whose columns are c0, c1, c2. */
     private fun quatFromColumns(c0: DoubleArray, c1: DoubleArray, c2: DoubleArray): DoubleArray {
@@ -786,6 +917,15 @@ class WatchRenderer(
         if (len > 1e-9) for (i in 0 until 4) cur[i] /= len
     }
 }
+
+/** The strap is drawn this much bigger than the case (on top of the overall size boost): 1.10 x 1.09 ~ 1.20. */
+internal const val STRAP_SCALE = 1.09
+
+// Inspect mode: how far from the camera the watch floats, and the pinch-zoom range (x default size).
+private const val INSPECT_DEPTH_M = 0.5
+private const val INSPECT_DEFAULT_SCALE = 2.2
+private const val INSPECT_MIN_SCALE = 0.5
+private const val INSPECT_MAX_SCALE = 8.0
 
 /**
  * Where one watch model's strap opening is, in that model's own units: the centre along X, and the

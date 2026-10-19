@@ -67,6 +67,8 @@ class HandTracker(
     private val context: Context,
     private val owner: LifecycleOwner,
     private val previewView: PreviewView,
+    /** Guidance for the person (dark room, hand cut off, too close). Called from the tracker threads. */
+    private val onHint: (TryOnHint) -> Unit,
     private val onFrame: (TrackingFrame) -> Unit,
 ) {
     private val tag = "TryOnTracker"
@@ -83,6 +85,33 @@ class HandTracker(
     private var boundUseCases: Array<UseCase> = emptyArray()
 
     @Volatile var smoothingEnabled = true
+
+    /** True while wrist tracking is switched off: frames are dropped, so the camera preview costs the CPU/GPU nothing extra. */
+    @Volatile var paused = false
+        private set
+    private val hints = HintMonitor(onHint)
+    private var statFrame = 0
+
+    /** Switch tracking off/on. Switching on starts from a clean slate so no stale pose is smoothed in. */
+    fun setPaused(value: Boolean) {
+        if (paused == value) return
+        paused = value
+        try {
+            analysisExecutor.execute {
+                filter.reset()
+                armFilter.reset()
+                shiftXFilter.reset()
+                shiftYFilter.reset()
+                cachedSkin = null
+                armTick = 0
+                stableLeft = null
+                flipCount = 0
+                hints.reset()
+            }
+        } catch (e: Throwable) {
+            Log.w(tag, "could not queue pause reset: ${e.message}")
+        }
+    }
 
     /** Flip the left/right decision if MediaPipe's label turns out to be the other way round on your device. */
     @Volatile var swapHand = false
@@ -317,7 +346,7 @@ class HandTracker(
 
     private fun analyze(proxy: ImageProxy) {
         try {
-            if (stopped) return
+            if (stopped || paused) return
             val t0 = SystemClock.elapsedRealtimeNanos()
             val rotation = proxy.imageInfo.rotationDegrees
             val rw = proxy.width
@@ -359,6 +388,8 @@ class HandTracker(
             uprightW = upW
             uprightH = upH
             if (focalPx == 0.0) focalPx = computeFocalPx(upW, upH)
+            // Brightness and skin share, a few times a second, for the guidance messages.
+            if (statFrame++ % 6 == 0) hints.onFrameStats(FrameSampler.sample(dst))
 
             var ts = SystemClock.elapsedRealtime()
             if (ts <= lastTs) ts = lastTs + 1
@@ -387,6 +418,7 @@ class HandTracker(
     }
 
     private fun processResult(result: HandLandmarkerResult) {
+        if (paused) return
         val now = SystemClock.elapsedRealtime()
         latencyMs = now - result.timestampMs()
         windowCount++
@@ -529,6 +561,7 @@ class HandTracker(
         val hud = "delegate=$delegateName  landmarks/s=$resultFps  latency=${latencyMs}ms  prep=${prepMs}ms arm=${armMs}ms\n" +
             "hand=$side(label $rawLabel)  depth=$depth  smoothing=${if (smoothingEnabled) "on" else "off"}  f=%.0fpx (${focalSource})".format(focalPx) + "\n$armInfo  $fitInfo"
 
+        hints.onResult(lm)
         onFrame(TrackingFrame(w, h, false, lm, raw, smooth, hud, stableLeft, fitW, fitSx, fitSy))
     }
 }

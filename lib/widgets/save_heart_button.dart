@@ -15,10 +15,15 @@ class SaveHeartButton extends StatefulWidget {
   final bool isSaved;
   final VoidCallback onPressed;
 
+  /// Draws the heart as the small round dark button used over the camera
+  /// picture (white outline heart, red when saved) instead of an app-bar icon.
+  final bool overCamera;
+
   const SaveHeartButton({
     super.key,
     required this.isSaved,
     required this.onPressed,
+    this.overCamera = false,
   });
 
   @override
@@ -88,17 +93,37 @@ class _SaveHeartButtonState extends State<SaveHeartButton>
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: _handleTap,
-      icon: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) => Transform.scale(
-          scale: (_saving ? _pop : _shrink).evaluate(_controller),
-          child: child,
-        ),
-        child: Icon(
-          widget.isSaved ? Icons.favorite : Icons.favorite_border,
-          color: widget.isSaved ? Colors.redAccent : null,
+    final icon = AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => Transform.scale(
+        scale: (_saving ? _pop : _shrink).evaluate(_controller),
+        child: child,
+      ),
+      child: Icon(
+        widget.isSaved ? Icons.favorite : Icons.favorite_border,
+        size: widget.overCamera ? 20 : null,
+        color: widget.isSaved
+            ? Colors.redAccent
+            : (widget.overCamera ? Colors.white : null),
+      ),
+    );
+
+    if (!widget.overCamera) {
+      return IconButton(onPressed: _handleTap, icon: icon);
+    }
+    return Tooltip(
+      message: widget.isSaved ? 'Remove from saved' : 'Save this watch',
+      child: InkResponse(
+        onTap: _handleTap,
+        radius: 24,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.4),
+            shape: BoxShape.circle,
+          ),
+          child: Center(child: icon),
         ),
       ),
     );

@@ -12,6 +12,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
@@ -36,7 +39,14 @@ class TryOnPlatformView(
     messenger: BinaryMessenger,
     viewId: Int,
 ) : PlatformView {
-    private val root = FrameLayout(context)
+    // While wrist tracking is off ("inspect mode") this view takes over touches: one finger turns the
+    // watch, two fingers pinch-zoom and slide it, a double tap resets the view.
+    @Volatile private var inspecting = false
+    private val root = object : FrameLayout(context) {
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = inspecting
+        override fun onTouchEvent(event: MotionEvent): Boolean =
+            if (inspecting) handleInspectTouch(event) else super.onTouchEvent(event)
+    }
     private val previewView = PreviewView(context).apply {
         // COMPATIBLE = TextureView: plays nicely inside Flutter platform views.
         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
@@ -46,7 +56,7 @@ class TryOnPlatformView(
     private val watchView = TextureView(context)
     private val watch = WatchRenderer(context, watchView)
     private val overlay = TryOnOverlayView(context)
-    private val tracker = HandTracker(context, owner, previewView) {
+    private val tracker = HandTracker(context, owner, previewView, onHint = { sendHint(it) }) {
         // Called on MediaPipe's thread; an exception escaping here would crash the app.
         try {
             watch.submit(it)
@@ -59,6 +69,85 @@ class TryOnPlatformView(
     private val ctx = context
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var disposed = false
+
+    private val scaleDetector = ScaleGestureDetector(
+        context,
+        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                watch.inspectZoomBy(detector.scaleFactor.toDouble())
+                return true
+            }
+        },
+    )
+    private val tapDetector = GestureDetector(
+        context,
+        object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                watch.resetInspectView()
+                return true
+            }
+        },
+    )
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+
+    /** Centre of all fingers on the screen, optionally ignoring the one that is just being lifted. */
+    private fun centroid(ev: MotionEvent, skip: Int = -1): FloatArray {
+        var sx = 0f
+        var sy = 0f
+        var n = 0
+        for (i in 0 until ev.pointerCount) {
+            if (i == skip) continue
+            sx += ev.getX(i)
+            sy += ev.getY(i)
+            n++
+        }
+        return if (n == 0) floatArrayOf(ev.x, ev.y) else floatArrayOf(sx / n, sy / n)
+    }
+
+    private fun handleInspectTouch(ev: MotionEvent): Boolean {
+        scaleDetector.onTouchEvent(ev)
+        tapDetector.onTouchEvent(ev)
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                val c = centroid(ev)
+                lastTouchX = c[0]; lastTouchY = c[1]
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                // A finger lifted: continue from the centre of the ones that remain, without a jump.
+                val c = centroid(ev, skip = ev.actionIndex)
+                lastTouchX = c[0]; lastTouchY = c[1]
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val c = centroid(ev)
+                val dx = c[0] - lastTouchX
+                val dy = c[1] - lastTouchY
+                lastTouchX = c[0]; lastTouchY = c[1]
+                if (ev.pointerCount == 1) watch.inspectRotateBy(dx, dy) else watch.inspectPanBy(dx, dy)
+            }
+        }
+        return true
+    }
+
+    /** Tells Flutter which guidance message to show (null-safe after dispose). */
+    private fun sendHint(hint: TryOnHint) {
+        mainHandler.post {
+            if (disposed) return@post
+            try {
+                channel.invokeMethod("hint", hint.name)
+            } catch (e: Throwable) {
+                Log.w("TryOnPlatformView", "hint not delivered: ${e.message}")
+            }
+        }
+    }
+
+    /** Wrist tracking on/off. Off = hand tracking paused, watch shown whole and turned by touch. */
+    private fun setTracking(on: Boolean) {
+        inspecting = !on
+        tracker.setPaused(!on)
+        watch.setInspectMode(!on)
+    }
 
     init {
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
@@ -121,6 +210,10 @@ class TryOnPlatformView(
                             result.error("load_failed", e.message, null)
                         }
                     }
+                }
+                "setTracking" -> {
+                    setTracking(call.arguments as? Boolean ?: true)
+                    result.success(null)
                 }
                 "swapHand" -> {
                     tracker.swapHand = !tracker.swapHand
@@ -232,6 +325,7 @@ class TryOnPlatformView(
     }
 
     override fun dispose() {
+        disposed = true
         channel.setMethodCallHandler(null)
         try { tracker.stop() } catch (e: Throwable) { Log.e("TryOnPlatformView", "tracker stop failed: ${e.message}", e) }
         try { watch.stop() } catch (e: Throwable) { Log.e("TryOnPlatformView", "renderer stop failed: ${e.message}", e) }

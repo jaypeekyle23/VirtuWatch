@@ -5,12 +5,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../services/ar_preferences_service.dart';
+import '../../services/user_service.dart';
 import '../../services/watch_model_cache.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/ar_readiness.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
+import '../../widgets/save_heart_button.dart';
 import '../../widgets/tryon_camera_view.dart';
 import '../../widgets/tryon_photo_preview.dart';
 import 'watch_detail_screen.dart';
@@ -44,6 +47,7 @@ class ArTryOnScreen extends StatefulWidget {
 
 class _ArTryOnScreenState extends State<ArTryOnScreen> {
   final _watchService = WatchService();
+  final _userService = UserService();
   final _tryOn = TryOnController();
   // App-wide cache: a download keeps going, and is kept, after this screen
   // is closed, so leaving and coming back never restarts it from zero.
@@ -53,9 +57,23 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   // spinner each time the slider moved or a watch was selected.
   late final _watchesStream = _watchService.allListedWatches();
 
+  // The person's own profile, for the saved-watches heart. Also created once.
+  late final _userStream = _userService.currentUserStream();
+
+  // First-time "how to hold your hand" tips.
+  bool _showTips = false;
+
   String? _selectedWatchId;
   Map<String, dynamic>? _selectedWatchData;
   double _userScaleAdjust = 0;
+
+  // Wrist tracking. Off = the watch is shown whole and can be turned and
+  // zoomed by hand, with no jitter from the tracker.
+  bool _trackingOn = true;
+
+  // Lets the search pick scroll the carousel to the chosen watch.
+  final _carouselController = ScrollController();
+  static const _carouselItemExtent = 110.0 + 10.0; // card width + separator
 
   // Photo capture.
   bool _capturing = false;
@@ -85,6 +103,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     _selectedWatchId = widget.initialWatchId;
     _selectedWatchData = widget.initialWatchData;
     _tryOn.phase.addListener(_onViewPhase);
+    _loadPrefs();
     // A watch opened from its detail page is already selected, so nothing else
     // would trigger its first load. (If it isn't AR-ready this is a no-op and
     // _ensureSelection picks the first valid watch instead.)
@@ -93,16 +112,50 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     });
   }
 
+  /// Restores the size correction this person chose last time and decides
+  /// whether to show the first-time tips.
+  Future<void> _loadPrefs() async {
+    final adjust = await ArPreferences.loadSizeAdjust();
+    final seenTips = await ArPreferences.hasSeenTips();
+    if (!mounted) return;
+    setState(() {
+      _userScaleAdjust = adjust;
+      _showTips = !seenTips;
+    });
+    // The controller remembers this and applies it when the camera view is up.
+    if (adjust != 0) _tryOn.setWatchScale(1 + adjust / 100);
+  }
+
+  void _dismissTips() {
+    setState(() => _showTips = false);
+    ArPreferences.markTipsSeen();
+  }
+
+  /// Saves or un-saves the watch on screen, same as the heart on its detail page.
+  Future<void> _toggleSaved(bool isSaved) async {
+    final id = _selectedWatchId;
+    if (id == null) return;
+    try {
+      await _userService.toggleSavedWatch(id);
+      _snack(isSaved ? 'Removed from saved watches' : 'Saved to your favorites');
+    } catch (e) {
+      _snack(e.toString());
+    }
+  }
+
   @override
   void dispose() {
     _tryOn.phase.removeListener(_onViewPhase);
     _tryOn.dispose();
+    _carouselController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // The camera view must never be squeezed by the keyboard (search opens it).
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: Text('AR Try-On', style: AppTheme.serif(size: 28)),
         centerTitle: true,
@@ -311,6 +364,121 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   }
 
   void _restartCameraView() => setState(() => _cameraKey = UniqueKey());
+
+  void _toggleTracking() {
+    HapticFeedback.selectionClick();
+    setState(() => _trackingOn = !_trackingOn);
+    _tryOn.setTrackingEnabled(_trackingOn);
+  }
+
+  /// Search by name, brand or style in a sheet, so the carousel doesn't have
+  /// to be scrolled sideways to find a watch.
+  Future<void> _openSearch() async {
+    final picked = await showModalBottomSheet<
+        QueryDocumentSnapshot<Map<String, dynamic>>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _WatchSearchSheet(
+        docs: _arDocs,
+        selectedId: _selectedWatchId,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    _selectWatch(picked.id, picked.data());
+    _scrollCarouselTo(picked.id);
+  }
+
+  void _scrollCarouselTo(String id) {
+    final i = _arDocs.indexWhere((d) => d.id == id);
+    if (i < 0 || !_carouselController.hasClients) return;
+    final target = (i * _carouselItemExtent)
+        .clamp(0.0, _carouselController.position.maxScrollExtent);
+    _carouselController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  /// A small dark pill with an icon, used for status and guidance.
+  Widget _pill({required IconData icon, required String text}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(text,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 12, height: 1.3)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Plain-language guidance under the status pill: what to change so the
+  /// watch stays steady. While tracking is off it explains the touch controls.
+  Widget _guidance() {
+    if (_tryOn.phase.value != TryOnViewPhase.ready) {
+      return const SizedBox.shrink();
+    }
+    if (!_trackingOn) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: _pill(
+          icon: Icons.touch_app_outlined,
+          text: 'Tracking is off. Drag to turn the watch, pinch to zoom, '
+              'double-tap to reset.',
+        ),
+      );
+    }
+    return ValueListenableBuilder<TryOnHint>(
+      valueListenable: _tryOn.hint,
+      builder: (context, hint, _) {
+        final (IconData, String)? content = switch (hint) {
+          TryOnHint.none => null,
+          TryOnHint.lowLight => (
+              Icons.light_mode_outlined,
+              "It's a bit dark here. Move somewhere brighter so the watch "
+                  'stays steady.'
+            ),
+          TryOnHint.handNotVisible => (
+              Icons.back_hand_outlined,
+              'Keep your whole hand in view, fingertips included, so the '
+                  'watch stays steady.'
+            ),
+          TryOnHint.tooClose => (
+              Icons.zoom_out,
+              "You're too close. Move your phone back until your whole hand "
+                  'is in view.'
+            ),
+        };
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: content == null
+              ? const SizedBox.shrink(key: ValueKey('no-hint'))
+              : Padding(
+                  key: ValueKey(hint),
+                  padding: const EdgeInsets.only(top: 8),
+                  child: _pill(icon: content.$1, text: content.$2),
+                ),
+        );
+      },
+    );
+  }
 
   /// The native view is up and the selected watch is actually on screen, so a
   /// photo would show the watch.
@@ -530,9 +698,12 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
           left: 16,
           right: 72, // clear of the camera buttons
           top: 16,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _statusPill(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _statusPill(),
+              _guidance(),
+            ],
           ),
         ),
         Positioned(
@@ -540,12 +711,53 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
           top: 16,
           child: Column(
             children: [
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: _userStream,
+                builder: (context, snapshot) {
+                  final saved =
+                      (snapshot.data?.data()?['savedWatches'] as List?)
+                              ?.cast<String>() ??
+                          const <String>[];
+                  final isSaved =
+                      _selectedWatchId != null && saved.contains(_selectedWatchId);
+                  return SaveHeartButton(
+                    overCamera: true,
+                    isSaved: isSaved,
+                    onPressed: () => _toggleSaved(isSaved),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
               // MediaPipe's left/right label can be inverted; this flips the
               // wrist the watch is placed on if it lands on the wrong side.
+              // Meaningless while tracking is off, so it hides then.
+              if (_trackingOn) ...[
+                _floatingIcon(
+                  Icons.swap_horiz,
+                  tooltip: 'Swap wrist',
+                  onTap: _tryOn.swapHand,
+                ),
+                const SizedBox(height: 12),
+              ],
+              // Lit up while tracking is OFF, so it's clear the watch is
+              // in inspect mode and that this button turns tracking back on.
               _floatingIcon(
-                Icons.swap_horiz,
-                tooltip: 'Swap wrist',
-                onTap: _tryOn.swapHand,
+                _trackingOn ? Icons.sensors : Icons.sensors_off,
+                tooltip: _trackingOn ? 'Turn off tracking' : 'Turn on tracking',
+                highlighted: !_trackingOn,
+                onTap: () {
+                  if (_tryOn.phase.value == TryOnViewPhase.ready) {
+                    _toggleTracking();
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              _floatingIcon(
+                Icons.search,
+                tooltip: 'Search watches',
+                onTap: () {
+                  if (_arDocs.isNotEmpty) _openSearch();
+                },
               ),
             ],
           ),
@@ -571,6 +783,8 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
               },
             ),
           ),
+        if (_showTips)
+          Positioned.fill(child: _FirstTimeTips(onDismiss: _dismissTips)),
         Positioned.fill(
           child: IgnorePointer(
             child: AnimatedOpacity(
@@ -598,8 +812,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
               const Spacer(),
               Text(
                 '${_userScaleAdjust >= 0 ? '+' : ''}${_userScaleAdjust.toInt()}%',
-                style: TextStyle(
-                    color: AppTheme.textPrimary, fontSize: 13),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
               ),
             ],
           ),
@@ -613,16 +826,22 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
               value: _userScaleAdjust,
               min: -20,
               max: 20,
-              onChanged: (v) {
-                setState(() => _userScaleAdjust = v);
-                _tryOn.setWatchScale(1 + v / 100);
-              },
+              // While tracking is off, pinching the watch sets its size instead.
+              onChanged: !_trackingOn
+                  ? null
+                  : (v) {
+                      setState(() => _userScaleAdjust = v);
+                      _tryOn.setWatchScale(1 + v / 100);
+                    },
+              // Remembered for next time (saved once, when the finger lifts).
+              onChangeEnd: (v) => ArPreferences.saveSizeAdjust(v),
             ),
           ),
           const SizedBox(height: 8),
           SizedBox(
             height: 130,
             child: ListView.separated(
+              controller: _carouselController,
               scrollDirection: Axis.horizontal,
               itemCount: docs.length,
               separatorBuilder: (context, index) => const SizedBox(width: 10),
@@ -659,7 +878,9 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   }
 
   Widget _floatingIcon(IconData icon,
-      {required VoidCallback onTap, required String tooltip}) {
+      {required VoidCallback onTap,
+      required String tooltip,
+      bool highlighted = false}) {
     return Tooltip(
       message: tooltip,
       child: InkResponse(
@@ -669,10 +890,13 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.4),
+            color: highlighted
+                ? Colors.white.withValues(alpha: 0.9)
+                : Colors.black.withValues(alpha: 0.4),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: Colors.white, size: 20),
+          child: Icon(icon,
+              color: highlighted ? Colors.black : Colors.white, size: 20),
         ),
       ),
     );
@@ -699,6 +923,220 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
             child: const Text('Got it'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One-time card over the camera explaining how to hold the hand, which is
+/// what keeps the watch steady. Shown once per account.
+class _FirstTimeTips extends StatelessWidget {
+  final VoidCallback onDismiss;
+
+  const _FirstTimeTips({required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tip(IconData icon, String text) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 20, color: AppTheme.textPrimary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: 0.6),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 28),
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 12),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('For the best fit', style: AppTheme.serif(size: 24)),
+              const SizedBox(height: 16),
+              tip(Icons.straighten,
+                  "Hold your hand about an arm's length from the camera."),
+              tip(Icons.back_hand_outlined,
+                  'Face the back of your hand toward the camera.'),
+              tip(Icons.light_mode_outlined,
+                  'Keep your whole hand in view, in good light.'),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: onDismiss,
+                  child: const Text('Got it'),
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet that finds an AR watch by name, brand or style. Pops with the
+/// chosen watch's document.
+class _WatchSearchSheet extends StatefulWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final String? selectedId;
+
+  const _WatchSearchSheet({required this.docs, required this.selectedId});
+
+  @override
+  State<_WatchSearchSheet> createState() => _WatchSearchSheetState();
+}
+
+class _WatchSearchSheetState extends State<_WatchSearchSheet> {
+  final _controller = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool _matches(Map<String, dynamic> data) {
+    if (_query.isEmpty) return true;
+    bool has(String key) =>
+        (data[key] as String? ?? '').toLowerCase().contains(_query);
+    return has('name') || has('brand') || has('styleCategory');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final results = [
+      for (final d in widget.docs)
+        if (_matches(d.data())) d,
+    ];
+    return FractionallySizedBox(
+      heightFactor: 0.8,
+      child: Padding(
+        // Lift the sheet above the keyboard.
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                style: const TextStyle(fontSize: 15),
+                decoration: luxeFieldDecoration(
+                  hint: 'Search by name, brand, or style',
+                  prefixIcon: Icon(Icons.search,
+                      size: 20, color: AppTheme.textSecondary),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          color: AppTheme.textSecondary,
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            _controller.clear();
+                            setState(() => _query = '');
+                          },
+                        ),
+                ),
+                onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              ),
+            ),
+            Expanded(
+              child: results.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No AR watches match your search.',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 13),
+                      ),
+                    )
+                  : ListView.builder(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: results.length,
+                      itemBuilder: (context, i) {
+                        final doc = results[i];
+                        final data = doc.data();
+                        final imageUrl = data['imageUrl'] as String? ?? '';
+                        final fallback = Icon(Icons.watch,
+                            color: AppTheme.textSecondary, size: 24);
+                        return ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 20),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: SizedBox(
+                              width: 52,
+                              height: 52,
+                              child: ColoredBox(
+                                color: AppTheme.background,
+                                child: imageUrl.isEmpty
+                                    ? Center(child: fallback)
+                                    : NetworkPhoto(
+                                        url: imageUrl,
+                                        errorWidget: Center(child: fallback)),
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            data['name'] as String? ?? 'Watch',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: Text(
+                            (data['brand'] as String? ?? '').toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 10,
+                                letterSpacing: 1.2),
+                          ),
+                          trailing: doc.id == widget.selectedId
+                              ? Icon(Icons.check,
+                                  size: 20, color: AppTheme.textPrimary)
+                              : null,
+                          onTap: () => Navigator.of(context).pop(doc),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

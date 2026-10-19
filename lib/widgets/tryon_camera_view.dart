@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -27,6 +28,22 @@ enum TryOnViewPhase {
 
   /// Not an Android device, so there is no native view at all.
   unsupported,
+}
+
+/// Something the person can do to keep the watch steady. The native side works
+/// these out from the camera picture and the screen shows one at a time.
+enum TryOnHint {
+  /// Everything is fine.
+  none,
+
+  /// The room is too dark for the camera to follow the hand reliably.
+  lowLight,
+
+  /// Part of the hand is outside the picture (or it hasn't been seen for a while).
+  handNotVisible,
+
+  /// The camera is so close that the hand or wrist fills the picture.
+  tooClose,
 }
 
 /// What happened to a [TryOnController.loadModel] request.
@@ -104,7 +121,36 @@ class TryOnController {
   MethodChannel? _channel;
   double _scale = 1.0;
   bool _disposed = false;
+  bool _trackingEnabled = true;
   Timer? _startTimer;
+
+  /// The guidance message to show right now ([TryOnHint.none] = nothing).
+  /// Always none while wrist tracking is switched off.
+  final ValueNotifier<TryOnHint> hint = ValueNotifier(TryOnHint.none);
+
+  /// False while wrist tracking is off and the watch can be inspected freely.
+  bool get trackingEnabled => _trackingEnabled;
+
+  void _setHint(TryOnHint next) {
+    // Same reason as _setPhase: never notify in the middle of a build or a dispose.
+    scheduleMicrotask(() {
+      if (_disposed) return;
+      if (!_trackingEnabled && next != TryOnHint.none) return;
+      hint.value = next;
+    });
+  }
+
+  Future<dynamic> _onNativeCall(MethodCall call) async {
+    if (call.method == 'hint') {
+      _setHint(switch (call.arguments) {
+        'LOW_LIGHT' => TryOnHint.lowLight,
+        'HAND_NOT_VISIBLE' => TryOnHint.handNotVisible,
+        'TOO_CLOSE' => TryOnHint.tooClose,
+        _ => TryOnHint.none,
+      });
+    }
+    return null;
+  }
 
   /// Start-up state of the native view. Listeners are never notified in the
   /// middle of a build, so it is safe to call setState from one.
@@ -142,13 +188,18 @@ class TryOnController {
   void _attach(MethodChannel channel) {
     _startTimer?.cancel();
     _channel = channel;
+    channel.setMethodCallHandler(_onNativeCall);
     if (_scale != 1.0) _invoke<void>('setWatchScale', _scale);
+    // A restarted camera view must come back in the mode the person chose.
+    if (!_trackingEnabled) _invoke<void>('setTracking', false);
     _setPhase(TryOnViewPhase.ready);
   }
 
   void _detach() {
     _startTimer?.cancel();
+    _channel?.setMethodCallHandler(null);
     _channel = null;
+    _setHint(TryOnHint.none);
   }
 
   /// Call once, when the owning screen is disposed.
@@ -156,6 +207,7 @@ class TryOnController {
     _disposed = true;
     _startTimer?.cancel();
     phase.dispose();
+    hint.dispose();
   }
 
   Future<T?> _invoke<T>(String method, [Object? args]) async {
@@ -169,6 +221,16 @@ class TryOnController {
       // View was torn down between the call and its delivery.
       return null;
     }
+  }
+
+  /// Wrist tracking on/off. Off: hand tracking pauses (so nothing jitters), the
+  /// watch is shown whole in the middle of the screen, and the person turns it
+  /// with one finger, pinch-zooms and slides it with two, and double-taps to
+  /// reset. On: the watch goes back onto the wrist.
+  Future<void> setTrackingEnabled(bool enabled) {
+    _trackingEnabled = enabled;
+    if (!enabled) _setHint(TryOnHint.none);
+    return _invoke<void>('setTracking', enabled);
   }
 
   /// Multiplier on the watch size. 1.0 = true-to-wrist size.
@@ -338,6 +400,10 @@ class _TryOnCameraViewState extends State<TryOnCameraView> {
     return AndroidView(
       viewType: 'tryon/camera_view',
       creationParamsCodec: const StandardMessageCodec(),
+      // The native view handles touches itself while the watch is being inspected.
+      gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+        Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+      },
       onPlatformViewCreated: (id) =>
           widget.controller._attach(MethodChannel('tryon/camera_view_$id')),
     );
