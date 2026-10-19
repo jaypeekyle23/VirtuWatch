@@ -120,6 +120,8 @@ class WatchRenderer(
     )
 
     @Volatile private var target: Target? = null
+    /** When the hand was lost (System.nanoTime base, seconds); NaN while it is being tracked. */
+    @Volatile private var lostSinceSec = Double.NaN
     // Sensible defaults (portrait 4:3 analysis image, ~68 deg lens) so the renderer can draw before the
     // tracker has reported anything, e.g. when tracking is switched off right away (inspect mode).
     @Volatile private var imgW = 480
@@ -181,9 +183,13 @@ class WatchRenderer(
         val pose = frame.pose
         val isLeft = frame.isLeftHand
         if (pose == null || isLeft == null) {
-            target = null
+            // Don't drop the watch on one missed frame (motion blur, a turning wrist, a half-hidden
+            // hand). Keep the last pose and note when the hand was lost; updateWatch() holds the
+            // watch still for a moment and only hides it if the hand stays gone.
+            if (lostSinceSec.isNaN()) lostSinceSec = System.nanoTime() / 1e9
             return
         }
+        lostSinceSec = Double.NaN
         imgW = pose.imgW
         imgH = pose.imgH
         focalPx = pose.focalPx
@@ -657,9 +663,19 @@ class WatchRenderer(
             return
         }
 
+        // Hand lost: hold the watch where it was for a short moment, then hide it. Most losses last
+        // a frame or two, so the watch never visibly disappears; a real loss still clears it.
+        val lostAt = lostSinceSec
+        val holding = !lostAt.isNaN()
+        if (holding && nowSec - lostAt > HOLD_LOST_SEC) {
+            setShown(false)
+            return
+        }
+
         // Predict where the wrist is NOW: the measurement's age plus the lead. Extrapolation fades in
         // only above a small speed, otherwise measurement jitter would be amplified while the hand is still.
-        val horizon = ((nowSec - t.tArrSec) + leadSec).coerceIn(0.0, 0.25)
+        // While holding there is no new measurement, so nothing is extrapolated (the watch stays put).
+        val horizon = if (holding) 0.0 else ((nowSec - t.tArrSec) + leadSec).coerceIn(0.0, 0.25)
         val speed = sqrt(t.vel[0] * t.vel[0] + t.vel[1] * t.vel[1] + t.vel[2] * t.vel[2])
         val fv = smoothstep(0.06, 0.20, speed) // m/s
         val predPos = DoubleArray(3) { t.posGl[it] + t.vel[it] * horizon * fv }
@@ -800,6 +816,7 @@ class WatchRenderer(
         } else {
             // Back to live tracking: hidden until the hand is seen again, then it snaps onto the wrist.
             target = null
+            lostSinceSec = Double.NaN
             setShown(false)
         }
         lastM.fill(Float.MAX_VALUE)
@@ -920,6 +937,9 @@ class WatchRenderer(
 
 /** The strap is drawn this much bigger than the case (on top of the overall size boost): 1.10 x 1.09 ~ 1.20. */
 internal const val STRAP_SCALE = 1.09
+
+/** How long the watch stays put after the hand is lost before it is hidden. Tune on a real phone: ~0.3-0.6 s. */
+private const val HOLD_LOST_SEC = 0.4
 
 // Inspect mode: how far from the camera the watch floats, and the pinch-zoom range (x default size).
 private const val INSPECT_DEPTH_M = 0.5

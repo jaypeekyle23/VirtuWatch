@@ -172,7 +172,7 @@ class TryOnPlatformView(
                     result.success(null)
                 }
                 "setForearmOffset" -> {
-                    watch.forearmOffsetM = (call.arguments as? Number)?.toDouble() ?: 0.03
+                    watch.forearmOffsetM = (call.arguments as? Number)?.toDouble() ?: 0.017
                     result.success(null)
                 }
                 "setDebug" -> {

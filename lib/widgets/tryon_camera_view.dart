@@ -118,8 +118,13 @@ class TryOnController {
   static const _permissions = MethodChannel('tryon/permissions');
   static const _photos = MethodChannel('tryon/photos');
 
+  /// Where the watch sits on the forearm by default, in metres from the wrist
+  /// landmark. Matches the renderer's own default.
+  static const defaultForearmOffsetM = 0.017;
+
   MethodChannel? _channel;
   double _scale = 1.0;
+  double _offsetM = defaultForearmOffsetM;
   bool _disposed = false;
   bool _trackingEnabled = true;
   Timer? _startTimer;
@@ -190,6 +195,9 @@ class TryOnController {
     _channel = channel;
     channel.setMethodCallHandler(_onNativeCall);
     if (_scale != 1.0) _invoke<void>('setWatchScale', _scale);
+    if (_offsetM != defaultForearmOffsetM) {
+      _invoke<void>('setForearmOffset', _offsetM);
+    }
     // A restarted camera view must come back in the mode the person chose.
     if (!_trackingEnabled) _invoke<void>('setTracking', false);
     _setPhase(TryOnViewPhase.ready);
@@ -237,6 +245,13 @@ class TryOnController {
   Future<void> setWatchScale(double scale) {
     _scale = scale;
     return _invoke<void>('setWatchScale', scale);
+  }
+
+  /// How far up the forearm (metres from the wrist landmark) the watch sits.
+  /// People wear watches at different heights on the arm.
+  Future<void> setForearmOffset(double metres) {
+    _offsetM = metres;
+    return _invoke<void>('setForearmOffset', metres);
   }
 
   /// Shows the .glb at [path] on the wrist, placed using [fit].

@@ -11,6 +11,7 @@ import '../../services/watch_model_cache.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/ar_readiness.dart';
+import '../../utils/share_card.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
 import '../../widgets/save_heart_button.dart';
@@ -30,6 +31,9 @@ import 'watch_detail_screen.dart';
 /// Selecting a watch downloads its .glb (cached on the device) and hands it to
 /// the native renderer together with that model's fit numbers.
 enum _Stage { idle, downloading, preparing, error }
+
+/// What the single fit slider is currently changing.
+enum _FitMode { size, position }
 
 class ArTryOnScreen extends StatefulWidget {
   final String? initialWatchId;
@@ -67,6 +71,11 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   Map<String, dynamic>? _selectedWatchData;
   double _userScaleAdjust = 0;
 
+  // Size and position share ONE slider so the panel stays as compact as it
+  // was: the two small tabs above it choose what the slider changes.
+  _FitMode _fitMode = _FitMode.size;
+  double _positionAdjustCm = 0; // 0 = default spot; + toward elbow, - toward hand
+
   // Wrist tracking. Off = the watch is shown whole and can be turned and
   // zoomed by hand, with no jitter from the tracker.
   bool _trackingOn = true;
@@ -94,8 +103,11 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   // for the permission and starts the native view again (used by "retry").
   Key _cameraKey = UniqueKey();
 
-  // The photo currently shown in the post-capture preview, if any.
+  // The photo currently shown in the post-capture preview, if any, and the
+  // watch it was taken with (kept so switching watches while the preview is
+  // open doesn't change the name on the share card).
   TryOnPhoto? _photo;
+  Map<String, dynamic>? _photoWatchData;
 
   @override
   void initState() {
@@ -116,14 +128,94 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   /// whether to show the first-time tips.
   Future<void> _loadPrefs() async {
     final adjust = await ArPreferences.loadSizeAdjust();
+    final position = await ArPreferences.loadPositionAdjust();
     final seenTips = await ArPreferences.hasSeenTips();
     if (!mounted) return;
     setState(() {
       _userScaleAdjust = adjust;
+      _positionAdjustCm = position;
       _showTips = !seenTips;
     });
-    // The controller remembers this and applies it when the camera view is up.
+    // The controller remembers these and applies them when the camera view is up.
     if (adjust != 0) _tryOn.setWatchScale(1 + adjust / 100);
+    if (position != 0) _applyPosition(position);
+  }
+
+  void _applyPosition(double cm) => _tryOn.setForearmOffset(
+      TryOnController.defaultForearmOffsetM + cm / 100);
+
+  void _onFitChanged(double v) {
+    setState(() {
+      if (_fitMode == _FitMode.size) {
+        _userScaleAdjust = v;
+      } else {
+        _positionAdjustCm = v;
+      }
+    });
+    if (_fitMode == _FitMode.size) {
+      _tryOn.setWatchScale(1 + v / 100);
+    } else {
+      _applyPosition(v);
+    }
+  }
+
+  void _onFitChangeEnd(double v) {
+    if (_fitMode == _FitMode.size) {
+      ArPreferences.saveSizeAdjust(v);
+    } else {
+      ArPreferences.savePositionAdjust(v);
+    }
+  }
+
+  /// Puts the slider that is currently showing back to its default.
+  void _resetFit() {
+    HapticFeedback.selectionClick();
+    _onFitChanged(0);
+    _onFitChangeEnd(0);
+  }
+
+  /// "+5%" for size; "Default" or "1.2 cm toward elbow" for position.
+  String _fitValueText() {
+    if (_fitMode == _FitMode.size) {
+      return '${_userScaleAdjust >= 0 ? '+' : ''}${_userScaleAdjust.toInt()}%';
+    }
+    final cm = _positionAdjustCm;
+    if (cm.abs() < 0.05) return 'Default';
+    return '${cm.abs().toStringAsFixed(1)} cm '
+        '${cm > 0 ? 'toward elbow' : 'toward hand'}';
+  }
+
+  Widget _fitTab(String label, _FitMode mode) {
+    final selected = _fitMode == mode;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (selected) return;
+        HapticFeedback.selectionClick();
+        setState(() => _fitMode = mode);
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(right: 18, top: 4, bottom: 4),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.only(bottom: 3),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? AppTheme.textPrimary : Colors.transparent,
+                width: 1.5,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            style: kLabelStyle.copyWith(
+              color: selected ? AppTheme.textPrimary : AppTheme.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _dismissTips() {
@@ -515,7 +607,10 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
       _capturing = false;
       // The preview replaces the "saved" message; it only appears when there
       // is a photo to show.
-      if (capture.photo != null) _photo = capture.photo;
+      if (capture.photo != null) {
+        _photo = capture.photo;
+        _photoWatchData = _selectedWatchData;
+      }
     });
     if (capture.photo != null) return;
     _snack(switch (capture.result) {
@@ -529,8 +624,8 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
 
   /// Opens the system share sheet, which lists whatever the person has
   /// installed (Facebook, Instagram, Telegram, email, ...).
-  Future<void> _sharePhoto(TryOnPhoto photo) async {
-    final data = _selectedWatchData;
+  Future<void> _sharePhoto(TryOnPhoto photo, bool withDetails) async {
+    final data = _photoWatchData ?? _selectedWatchData;
     final watch = [
       (data?['brand'] as String?)?.trim() ?? '',
       (data?['name'] as String?)?.trim() ?? '',
@@ -538,9 +633,24 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     final text = watch.isEmpty
         ? 'Trying on a watch with VirtuWatch'
         : 'Trying on the $watch with VirtuWatch';
+    // With "Watch details" on, share a copy with the brand and name strip.
+    // If making it fails, the plain photo is still shared.
+    var path = photo.path;
+    var mime = 'image/jpeg';
+    if (withDetails) {
+      try {
+        path = await buildShareCard(
+          photoPath: photo.path,
+          text: ShareCardText.from(data),
+        );
+        mime = 'image/png';
+      } catch (_) {
+        _snack("Couldn't add the watch details, sharing the plain photo.");
+      }
+    }
     try {
       await SharePlus.instance.share(ShareParams(
-        files: [XFile(photo.path, mimeType: 'image/jpeg')],
+        files: [XFile(path, mimeType: mime)],
         text: text,
         subject: 'My VirtuWatch try-on',
       ));
@@ -774,7 +884,8 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
               // A new photo gets a fresh preview with its own animation.
               key: ValueKey(photo.path),
               photo: photo,
-              onShare: () => _sharePhoto(photo),
+              cardText: ShareCardText.from(_photoWatchData),
+              onShare: (withDetails) => _sharePhoto(photo, withDetails),
               onDelete: () => _deletePhoto(photo),
               onDismissed: () {
                 if (mounted && _photo?.path == photo.path) {
@@ -808,12 +919,34 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         children: [
           Row(
             children: [
-              Text('FINE-TUNE SIZE', style: kLabelStyle),
-              const Spacer(),
-              Text(
-                '${_userScaleAdjust >= 0 ? '+' : ''}${_userScaleAdjust.toInt()}%',
-                style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              _fitTab('SIZE', _FitMode.size),
+              _fitTab('POSITION', _FitMode.position),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    _fitValueText(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                  ),
+                ),
               ),
+              // Only shows when there is something to undo.
+              if (_fitMode == _FitMode.size
+                  ? _userScaleAdjust != 0
+                  : _positionAdjustCm != 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: GestureDetector(
+                    onTap: _resetFit,
+                    child: Tooltip(
+                      message: 'Reset',
+                      child: Icon(Icons.restart_alt,
+                          size: 18, color: AppTheme.textSecondary),
+                    ),
+                  ),
+                ),
             ],
           ),
           SliderTheme(
@@ -823,18 +956,20 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
               inactiveTrackColor: Colors.white24,
             ),
             child: Slider(
-              value: _userScaleAdjust,
-              min: -20,
-              max: 20,
-              // While tracking is off, pinching the watch sets its size instead.
-              onChanged: !_trackingOn
-                  ? null
-                  : (v) {
-                      setState(() => _userScaleAdjust = v);
-                      _tryOn.setWatchScale(1 + v / 100);
-                    },
+              value: _fitMode == _FitMode.size
+                  ? _userScaleAdjust
+                  : _positionAdjustCm,
+              min: _fitMode == _FitMode.size
+                  ? ArPreferences.sizeAdjustMin
+                  : ArPreferences.positionAdjustMin,
+              max: _fitMode == _FitMode.size
+                  ? ArPreferences.sizeAdjustMax
+                  : ArPreferences.positionAdjustMax,
+              // While tracking is off, pinching the watch sets its size
+              // instead, and there is no wrist to slide along.
+              onChanged: !_trackingOn ? null : _onFitChanged,
               // Remembered for next time (saved once, when the finger lifts).
-              onChangeEnd: (v) => ArPreferences.saveSizeAdjust(v),
+              onChangeEnd: _onFitChangeEnd,
             ),
           ),
           const SizedBox(height: 8),

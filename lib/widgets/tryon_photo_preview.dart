@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/share_card.dart';
 import 'tryon_camera_view.dart';
 
 enum _Mode {
@@ -39,8 +41,12 @@ enum _Mode {
 class TryOnPhotoPreview extends StatefulWidget {
   final TryOnPhoto photo;
 
-  /// Opens the system share sheet for the photo.
-  final Future<void> Function() onShare;
+  /// The watch's brand and name, for the optional details strip on the photo.
+  final ShareCardText cardText;
+
+  /// Opens the system share sheet for the photo. [withDetails] is true when
+  /// the person left "Watch details" on, so the shared copy carries the strip.
+  final Future<void> Function(bool withDetails) onShare;
 
   /// Deletes the photo. Return true if it is gone; on false the preview stays
   /// open (the caller is expected to explain what went wrong).
@@ -52,6 +58,7 @@ class TryOnPhotoPreview extends StatefulWidget {
   const TryOnPhotoPreview({
     super.key,
     required this.photo,
+    required this.cardText,
     required this.onShare,
     required this.onDelete,
     required this.onDismissed,
@@ -78,12 +85,18 @@ class _TryOnPhotoPreviewState extends State<TryOnPhotoPreview> {
   _Mode _mode = _Mode.hidden;
   bool _showButtons = false;
   bool _busy = false;
+  // "Watch details" strip: on by default, and only offered if the watch has a name.
+  bool _withDetails = true;
+  ui.Image? _logo; // the white logo on the strip; arrives a moment after the preview opens
   Timer? _autoTimer;
   Timer? _buttonsTimer;
 
   @override
   void initState() {
     super.initState();
+    ShareCardLogo.load().then((img) {
+      if (mounted && img != null) setState(() => _logo = img);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _begin());
   }
 
@@ -141,7 +154,7 @@ class _TryOnPhotoPreviewState extends State<TryOnPhotoPreview> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await widget.onShare();
+      await widget.onShare(_withDetails && !widget.cardText.isEmpty);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -280,15 +293,31 @@ class _TryOnPhotoPreviewState extends State<TryOnPhotoPreview> {
                           width: 2,
                         ),
                       ),
-                      child: Image(
-                        image: _image,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                        errorBuilder: (_, _, _) => const ColoredBox(
-                          color: Colors.black54,
-                          child: Icon(Icons.image_not_supported_outlined,
-                              color: Colors.white54),
-                        ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image(
+                            image: _image,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            errorBuilder: (_, _, _) => const ColoredBox(
+                              color: Colors.black54,
+                              child: Icon(Icons.image_not_supported_outlined,
+                                  color: Colors.white54),
+                            ),
+                          ),
+                          // The same strip that goes onto the shared copy, so
+                          // what you see here is what you share.
+                          if (expanded && _withDetails)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: CustomPaint(
+                                  painter: ShareCardPainter(widget.cardText,
+                                      logo: _logo),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -323,6 +352,51 @@ class _TryOnPhotoPreviewState extends State<TryOnPhotoPreview> {
                   ),
                 ),
               ),
+              if (!widget.cardText.isEmpty)
+                Positioned(
+                  left: card.left + 10,
+                  top: card.top + 10,
+                  height: 40,
+                  child: _fadeButtons(
+                    Material(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: const StadiumBorder(),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: _busy
+                            ? null
+                            : () {
+                                HapticFeedback.selectionClick();
+                                setState(() => _withDetails = !_withDetails);
+                              },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _withDetails
+                                    ? Icons.check_circle
+                                    : Icons.radio_button_unchecked,
+                                size: 18,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Watch details',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Positioned(
                 left: card.right - 40 - 10,
                 top: card.top + 10,
