@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/recommendation_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/match_score_color.dart';
+import '../utils/stock.dart';
 import 'network_photo.dart';
 
 /// A compact, tappable preview of one watch, shown under an assistant
@@ -52,9 +53,12 @@ class ChatWatchCard extends StatelessWidget {
     final caseDiameter = data['caseDiameterMm'];
     final styleCategory = data['styleCategory'] as String? ?? '';
     final imageUrl = data['imageUrl'] as String? ?? '';
+    // Only a warning is worth the room on this small card.
+    final stockNote = needsStockAttention(data) ? customerStockLabel(data) : null;
     final detail = [
       if (caseDiameter != null) '${caseDiameter}mm',
       if (styleCategory.isNotEmpty) styleCategory,
+      ?stockNote,
     ].join(' · ');
 
     final match = rec.matchPercent;

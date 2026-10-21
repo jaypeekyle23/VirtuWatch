@@ -5,10 +5,12 @@ import '../../services/user_service.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
+import '../../utils/stock.dart';
 import '../../widgets/home_header.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
 import '../../widgets/skeleton_box.dart';
+import '../../widgets/stock_badge.dart';
 import '../../widgets/update_available_banner.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_edit_watch_screen.dart';
@@ -86,6 +88,7 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
           _stat('LISTED', count((d) => d['listedInCatalog'] == true)),
           _stat('AR READY', count(isArReady)),
         ]),
+        if (!loading) _stockAlerts(docs),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 20),
           child: Row(
@@ -128,6 +131,81 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
         else
           for (final doc in docs.take(3)) _row(doc.id, doc.data()),
       ],
+    );
+  }
+
+  /// Stock alerts: shown only while some watch is out of stock or running
+  /// low. Lists the most urgent few; tapping one opens the stock dialog so a
+  /// restock is two taps. VIEW ALL goes to the catalog tab.
+  Widget _stockAlerts(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final flagged = docs.where((d) => needsStockAttention(d.data())).toList()
+      ..sort((a, b) => compareByStockUrgency(a.data(), b.data()));
+    if (flagged.isEmpty) return const SizedBox.shrink();
+    final counts = stockAlertCounts(flagged.map((d) => d.data()));
+    const maxShown = 4;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          luxeHeader('Stock alerts',
+              action: 'VIEW ALL', onTap: () => widget.onSelectTab(1)),
+          Text(
+            [
+              if (counts.out > 0) '${counts.out} out of stock',
+              if (counts.low > 0) '${counts.low} running low',
+            ].join(', '),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          for (final doc in flagged.take(maxShown))
+            _alertRow(doc.id, doc.data()),
+          if (flagged.length > maxShown)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('+ ${flagged.length - maxShown} more in My Catalog',
+                  style:
+                      TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _alertRow(String watchId, Map<String, dynamic> data) {
+    final out = isOutOfStock(data);
+    final color = out ? Colors.redAccent : Colors.orangeAccent;
+    return InkWell(
+      onTap: () => showStockDialog(context, watchId: watchId, data: data),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppTheme.hairline)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 18, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(data['name'] as String? ?? 'Unnamed Watch',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
+            ),
+            const SizedBox(width: 12),
+            Text(merchantStockLabel(data) ?? '',
+                style: TextStyle(
+                    color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 8),
+            Text('UPDATE',
+                style: kLabelStyle.copyWith(color: AppTheme.textPrimary)),
+          ],
+        ),
+      ),
     );
   }
 

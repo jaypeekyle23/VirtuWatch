@@ -81,6 +81,12 @@ class WatchService {
     await batch.commit();
   }
 
+  /// Live stream of one watch document. Detail screens listen to this so an
+  /// edit (such as a new stock count) shows as soon as it is saved, instead
+  /// of waiting for the screen to be reopened.
+  Stream<DocumentSnapshot<Map<String, dynamic>>> watchStream(String watchId) =>
+      _watches.doc(watchId).snapshots();
+
   /// Stream of watches belonging to the currently logged-in merchant.
   Stream<QuerySnapshot<Map<String, dynamic>>> myWatches() {
     final uid = FirebaseAuth.instance.currentUser?.uid;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../utils/ar_readiness.dart';
@@ -6,13 +8,16 @@ import '../../constants/watch_colors.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/user_service.dart';
 import '../../services/watch_model_cache.dart';
+import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
 import '../../utils/match_score_color.dart';
+import '../../utils/stock.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
 import '../../widgets/save_heart_button.dart';
 import '../../widgets/skeleton_box.dart';
+import '../../widgets/stock_badge.dart';
 import '../../widgets/watch_chat_sheet.dart';
 import 'ar_try_on_screen.dart';
 
@@ -49,14 +54,34 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
   WatchRecommendation? _match;
   bool _loadingMatch = true;
 
+  // What the screen shows. Starts as the data it was opened with, then
+  // follows the live watch document, so a change made elsewhere (such as the
+  // merchant updating stock) shows up without reopening the screen.
+  late Map<String, dynamic> _data = widget.data;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _watchSub;
+
   @override
   void initState() {
     super.initState();
+    _watchSub = WatchService().watchStream(widget.watchId).listen(
+      (snap) {
+        final fresh = snap.data();
+        if (fresh != null && mounted) setState(() => _data = fresh);
+      },
+      // Keep showing what is on screen if the live feed drops.
+      onError: (_) {},
+    );
     // Fire-and-forget: recording a view only feeds "Recently Viewed" and
     // should never interrupt someone looking at a watch.
     _userService.recordRecentlyViewed(widget.watchId).catchError((_) {});
     _loadMatch();
     _prefetchArModel();
+  }
+
+  @override
+  void dispose() {
+    _watchSub?.cancel();
+    super.dispose();
   }
 
   /// If this watch can be tried on in AR, start fetching its 3D model now, so
@@ -99,7 +124,7 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final data = widget.data;
+    final data = _data;
     String text(String key) => data[key] as String? ?? '';
 
     final name = data['name'] as String? ?? 'Unnamed Watch';
@@ -202,6 +227,10 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                             fontSize: 16,
                             fontWeight: FontWeight.w600)),
                   ],
+                  if (customerStockLabel(data) != null) ...[
+                    const SizedBox(height: 10),
+                    StockStatusLine(data),
+                  ],
                   if (meta.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Row(
@@ -270,7 +299,9 @@ class _WatchDetailScreenState extends State<WatchDetailScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 14)),
                       onPressed: _inquireViaFacebook,
                       icon: const Icon(Icons.facebook),
-                      label: const Text('Inquire via Urbane Time'),
+                      label: Text(isOutOfStock(data)
+                          ? 'Ask Urbane Time about restock'
+                          : 'Inquire via Urbane Time'),
                     ),
                   ),
                   const SizedBox(height: 12),

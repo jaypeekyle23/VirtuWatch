@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../utils/ar_readiness.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
+import '../utils/stock.dart';
 import 'luxe.dart';
 
 /// Immutable snapshot of every filter a catalog screen (customer,
@@ -23,6 +24,9 @@ class CatalogFilters {
   final String style;
   final String gender;
   final bool arOnly;
+  // Only watches with at least one unit on hand. A watch with no stock count
+  // is left out once this is on, since its availability is unknown.
+  final bool inStockOnly;
   final String brand;
   final RangeValues? priceRange;
   // Lug-to-lug range in mm. Null means not constrained, same as [priceRange].
@@ -36,6 +40,7 @@ class CatalogFilters {
     this.style = 'All',
     this.gender = 'All',
     this.arOnly = false,
+    this.inStockOnly = false,
     this.brand = 'All',
     this.priceRange,
     this.lugRange,
@@ -51,6 +56,7 @@ class CatalogFilters {
     // is never guessed into a bucket. It still shows under "All".
     if (gender != 'All' && data['targetGender'] != gender) return false;
     if (arOnly && !isArReady(data)) return false;
+    if (inStockOnly && !isInStock(data)) return false;
     if (listingStatus != 'All' &&
         (data['listedInCatalog'] == true) != (listingStatus == 'Active')) {
       return false;
@@ -79,6 +85,7 @@ class CatalogFilters {
     String? style,
     String? gender,
     bool? arOnly,
+    bool? inStockOnly,
     String? brand,
     RangeValues? priceRange,
     bool clearPriceRange = false,
@@ -90,6 +97,7 @@ class CatalogFilters {
       style: style ?? this.style,
       gender: gender ?? this.gender,
       arOnly: arOnly ?? this.arOnly,
+      inStockOnly: inStockOnly ?? this.inStockOnly,
       brand: brand ?? this.brand,
       priceRange: clearPriceRange ? null : (priceRange ?? this.priceRange),
       lugRange: clearLugRange ? null : (lugRange ?? this.lugRange),
@@ -105,6 +113,7 @@ class CatalogFilters {
     if (style != 'All') count++;
     if (gender != 'All') count++;
     if (arOnly) count++;
+    if (inStockOnly) count++;
     if (brand != 'All') count++;
     if (priceRange != null) count++;
     if (lugRange != null) count++;
@@ -373,6 +382,20 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
                 ),
                 const SizedBox(height: 12),
               ],
+              Text('AVAILABILITY', style: kLabelStyle),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _draft.inStockOnly,
+                onChanged: (value) => setState(
+                    () => _draft = _draft.copyWith(inStockOnly: value)),
+                activeThumbColor: AppTheme.textPrimary,
+                activeTrackColor: AppTheme.outline,
+                title: Text(
+                  'Only show watches that are in stock',
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 12),
               _rangeSection('PRICE RANGE', _priceDraft, widget.priceFloor,
                   widget.priceCeiling, formatPeso, 'price',
                   (v) => _priceDraft = v),

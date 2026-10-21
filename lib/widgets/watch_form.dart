@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../constants/watch_colors.dart';
 import '../services/cloudinary_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/ar_readiness.dart';
 import '../utils/form_validators.dart';
+import '../utils/stock.dart';
 import 'luxe.dart';
 import 'network_photo.dart';
 import 'watch_color_picker.dart';
@@ -51,7 +53,7 @@ class WatchFormState extends State<WatchForm> {
   ];
   static const _genders = ["Men's", "Women's", 'Unisex'];
   static const _textKeys = [
-    'name', 'brand', 'price', 'caseDiameterMm', 'caseThicknessMm', //
+    'name', 'brand', 'price', 'stock', 'caseDiameterMm', 'caseThicknessMm', //
     'lugToLugMm', 'bandWidthMm', 'bandMaterial', 'caseMaterial',
     'movementType', 'waterResistance',
   ];
@@ -121,6 +123,12 @@ class WatchFormState extends State<WatchForm> {
 
   static String _fitText(double? v) => v == null ? '' : _text(v);
 
+  /// A new listing must have a stock count. An older listing without one can
+  /// still be edited and saved with the field blank (it shows no availability
+  /// until a count is entered).
+  bool get _stockRequired =>
+      widget.initialData.isEmpty || widget.initialData['stock'] != null;
+
   int get _photoCount => _imageUrls.length + _newImages.length;
   bool get _hasModel => _modelFile != null || _modelUrl.isNotEmpty;
 
@@ -172,6 +180,7 @@ class WatchFormState extends State<WatchForm> {
       'name': t('name'),
       'brand': t('brand'),
       'price': double.parse(t('price')),
+      'stock': int.tryParse(t('stock')),
       'styleCategory': _style,
       'targetGender': _gender,
       'colorHex': _colorHexes.first,
@@ -296,10 +305,25 @@ class WatchFormState extends State<WatchForm> {
                 const SizedBox(height: 16),
                 _field('Brand', 'brand', hint: 'e.g. Seiko'),
                 const SizedBox(height: 16),
-                _field('Price (PHP) *', 'price',
-                    hint: 'e.g. 15000',
-                    number: true,
-                    validator: requiredPositiveNumber),
+                _pair(
+                  _field('Price (PHP) *', 'price',
+                      hint: 'e.g. 15000',
+                      number: true,
+                      validator: requiredPositiveNumber),
+                  _field(_stockRequired ? 'Stock *' : 'Stock', 'stock',
+                      hint: 'e.g. 5',
+                      integer: true,
+                      validator: _stockRequired
+                          ? requiredStockCount
+                          : optionalStockCount),
+                  last: true,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Customers see this count. At $lowStockThreshold or fewer '
+                  'it shows "Only N left", and at 0 "Out of stock".',
+                  style: _muted,
+                ),
               ],
             ),
           ),
@@ -365,12 +389,18 @@ class WatchFormState extends State<WatchForm> {
   Widget _field(String label, String key,
       {String? hint,
       bool number = false,
+      bool integer = false,
       FormFieldValidator<String>? validator}) {
     return TextFormField(
       controller: _fields[key],
       style: const TextStyle(fontSize: 15),
-      keyboardType:
-          number ? const TextInputType.numberWithOptions(decimal: true) : null,
+      keyboardType: integer
+          ? TextInputType.number
+          : number
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : null,
+      inputFormatters:
+          integer ? [FilteringTextInputFormatter.digitsOnly] : null,
       validator: validator,
       decoration: luxeFieldDecoration(hint: hint).copyWith(
         labelText: label,

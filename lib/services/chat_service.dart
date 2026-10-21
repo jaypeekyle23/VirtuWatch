@@ -15,6 +15,7 @@ import '../constants/app_knowledge.dart';
 import '../constants/watch_colors.dart';
 import '../utils/ar_readiness.dart';
 import '../utils/match_score_color.dart';
+import '../utils/stock.dart';
 import 'recommendation_service.dart';
 
 /// A single turn in the conversation, in the order it was said.
@@ -442,6 +443,7 @@ Here is the ONLY factual data you know about THIS watch — never invent specs, 
 - Band material: $bandMaterial
 - Case material: $caseMaterial
 - ${_arLine(watchData)}
+- ${stockPromptLine(watchData)}
 
 What you know about the CUSTOMER you're talking to (use this — don't ask for info you already have here):
 ${userContextLines.join('\n')}
@@ -454,7 +456,8 @@ Rules:
 - Describe colors in plain language only (e.g. "burgundy", "teal") — never state a hex code like "#6F1011" to the customer, even if they ask for one; explain you don't expose technical color codes and give the plain-language name instead.
 - If asked whether this watch is for men, women, or unisex, answer using "Suited for" above exactly. If it says "Not specified", say plainly that the merchant hasn't categorized it yet — never guess based on the name, size, or color.
 - Be honest about the match score, following the verdict above exactly — do not soften, round up, or talk up a low score into a recommendation just to be agreeable. A middling or poor score means you should say so plainly and explain why (fit, color, or style), not reassure the customer it would still be good for them.
-- If asked something not covered by the data above (e.g. exact stock, warranty terms, discounts), say you don't have that info and suggest they use the "Inquire via Urbane Time" button to ask the seller directly.
+- Availability: answer stock questions from the "Availability" line above exactly. If it says OUT OF STOCK, say plainly that this watch is out of stock right now, never suggest it can be bought today, and suggest asking Urbane Time about a restock with the button on the screen. If it says LOW STOCK, say only that few are left, using the number given. If it says in stock, say it is in stock and you may state the number given. If it says NOT on file, say you don't have availability info for this watch. Stock is updated by the seller by hand, so for a final answer suggest confirming with Urbane Time.
+- If asked something not covered by the data above (e.g. warranty terms, discounts), say you don't have that info and suggest they use the "Inquire via Urbane Time" button to ask the seller directly.
 - For any question about water, swimming, showering, rain, sweat, mud, or what activities a watch can handle, follow the WATER RESISTANCE GUIDANCE above strictly. Quote the listed rating, then answer plainly from the guidance. Lean cautious: if the activity is beyond the rating, or the rating is not listed, say it is not suitable or that you cannot confirm it. Never call a watch waterproof.
 - Keep replies short and conversational — a few sentences, not an essay.
 - Do not discuss other specific watches' prices or specs (you only have this one watch's data) or unrelated topics outside this domain; gently redirect those back to this watch or to browsing the catalog. Questions about the app itself or the general domain (see above) are welcome, not off-topic.
@@ -512,7 +515,8 @@ Rules:
           '${rec.confidenceNote != null ? ' (${rec.confidenceNote})' : ''}. '
           'Fit: ${rec.fitNote}.'
           '${rec.colorNote != null ? ' Color match: ${rec.colorNote}.' : ''} '
-          '${_arLine(data)}.';
+          '${_arLine(data)}. '
+          '${stockPromptLine(data)}.';
     }).join('\n');
 
     return '''
@@ -546,7 +550,8 @@ Rules:
 - Be honest about match quality, using the label next to each score above: "Great match" and "Good match" can be recommended normally; "Fair match" should be presented as only a partial fit, naming the weak signal; "Weak match" and "Poor match" must NOT be recommended as good for the customer — say plainly it's a poor match and why, and steer them to a higher-scoring watch instead. Never round a low score up into a positive recommendation just to be agreeable.
 - For any question about water, swimming, showering, rain, sweat, mud, or what activities a watch can handle, follow the WATER RESISTANCE GUIDANCE above strictly. Quote the listed rating, then answer plainly from the guidance. Lean cautious: if the activity is beyond the rating, or the rating is not listed, say it is not suitable or that you cannot confirm it. Never call a watch waterproof.
 - Keep replies short and conversational — a few sentences, not an essay. Use watch names so the customer can find them on screen.
-- If asked something not covered by the data above (stock, warranty, exact availability), say you don't have that info and suggest using each watch's "Inquire via Urbane Time" button.
+- Availability: each watch's line ends with an "Availability" note. Answer stock questions from it exactly. A watch marked OUT OF STOCK can still be discussed, but always say it is out of stock right now, and when recommending, prefer in-stock watches of similar quality. Say "low stock" only for watches marked LOW STOCK, using the number given. You may state the number given for an in-stock watch. If a watch is marked NOT on file, say you don't have availability info for it. Stock is updated by the seller by hand, so suggest confirming with Urbane Time before relying on it.
+- If asked something not covered by the data above (warranty, discounts), say you don't have that info and suggest using each watch's "Inquire via Urbane Time" button.
 
 RESPONSE FORMAT: always reply with a JSON object that has exactly three fields.
 - "text": your normal conversational reply, written exactly as you would have written it before (short, friendly, same rules as above).

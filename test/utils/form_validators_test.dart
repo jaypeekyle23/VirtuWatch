@@ -69,4 +69,38 @@ void main() {
       expect(optionalPositiveNumber('12'), isNull);
     });
   });
+
+  group('requiredStockCount', () {
+    test('blank is rejected as Required', () {
+      expect(requiredStockCount(null), 'Required');
+      expect(requiredStockCount('  '), 'Required');
+    });
+
+    test('zero is allowed, since it marks the watch out of stock', () {
+      expect(requiredStockCount('0'), isNull);
+    });
+
+    test('a whole number passes', () {
+      expect(requiredStockCount('12'), isNull);
+    });
+
+    test('decimals, negatives and text are rejected', () {
+      expect(requiredStockCount('2.5'), 'Enter a whole number');
+      expect(requiredStockCount('abc'), 'Enter a whole number');
+      expect(requiredStockCount('-1'), 'Cannot be negative');
+    });
+  });
+
+  group('optionalStockCount', () {
+    test('blank passes, for older listings with no count yet', () {
+      expect(optionalStockCount(null), isNull);
+      expect(optionalStockCount(''), isNull);
+    });
+
+    test('anything typed must still be a valid whole number', () {
+      expect(optionalStockCount('4'), isNull);
+      expect(optionalStockCount('1.5'), 'Enter a whole number');
+      expect(optionalStockCount('-3'), 'Cannot be negative');
+    });
+  });
 }

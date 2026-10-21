@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import 'network_photo.dart';
 import 'skeleton_box.dart';
+import 'stock_badge.dart';
 
 /// Lays [tiles] out two per row. Rows size to their content, so there is
 /// no guessed aspect ratio and no blank space under tiles on any screen
@@ -92,13 +93,16 @@ class WatchTile extends StatelessWidget {
               aspectRatio: 1,
               child: ColoredBox(
                 color: AppTheme.background,
-                child: imageUrl.isEmpty
-                    ? fallback
-                    : Hero(
-                        tag: heroTag,
-                        child: NetworkPhoto(
-                            url: imageUrl, errorWidget: fallback),
-                      ),
+                child: withStockOverlay(
+                  imageUrl.isEmpty
+                      ? fallback
+                      : Hero(
+                          tag: heroTag,
+                          child: NetworkPhoto(
+                              url: imageUrl, errorWidget: fallback),
+                        ),
+                  data,
+                ),
               ),
             ),
             Padding(
@@ -300,13 +304,16 @@ class WatchListTile extends StatelessWidget {
                 width: _listRowHeight,
                 child: ColoredBox(
                   color: AppTheme.background,
-                  child: imageUrl.isEmpty
-                      ? fallback
-                      : Hero(
-                          tag: heroTag,
-                          child:
-                              NetworkPhoto(url: imageUrl, errorWidget: fallback),
-                        ),
+                  child: withStockOverlay(
+                    imageUrl.isEmpty
+                        ? fallback
+                        : Hero(
+                            tag: heroTag,
+                            child: NetworkPhoto(
+                                url: imageUrl, errorWidget: fallback),
+                          ),
+                    data,
+                  ),
                 ),
               ),
               Expanded(

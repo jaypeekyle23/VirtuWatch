@@ -24,3 +24,21 @@ String? optionalPositiveNumber(String? value) {
   if (parsed <= 0) return 'Must be greater than 0';
   return null;
 }
+
+/// Validates the stock quantity when it is required (a new listing). Must be
+/// a whole number, zero or more. Zero is fine: it marks the watch out of
+/// stock. Decimals and negatives are rejected.
+String? requiredStockCount(String? value) {
+  if (value == null || value.trim().isEmpty) return 'Required';
+  return optionalStockCount(value);
+}
+
+/// Same rule, but blank is allowed. Used when editing an older listing that
+/// has no stock count yet, so a merchant can still change other fields first.
+String? optionalStockCount(String? value) {
+  if (value == null || value.trim().isEmpty) return null;
+  final parsed = int.tryParse(value.trim());
+  if (parsed == null) return 'Enter a whole number';
+  if (parsed < 0) return 'Cannot be negative';
+  return null;
+}

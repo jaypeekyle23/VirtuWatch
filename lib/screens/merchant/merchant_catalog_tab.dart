@@ -4,9 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/stock.dart';
 import '../../widgets/catalog_filter_sheet.dart';
 import '../../widgets/delete_watch.dart';
 import '../../widgets/luxe.dart';
+import '../../widgets/stock_badge.dart';
 import '../../widgets/watch_tile.dart';
 import 'merchant_add_watch_screen.dart';
 import 'merchant_edit_watch_screen.dart';
@@ -23,7 +25,9 @@ TextStyle get _muted =>
 /// score — the single biggest weighted signal at 55%). Deliberately
 /// narrower than "every empty field" — this flags gaps that actually
 /// degrade what the customer sees or what the AI can honestly answer,
-/// not cosmetic specs like water resistance.
+/// not cosmetic specs like water resistance. Stock is included because
+/// customers see availability on every listing, and a watch with no count
+/// shows none.
 List<String> missingWatchFields(Map<String, dynamic> data) {
   final missing = <String>[];
   if (data['targetGender'] == null) missing.add('Gender');
@@ -33,6 +37,7 @@ List<String> missingWatchFields(Map<String, dynamic> data) {
     missing.add('Color');
   }
   if (data['lugToLugMm'] == null) missing.add('Lug-to-Lug');
+  if (stockOf(data) == null) missing.add('Stock');
   return missing;
 }
 
@@ -63,6 +68,8 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
   // "Needs info" is a merchant-only data-completeness tool, not a catalog
   // filter a customer would use, so it stays out of the shared CatalogFilters.
   bool _needsInfoOnly = false;
+  // Same idea for stock: only watches that are low or out of stock.
+  bool _stockAlertOnly = false;
   bool _isMultiColumn = true;
 
   @override
@@ -101,6 +108,7 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
         final incomplete = allDocs
             .where((d) => missingWatchFields(d.data()).isNotEmpty)
             .length;
+        final stockAlerts = stockAlertCounts(allDocs.map((d) => d.data()));
         final docs = sortWatchDocs(allDocs.where(_matches).toList(), _sort);
 
         return Scaffold(
@@ -153,6 +161,8 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
                 onChanged: (value) =>
                     setState(() => _searchQuery = value.toLowerCase()),
               ),
+              if (stockAlerts.out + stockAlerts.low > 0)
+                _stockAlertBar(stockAlerts.out, stockAlerts.low),
               if (incomplete > 0) _needsInfoBar(incomplete),
               Expanded(child: _body(snapshot, docs)),
             ],
@@ -177,7 +187,10 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
         snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
     if (!loading && docs.isEmpty) {
       final unfiltered =
-          _filters.isDefault && _searchQuery.isEmpty && !_needsInfoOnly;
+          _filters.isDefault &&
+              _searchQuery.isEmpty &&
+              !_needsInfoOnly &&
+              !_stockAlertOnly;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -269,7 +282,7 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
                     size: 14, color: Colors.orangeAccent),
               ),
             ),
-          const Spacer(),
+          Expanded(child: _stockText(data)),
           SizedBox(
             width: 28,
             height: 28,
@@ -282,6 +295,8 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
                 switch (action) {
                   case 'edit':
                     _open(MerchantEditWatchScreen(watchId: id, data: data));
+                  case 'stock':
+                    _updateStock(id, data);
                   case 'toggle':
                     _toggleListed(id, data);
                   default:
@@ -290,12 +305,74 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
               },
               itemBuilder: (context) => [
                 item('edit', 'Edit'),
+                item('stock', 'Update stock'),
                 item('toggle', listed ? 'Unlist' : 'List in catalog'),
                 item('delete', 'Delete', color: Colors.redAccent),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Stock count in the footer, right-aligned next to the menu. Orange when
+  /// low, red when out. Empty when no count is on file.
+  Widget _stockText(Map<String, dynamic> data) {
+    final count = stockOf(data);
+    if (count == null) return const SizedBox.shrink();
+    final color = switch (stockStatus(data)) {
+      StockStatus.out => Colors.redAccent,
+      StockStatus.low => Colors.orangeAccent,
+      _ => AppTheme.textSecondary,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 4),
+      child: Text('Stock $count',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.end,
+          style: TextStyle(
+              color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  /// Alert strip under the search field. Shown while any watch is out of
+  /// stock or running low (see [lowStockThreshold]). Tapping it toggles
+  /// between just those watches and everything.
+  Widget _stockAlertBar(int out, int low) {
+    final parts = [
+      if (out > 0) '$out out of stock',
+      if (low > 0) '$low running low',
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: InkWell(
+        onTap: () => setState(() => _stockAlertOnly = !_stockAlertOnly),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.symmetric(
+                horizontal: BorderSide(color: AppTheme.hairline)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  size: 16, color: out > 0 ? Colors.redAccent : Colors.orangeAccent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(parts.join(', '),
+                    style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 12),
+              Text(_stockAlertOnly ? 'SHOW ALL' : 'REVIEW',
+                  style: kLabelStyle.copyWith(color: AppTheme.textPrimary)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -320,7 +397,7 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
               Expanded(
                 child: Text(
                   '${count == 1 ? '1 watch is' : '$count watches are'} '
-                  'missing gender, color or fit data.',
+                  'missing gender, color, fit or stock data.',
                   style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),
@@ -339,9 +416,15 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
     final data = doc.data();
     if (!_filters.matches(data)) return false;
     if (_needsInfoOnly && missingWatchFields(data).isEmpty) return false;
+    if (_stockAlertOnly && !needsStockAttention(data)) return false;
     if (_searchQuery.isEmpty) return true;
     return ['name', 'brand', 'styleCategory'].any((key) =>
         (data[key] as String? ?? '').toLowerCase().contains(_searchQuery));
+  }
+
+  Future<void> _updateStock(String id, Map<String, dynamic> data) async {
+    final saved = await showStockDialog(context, watchId: id, data: data);
+    if (saved) _snack('Stock updated for "${data['name']}".');
   }
 
   Future<void> _toggleListed(String id, Map<String, dynamic> data) async {

@@ -7,6 +7,7 @@ import '../../widgets/catalog_filter_sheet.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/network_photo.dart';
 import '../../widgets/skeleton_box.dart';
+import '../../widgets/stock_badge.dart';
 import '../../widgets/watch_tile.dart';
 import 'watch_detail_screen.dart';
 
@@ -371,13 +372,16 @@ class _WatchListTile extends StatelessWidget {
                   width: _listRowHeight,
                   child: ColoredBox(
                     color: AppTheme.background,
-                    child: imageUrl.isEmpty
-                        ? fallback
-                        : Hero(
-                            tag: heroTag,
-                            child: NetworkPhoto(
-                                url: imageUrl, errorWidget: fallback),
-                          ),
+                    child: withStockOverlay(
+                      imageUrl.isEmpty
+                          ? fallback
+                          : Hero(
+                              tag: heroTag,
+                              child: NetworkPhoto(
+                                  url: imageUrl, errorWidget: fallback),
+                            ),
+                      data,
+                    ),
                   ),
                 ),
                 Expanded(

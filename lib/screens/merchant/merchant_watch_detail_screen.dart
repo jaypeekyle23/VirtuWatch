@@ -1,6 +1,11 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../services/watch_service.dart';
 import '../../utils/ar_readiness.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/stock.dart';
 import '../../widgets/delete_watch.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/watch_detail_parts.dart';
@@ -10,7 +15,7 @@ import 'merchant_edit_watch_screen.dart';
 /// A watch as its owner sees it, used by both the merchant and admin
 /// catalogs. Same layout as the customer detail screen, with the listing
 /// status and edit/delete actions in place of matching, AR and chat.
-class MerchantWatchDetailScreen extends StatelessWidget {
+class MerchantWatchDetailScreen extends StatefulWidget {
   final String watchId;
   final Map<String, dynamic> data;
 
@@ -31,11 +36,47 @@ class MerchantWatchDetailScreen extends StatelessWidget {
   });
 
   @override
+  State<MerchantWatchDetailScreen> createState() =>
+      _MerchantWatchDetailScreenState();
+}
+
+class _MerchantWatchDetailScreenState extends State<MerchantWatchDetailScreen> {
+  // Starts as the data the screen was opened with, then follows the live
+  // watch document, so saving the edit form (or a stock change) shows here
+  // right away.
+  late Map<String, dynamic> _data = widget.data;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _watchSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _watchSub = WatchService().watchStream(widget.watchId).listen(
+      (snap) {
+        final fresh = snap.data();
+        if (fresh != null && mounted) setState(() => _data = fresh);
+      },
+      // Keep showing what is on screen if the live feed drops.
+      onError: (_) {},
+    );
+  }
+
+  @override
+  void dispose() {
+    _watchSub?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final data = _data;
+    final watchId = widget.watchId;
+    final heroTag = widget.heroTag;
+    final showArFit = widget.showArFit;
     final listed = data['listedInCatalog'] as bool? ?? false;
     final has3D = data['has3DModel'] as bool? ?? false;
     final arReady = isArReady(data);
     final missing = missingWatchFields(data);
+    final stockLabel = merchantStockLabel(data);
 
     return Scaffold(
       appBar: AppBar(
@@ -80,6 +121,12 @@ class MerchantWatchDetailScreen extends StatelessWidget {
                                         ? 'Needs AR fit: add it under Edit details'
                                         : '3D model uploaded, AR fit pending review')
                                     : 'No 3D model, so AR try-on is unavailable'),
+                        if (stockLabel != null)
+                          _line(stockStatus(data) == StockStatus.inStock,
+                              stockLabel)
+                        else
+                          _line(false,
+                              'No stock count yet: add one under Edit details'),
                         _line(
                             missing.isEmpty,
                             missing.isEmpty
@@ -163,8 +210,9 @@ class MerchantWatchDetailScreen extends StatelessWidget {
   }
 
   Future<void> _delete(BuildContext context) async {
+    final watchId = widget.watchId;
     final deleted = await confirmDeleteWatch(context,
-        watchId: watchId, name: data['name'] as String? ?? watchId);
+        watchId: watchId, name: _data['name'] as String? ?? watchId);
     if (deleted && context.mounted) {
       // Leave too: this screen was showing a watch that no longer exists.
       Navigator.of(context).pop();

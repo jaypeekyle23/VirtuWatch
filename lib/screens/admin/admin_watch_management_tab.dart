@@ -307,7 +307,7 @@ class _AdminWatchManagementTabState extends State<AdminWatchManagementTab> {
               Expanded(
                 child: Text(
                   '${count == 1 ? '1 watch is' : '$count watches are'} '
-                  'missing gender, color or fit data.',
+                  'missing gender, color, fit or stock data.',
                   style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),

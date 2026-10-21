@@ -7,6 +7,7 @@ import '../../utils/ar_readiness.dart';
 import '../../services/watch_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
+import '../../utils/stock.dart';
 import '../../widgets/luxe.dart';
 import '../../widgets/skeleton_box.dart';
 
@@ -91,8 +92,21 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
       for (final d in data)
         if (d['price'] is num) (d['price'] as num).toDouble(),
     ];
-    final total = prices.fold(0.0, (a, b) => a + b);
+    final priceSum = prices.fold(0.0, (a, b) => a + b);
     String peso(double? v) => v == null || prices.isEmpty ? '—' : formatPeso(v);
+
+    // Inventory value is price times units on hand. A watch with no stock
+    // count yet is left out (not counted as zero), and the note below says
+    // how many were skipped, so the total is never silently understated.
+    final counted = [
+      for (final d in data)
+        if (d['price'] is num && stockOf(d) != null) d,
+    ];
+    final inventoryValue = counted.fold(
+        0.0, (acc, d) => acc + (d['price'] as num).toDouble() * stockOf(d)!);
+    final units = data.fold(0, (acc, d) => acc + (stockOf(d) ?? 0));
+    final untracked = data.where((d) => stockOf(d) == null).length;
+    final alerts = stockAlertCounts(data);
 
     final styleCounts = <String, int>{};
     for (final d in data) {
@@ -134,14 +148,27 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(peso(total), style: AppTheme.serif(size: 34)),
+                Text(peso(counted.isEmpty ? null : inventoryValue),
+                    style: AppTheme.serif(size: 34)),
                 const SizedBox(height: 2),
-                Text('Total inventory value',
+                Text('Total inventory value (price × stock)',
                     style:
                         TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                if (untracked > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${untracked == 1 ? '1 watch has' : '$untracked watches have'} '
+                    'no stock count and is not included.',
+                    style: const TextStyle(
+                        color: Colors.orangeAccent, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 6),
+                row('Units in stock', '$units'),
+                row('Out of stock', '${alerts.out}'),
+                row('Running low', '${alerts.low}'),
                 row('Average price',
-                    peso(prices.isEmpty ? null : total / prices.length)),
+                    peso(prices.isEmpty ? null : priceSum / prices.length)),
                 row('Lowest price',
                     peso(prices.isEmpty ? null : prices.reduce(min))),
                 row('Highest price',
