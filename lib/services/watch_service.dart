@@ -56,8 +56,10 @@ class WatchService {
     final viewerIds = (engagementDoc.data()?['viewerIds'] as List?)?.cast<String>() ?? const [];
     final affectedUserIds = {...saverIds, ...viewerIds};
 
-    await _watches.doc(watchId).delete();
+    // The summary goes first: the rules decide who may delete it by looking
+    // up the watch's owner, which is impossible once the watch is gone.
     await engagementRef.delete();
+    await _watches.doc(watchId).delete();
     await _removeWatchReferences(watchId, affectedUserIds);
     await _activityLog.log(
       'watch_deleted',
@@ -135,20 +137,37 @@ class WatchService {
     final savedCounts = <String, int>{};
     final viewedCounts = <String, int>{};
     final uniqueSavers = <String>{};
+    final tryOnerCounts = <String, int>{};
+    final tryOnCounts = <String, int>{};
+    final photoCounts = <String, int>{};
+    final shareCounts = <String, int>{};
+    final uniqueTryOners = <String>{};
 
     for (var i = 0; i < watchIds.length; i++) {
+      final id = watchIds[i];
       final data = summaries[i].data();
       final saverIds = (data?['saverIds'] as List?)?.cast<String>() ?? const [];
       final viewerIds = (data?['viewerIds'] as List?)?.cast<String>() ?? const [];
-      savedCounts[watchIds[i]] = saverIds.length;
-      viewedCounts[watchIds[i]] = viewerIds.length;
+      final tryOnerIds = (data?['tryOnerIds'] as List?)?.cast<String>() ?? const [];
+      savedCounts[id] = saverIds.length;
+      viewedCounts[id] = viewerIds.length;
       uniqueSavers.addAll(saverIds);
+      tryOnerCounts[id] = tryOnerIds.length;
+      tryOnCounts[id] = (data?['tryOnCount'] as num?)?.toInt() ?? 0;
+      photoCounts[id] = (data?['photoCount'] as num?)?.toInt() ?? 0;
+      shareCounts[id] = (data?['shareCount'] as num?)?.toInt() ?? 0;
+      uniqueTryOners.addAll(tryOnerIds);
     }
 
     return EngagementStats(
       savedCounts: savedCounts,
       viewedCounts: viewedCounts,
       uniqueSaverCount: uniqueSavers.length,
+      tryOnerCounts: tryOnerCounts,
+      tryOnCounts: tryOnCounts,
+      photoCounts: photoCounts,
+      shareCounts: shareCounts,
+      uniqueTryOnerCount: uniqueTryOners.length,
     );
   }
 }
@@ -162,6 +181,11 @@ class EngagementStats {
     required this.savedCounts,
     required this.viewedCounts,
     required this.uniqueSaverCount,
+    this.tryOnerCounts = const {},
+    this.tryOnCounts = const {},
+    this.photoCounts = const {},
+    this.shareCounts = const {},
+    this.uniqueTryOnerCount = 0,
   });
 
   /// Watch ID -> number of customers who currently have it saved.
@@ -174,5 +198,24 @@ class EngagementStats {
   /// merchant's watches.
   final int uniqueSaverCount;
 
+  /// Watch ID -> number of distinct customers who have tried it on in AR.
+  final Map<String, int> tryOnerCounts;
+
+  /// Watch ID -> total AR try-ons (a customer trying it twice counts twice).
+  final Map<String, int> tryOnCounts;
+
+  /// Watch ID -> try-on photos captured.
+  final Map<String, int> photoCounts;
+
+  /// Watch ID -> try-on photos shared.
+  final Map<String, int> shareCounts;
+
+  /// Number of distinct customers who tried on at least one of this
+  /// merchant's watches.
+  final int uniqueTryOnerCount;
+
   int get totalSaves => savedCounts.values.fold(0, (a, b) => a + b);
+  int get totalTryOns => tryOnCounts.values.fold(0, (a, b) => a + b);
+  int get totalPhotos => photoCounts.values.fold(0, (a, b) => a + b);
+  int get totalShares => shareCounts.values.fold(0, (a, b) => a + b);
 }

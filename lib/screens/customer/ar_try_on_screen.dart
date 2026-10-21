@@ -108,6 +108,12 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   // open doesn't change the name on the share card).
   TryOnPhoto? _photo;
   Map<String, dynamic>? _photoWatchData;
+  String? _photoWatchId;
+
+  // Watches already counted as a try-on during this visit to the screen, so
+  // flicking back and forth in the carousel doesn't inflate the merchant's
+  // numbers. Leaving and reopening AR counts as a new try-on.
+  final _countedTryOns = <String>{};
 
   @override
   void initState() {
@@ -417,6 +423,13 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
       // Record what the view really shows, even if the user has moved on.
       if (result == TryOnLoadResult.loaded) _appliedFit = fit;
       if (!current()) return;
+      // Only a watch that really appeared on the wrist counts as a try-on.
+      final watchId = _selectedWatchId;
+      if (result == TryOnLoadResult.loaded &&
+          watchId != null &&
+          _countedTryOns.add(watchId)) {
+        unawaited(_userService.recordTryOnEvent(watchId, TryOnEvent.started));
+      }
 
       switch (result) {
         case TryOnLoadResult.loaded:
@@ -610,8 +623,14 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
       if (capture.photo != null) {
         _photo = capture.photo;
         _photoWatchData = _selectedWatchData;
+        _photoWatchId = _selectedWatchId;
       }
     });
+    final capturedId = _selectedWatchId;
+    if (capturedId != null &&
+        (capture.photo != null || capture.result == TryOnCaptureResult.saved)) {
+      unawaited(_userService.recordTryOnEvent(capturedId, TryOnEvent.photo));
+    }
     if (capture.photo != null) return;
     _snack(switch (capture.result) {
       TryOnCaptureResult.saved => 'Photo saved to your gallery.',
@@ -654,6 +673,10 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         text: text,
         subject: 'My VirtuWatch try-on',
       ));
+      final sharedId = _photoWatchId ?? _selectedWatchId;
+      if (sharedId != null) {
+        unawaited(_userService.recordTryOnEvent(sharedId, TryOnEvent.share));
+      }
     } catch (_) {
       _snack("Couldn't open the share sheet. Please try again.");
     }

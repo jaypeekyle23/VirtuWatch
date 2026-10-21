@@ -216,15 +216,17 @@ class _MerchantAnalyticsTabState extends State<MerchantAnalyticsTab> {
               ],
             ),
           ),
-          luxeSection('ENGAGEMENT', _Engagement(docs)),
+          _Engagement(docs),
         ],
       ),
     );
   }
 }
 
-/// Saves and views per watch. Loaded separately from the watch list, and
-/// only re-fetched when the set of watches changes.
+/// The ENGAGEMENT (saves, views) and AR TRY-ON sections. Both come from the
+/// same per-watch engagement summaries, so they share one fetch. Loaded
+/// separately from the watch list, and only re-fetched when the set of
+/// watches changes.
 class _Engagement extends StatefulWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
 
@@ -267,26 +269,136 @@ class _EngagementState extends State<_Engagement> {
       future: _stats,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SkeletonBox(width: double.infinity, height: 120);
+          return Column(children: [
+            for (final label in const ['ENGAGEMENT', 'AR TRY-ON'])
+              luxeSection(
+                  label, const SkeletonBox(width: double.infinity, height: 120)),
+          ]);
         }
         final stats = snapshot.data;
         if (stats == null) {
-          return Text('Could not load engagement data. Try again in a moment.',
-              style: _muted);
+          return luxeSection(
+              'ENGAGEMENT',
+              Text('Could not load engagement data. Try again in a moment.',
+                  style: _muted));
         }
-        if (stats.totalSaves == 0 &&
-            stats.viewedCounts.values.every((v) => v == 0)) {
-          return Text(
-              'No customer activity yet. Saves and views will appear here '
-              'once customers start engaging with your catalog.',
-              style: _muted);
-        }
+        return Column(children: [
+          luxeSection('ENGAGEMENT', _engagement(stats)),
+          luxeSection('AR TRY-ON', _arTryOn(stats)),
+        ]);
+      },
+    );
+  }
 
-        final ranked = [...widget.docs]..sort((a, b) =>
-            (stats.savedCounts[b.id] ?? 0)
-                .compareTo(stats.savedCounts[a.id] ?? 0));
+  /// A watch's name with up to three right-aligned count columns.
+  Widget _row(Widget name, List<Widget> cells) => Row(
+        children: [
+          Expanded(child: name),
+          for (final cell in cells)
+            SizedBox(
+                width: 44,
+                child: Align(alignment: Alignment.centerRight, child: cell)),
+        ],
+      );
 
-        return Column(
+  Widget _watchName(QueryDocumentSnapshot<Map<String, dynamic>> d) => Text(
+      d.data()['name'] as String? ?? 'Unnamed watch',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: AppTheme.textPrimary, fontSize: 13));
+
+  Widget _colIcon(IconData icon) =>
+      Icon(icon, size: 15, color: AppTheme.textSecondary);
+
+  /// AR try-ons per AR-ready watch. Only watches that can be tried on are
+  /// listed; the rest could never have a count.
+  Widget _arTryOn(EngagementStats stats) {
+    final arDocs = widget.docs.where((d) => isArReady(d.data())).toList();
+    if (arDocs.isEmpty) {
+      return Text(
+          'None of your watches is AR ready yet. Once a watch has a 3D model '
+          'and fit numbers, customers can try it on and the results show here.',
+          style: _muted);
+    }
+    if (stats.totalTryOns == 0) {
+      return Text(
+          'No try-ons yet. They will appear here once customers try your '
+          'AR-ready watches on.',
+          style: _muted);
+    }
+
+    final ranked = [...arDocs]..sort((a, b) {
+        final byTryOns = (stats.tryOnCounts[b.id] ?? 0)
+            .compareTo(stats.tryOnCounts[a.id] ?? 0);
+        if (byTryOns != 0) return byTryOns;
+        return (stats.tryOnerCounts[b.id] ?? 0)
+            .compareTo(stats.tryOnerCounts[a.id] ?? 0);
+      });
+    final tried = arDocs.where((d) => (stats.tryOnCounts[d.id] ?? 0) > 0).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _figures([
+          ('Try-ons', '${stats.totalTryOns}'),
+          ('Customers', '${stats.uniqueTryOnerCount}'),
+          ('Photos', '${stats.totalPhotos}'),
+        ], band: true),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(children: [
+            Expanded(child: Text('Photos shared', style: _muted)),
+            Text('${stats.totalShares}',
+                style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(children: [
+            Expanded(child: Text('AR-ready watches tried on', style: _muted)),
+            Text('$tried of ${arDocs.length}',
+                style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
+          ]),
+        ),
+        const SizedBox(height: 20),
+        _row(const SizedBox.shrink(), [
+          _colIcon(Icons.view_in_ar_outlined),
+          _colIcon(Icons.person_outline),
+          _colIcon(Icons.photo_camera_outlined),
+        ]),
+        for (final d in ranked)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _row(_watchName(d), [
+              _count(stats.tryOnCounts[d.id] ?? 0),
+              _count(stats.tryOnerCounts[d.id] ?? 0),
+              _count(stats.photoCounts[d.id] ?? 0),
+            ]),
+          ),
+      ],
+    );
+  }
+
+  Widget _engagement(EngagementStats stats) {
+    if (stats.totalSaves == 0 &&
+        stats.viewedCounts.values.every((v) => v == 0)) {
+      return Text(
+          'No customer activity yet. Saves and views will appear here '
+          'once customers start engaging with your catalog.',
+          style: _muted);
+    }
+
+    final ranked = [...widget.docs]..sort((a, b) =>
+        (stats.savedCounts[b.id] ?? 0).compareTo(stats.savedCounts[a.id] ?? 0));
+
+    return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _figures([
@@ -316,8 +428,6 @@ class _EngagementState extends State<_Engagement> {
               ),
           ],
         );
-      },
-    );
   }
 }
 
@@ -336,6 +446,8 @@ class _AnalyticsSkeleton extends StatelessWidget {
             ('CATALOG', 44.0),
             ('PRICING', 110.0),
             ('STYLES', 90.0),
+            ('ENGAGEMENT', 120.0),
+            ('AR TRY-ON', 120.0),
           ])
             luxeSection(
                 label, SkeletonBox(width: double.infinity, height: height)),

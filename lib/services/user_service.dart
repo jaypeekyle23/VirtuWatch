@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'activity_log_service.dart';
 
+/// What a customer did in AR try-on, recorded for merchant analytics.
+enum TryOnEvent { started, photo, share }
+
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _activityLog = ActivityLogService();
@@ -132,6 +135,36 @@ class UserService {
       SetOptions(merge: true),
     );
     await batch.commit();
+  }
+
+  /// Records an AR try-on event on the watch's engagement summary, for the
+  /// merchant's analytics. [event] is one of:
+  ///  - [TryOnEvent.started]: the watch's model loaded and was shown on the
+  ///    wrist. Also adds the user to the unique `tryOnerIds` set.
+  ///  - [TryOnEvent.photo]: a try-on photo was captured.
+  ///  - [TryOnEvent.share]: a try-on photo was shared.
+  ///
+  /// Counters are plain increments of exactly 1 and the set only ever gains
+  /// the caller's own uid; firestore.rules enforces both. Failures are
+  /// swallowed on purpose: analytics must never break the try-on itself.
+  Future<void> recordTryOnEvent(String watchId, TryOnEvent event) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await _engagementRef(watchId).set(
+        switch (event) {
+          TryOnEvent.started => {
+              'tryOnerIds': FieldValue.arrayUnion([uid]),
+              'tryOnCount': FieldValue.increment(1),
+            },
+          TryOnEvent.photo => {'photoCount': FieldValue.increment(1)},
+          TryOnEvent.share => {'shareCount': FieldValue.increment(1)},
+        },
+        SetOptions(merge: true),
+      );
+    } catch (_) {
+      // Intentionally ignored — see doc comment above.
+    }
   }
 
   /// Stream of the current user's own profile doc, used to reactively

@@ -72,15 +72,62 @@ service cloud.firestore {
       // Kept out of the watch document above — which any signed-in user
       // can read — because it holds customer IDs; only the owning
       // merchant or an admin should see who's engaging with a listing.
-      // Any signed-in customer can still WRITE their own save/view into
-      // it (the app controls exactly what gets written, same trust
-      // model as activityLog below); they just can't read the
-      // aggregated result back out.
+      // Any signed-in customer can still WRITE their own save/view/try-on
+      // into it; they just can't read the aggregated result back out.
+      //
+      // The writes are constrained so one customer can't tamper with
+      // another's data or inflate a merchant's numbers: the id lists may
+      // only gain or lose the writer's OWN uid, the counters may only go up
+      // by 1 per write, and no other fields are allowed. The owning
+      // merchant (or an admin) may delete the whole doc, which happens when
+      // the watch is deleted.
       match /engagement/{docId} {
+        function idLists() {
+          return ['saverIds', 'viewerIds', 'tryOnerIds'];
+        }
+        function counters() {
+          return ['tryOnCount', 'photoCount', 'shareCount'];
+        }
+        // True if the list [f] changed only by the writer's own uid.
+        function listChangeOk(f) {
+          let before = resource.data.get(f, []).toSet();
+          let after = request.resource.data.get(f, []).toSet();
+          return after.difference(before).hasOnly([request.auth.uid])
+              && before.difference(after).hasOnly([request.auth.uid]);
+        }
+        // True if the counter [f] stayed the same or went up by exactly 1.
+        function counterChangeOk(f) {
+          let step = request.resource.data.get(f, 0) - resource.data.get(f, 0);
+          return step == 0 || step == 1;
+        }
+
         allow read: if isSignedIn()
                     && (get(/databases/$(database)/documents/watches/$(watchId)).data.merchantId == request.auth.uid
                         || isAdmin());
-        allow write: if isSignedIn();
+
+        // First write for a watch: only the writer's own uid, counters at 1.
+        allow create: if isSignedIn()
+                      && request.resource.data.keys().hasOnly(idLists().concat(counters()))
+                      && request.resource.data.get('saverIds', []).toSet().hasOnly([request.auth.uid])
+                      && request.resource.data.get('viewerIds', []).toSet().hasOnly([request.auth.uid])
+                      && request.resource.data.get('tryOnerIds', []).toSet().hasOnly([request.auth.uid])
+                      && request.resource.data.get('tryOnCount', 1) == 1
+                      && request.resource.data.get('photoCount', 1) == 1
+                      && request.resource.data.get('shareCount', 1) == 1;
+
+        allow update: if isSignedIn()
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(idLists().concat(counters()))
+                      && listChangeOk('saverIds')
+                      && listChangeOk('viewerIds')
+                      && listChangeOk('tryOnerIds')
+                      && counterChangeOk('tryOnCount')
+                      && counterChangeOk('photoCount')
+                      && counterChangeOk('shareCount');
+
+        allow delete: if isSignedIn()
+                      && (get(/databases/$(database)/documents/watches/$(watchId)).data.merchantId == request.auth.uid
+                          || isAdmin());
       }
     }
     match /activityLog/{logId} {
