@@ -51,7 +51,7 @@ Photos captured with the in-app AR try-on. Customers can take a photo while tryi
 
 ## Web Portal (`admin-web/`)
 
-A Vue 3 single-page app for merchants and admins who prefer to manage listings from a desktop browser. It talks to the same Firebase project as the mobile app, so changes appear in the app immediately.
+A Vue 3 single-page app for merchants and admins who prefer to manage listings from a desktop browser. It talks to the same Firebase project as the mobile app, so changes appear in the app immediately. It is live at https://virtuwatch.web.app.
 
 ### Routes
 
@@ -69,6 +69,7 @@ Routes are guarded by role, so a merchant cannot open admin pages and the other 
 - **Tailwind CSS v4** for styling
 - **Firebase** Authentication and Firestore (same project as the app)
 - **Cloudinary** for image and 3D model (`.glb`) uploads, capped at 10 MB per model on the free plan
+- **Firebase Hosting** and **GitHub Actions** for hosting and automatic deploys
 
 ### Running the web portal
 
@@ -103,6 +104,26 @@ Uploads use an unsigned Cloudinary preset. If you use your own Cloudinary accoun
 
 Accounts are created by an admin, either from the web portal or the mobile app. Customers register themselves in the mobile app.
 
+### Deploying the web portal
+
+The portal is hosted on **Firebase Hosting**, in the same Firebase project as the app, at https://virtuwatch.web.app (site ID `virtuwatch`). The hosting settings are in the root `firebase.json`. The portal is a single-page app, so every path is rewritten to `index.html`. That is what keeps a page refresh on a route like `/admin/watches` from showing a 404.
+
+**Automatic deploys.** Every push to `main` runs the workflow in `.github/workflows/firebase-hosting-merge.yml`. It installs dependencies, builds `admin-web`, and deploys the result to the live site. Pushes to `dev` do not deploy. The workflow needs these repository secrets (GitHub repo > Settings > Secrets and variables > Actions):
+
+- `FIREBASE_SERVICE_ACCOUNT_VIRTUWATCH_711E4`: lets GitHub deploy to Firebase Hosting. It is created by `firebase init hosting:github`.
+- `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`: the same values as in `admin-web/.env.local`. They are baked into the build, so if one is missing or wrong, sign-in on the live site will fail.
+
+**Manual deploys.** Install the Firebase CLI (`npm install -g firebase-tools`) and sign in with `firebase login`. Then:
+```
+cd admin-web
+npm install
+npm run build
+cd ..
+firebase deploy --only hosting --project virtuwatch-711e4
+```
+
+**Using a different Firebase project or site.** Create the site with `firebase hosting:sites:create <site-id>`. Then update the site name in `firebase.json` (`hosting.site`), the project ID in `.firebaserc` and in the workflow (`projectId`), and the service account secret name in the workflow. Check that the new domain is listed under Authentication > Settings > Authorized domains in the Firebase console, or sign-in will fail.
+
 ### Keeping the app and portal in sync
 
 `admin-web/src/utils/arFit.js` is a JavaScript port of `lib/utils/ar_readiness.dart`. The app decides whether a watch appears in AR using the Dart version, so if you change the validation rules in one, change the other too.
@@ -112,6 +133,7 @@ Accounts are created by an admin, either from the web portal or the mobile app. 
 - **Flutter** (Android is the supported target for the mobile app)
 - **Kotlin, Filament, and MediaPipe** for the native AR try-on (rendering, hand tracking, and forearm detection)
 - **Vue 3, Vite, and Tailwind CSS** for the web portal
+- **Firebase Hosting and GitHub Actions**: host the web portal and deploy it on every push to `main`
 - **Firebase**: Authentication and Firestore (data is read and written as raw `Map<String, dynamic>` in the app; there's no separate model layer)
 - **Google Gemini (via Firebase AI Logic)**: powers the in-app chat assistant
 - **MediaPipe (`hand_landmarker`)**: on-device hand tracking for AR try-on
@@ -184,6 +206,8 @@ admin-web/            # Vue 3 web portal for merchants and admins
 
 test/                 # Dart unit tests
 firestore.rules       # security rules shared by the app and the portal
+firebase.json         # Firebase config: Firestore rules and Hosting (admin-web/dist)
+.github/workflows/    # GitHub Actions: build and deploy the portal on push to main
 ```
 
 ## Notifications
@@ -203,4 +227,4 @@ None of these need Firebase Cloud Messaging or a backend component, since each i
 - Test coverage is limited to the default Flutter scaffold test and unit tests for scoring and validation logic. The Firebase-backed services, the screens, and the web portal have no automated tests yet.
 - AR/hand-tracking package versions are unpinned, and the underlying MediaPipe bindings can change API between versions.
 - AR fit numbers are measured by hand for each 3D model and entered by an admin. A watch without them does not appear in AR.
-- The web portal has no build or deploy configuration yet. Hosting it (for example on Firebase Hosting) is left to the deployer.
+- Pushes to `main` deploy straight to the live portal. There is no staging site and no automated check before a deploy, so a broken change on `main` goes live.
