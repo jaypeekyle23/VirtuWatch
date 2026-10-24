@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/logo (1).png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0E1A2B" />
+    <script>
+      // Apply the saved look before the first paint (no flash of the wrong colors).
+      // Mirrors composables/useTheme.js: keep the two in step.
+      ;(function () {
+        var attr = 'default'
+        try {
+          var saved = localStorage.getItem('app_theme_mode')
+          if (saved === 'dark' || saved === 'light') attr = saved
+        } catch (e) {}
+        document.documentElement.setAttribute('data-theme', attr)
+        var bar = { default: '#0e1a2b', dark: '#070b12', light: '#f5f6f8' }[attr]
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', bar)
+      })()
+    </script>
+    <title>VirtuWatch</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

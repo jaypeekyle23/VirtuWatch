@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+/*
+  Mode-specific tweaks in templates: class="theme-light:bg-white".
+  The three looks (Default, Dark, Light) are set by <html data-theme="...">.
+  See composables/useTheme.js.
+*/
+@custom-variant theme-dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant theme-light (&:where([data-theme="light"], [data-theme="light"] *));
+
+@theme {
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /*
+    Brand palette. Same values as the mobile app's AppTheme.
+
+    These are the Default look (the original navy). The Dark and Light looks
+    re-assign the same variables in the "Appearance" block further down, so a
+    class such as text-cream or bg-dial changes with the look and no page needs
+    its own dark/light styling. Because of that, color names describe a role,
+    not a literal color: in the Light look "cream" (primary text) is navy and
+    "ink" (page background) is near-white.
+  */
+  --color-ink: #0e1a2b; /* page background */
+  --color-dial: #16263d; /* cards and panels */
+  --color-case: #0a1422; /* deepest layer: sidebar, recessed areas */
+  --color-gold: #e8bf6a; /* the one accent */
+  --color-gold-light: #f2d38f; /* gold text on hover */
+  --color-gold-fill: #e8bf6a; /* background of gold buttons and badges */
+  --color-gold-fill-hover: #f2d38f; /* the same, on hover */
+  --color-on-gold: #0e1a2b; /* text on top of gold-fill */
+  --color-cream: #f5f1e8; /* primary text */
+  --color-mist: #a9b4c4; /* secondary text */
+  --color-line: rgb(232 191 106 / 0.14); /* gold-tinted hairline borders */
+
+  /*
+    The existing pages use Tailwind's slate scale. Re-pointing it at navy
+    shades moves every page onto the brand palette right away, without
+    editing each file. The slate-500 to slate-300 steps are readable text
+    shades; slate-900 to slate-600 step up from the page color to controls.
+  */
+  --color-slate-950: #0a1422;
+  --color-slate-900: #0e1a2b;
+  --color-slate-800: #16263d;
+  --color-slate-700: #203452;
+  --color-slate-600: #2c4466;
+  --color-slate-500: #6f7f96;
+  --color-slate-400: #a9b4c4;
+  --color-slate-300: #c7cfdb;
+  --color-slate-200: #e1e6ed;
+  --color-slate-100: #f5f1e8;
+
+  /* Pure white is harsh on navy. "text-white" now renders as the app's cream. */
+  --color-white: #f5f1e8;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-ink);
+  }
+
+  body {
+    background: var(--color-ink);
+    color: var(--color-cream);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgb(232 191 106 / 0.3);
+  }
+
+  /* Visible keyboard focus. Inputs that set their own ring keep it. */
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-600) transparent;
+  }
+
+  /*
+    Appearance. Default is the @theme block above, so there is nothing to
+    override for it (it is also what shows if data-theme is missing).
+    Values match the mobile app's AppPalette.
+  */
+
+  /* Dark: the same accents and text, on a deeper near-black background. */
+  :root[data-theme="dark"] {
+    --color-ink: #070b12;
+    --color-dial: #0f1620;
+    --color-case: #04070c;
+    --color-slate-950: #04070c;
+    --color-slate-900: #070b12;
+    --color-slate-800: #0f1620;
+    --color-slate-700: #182334;
+    --color-slate-600: #243349;
+  }
+
+  /*
+    Light: a cool light background with navy text. Gold text and icons use a
+    deeper gold so small type stays readable; gold buttons keep a brighter fill
+    with navy text on top (gold-fill / on-gold).
+  */
+  :root[data-theme="light"] {
+    color-scheme: light;
+
+    --color-ink: #f5f6f8;
+    --color-dial: #ffffff;
+    --color-case: #eceff4;
+    --color-gold: #ad7d0f;
+    --color-gold-light: #8a6309;
+    --color-gold-fill: #d9a93a;
+    --color-gold-fill-hover: #c99a2e;
+    --color-on-gold: #0e1a2b;
+    --color-cream: #0e1a2b;
+    --color-mist: #566175;
+    --color-line: rgb(14 26 43 / 0.16);
+
+    /* Neutral steps. 950 to 600 are surfaces and fills, 500 is muted text. */
+    --color-slate-950: #e6eaf0;
+    --color-slate-900: #f5f6f8;
+    --color-slate-800: #ffffff;
+    --color-slate-700: #e3e7ee;
+    --color-slate-600: #c9d0dc;
+    --color-slate-500: #68758a;
+    --color-slate-400: #566175;
+    --color-slate-300: #3b475a;
+    --color-slate-200: #1f2a3b;
+    --color-slate-100: #0e1a2b;
+
+    --color-white: #ffffff;
+
+    /*
+      Status text. The usual shades are pale, made for dark backgrounds, and
+      would be hard to read on white. These darker ones keep the same names.
+    */
+    --color-red-200: #991b1b;
+    --color-red-300: #b91c1c;
+    --color-amber-300: #b45309;
+    --color-emerald-200: #065f46;
+    --color-emerald-300: #047857;
+  }
+}
+
+/* Shared building blocks, so every screen's controls match. */
+@layer components {
+  /* Small spaced-out uppercase label: stat names, section links, status. */
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.18em] text-mist;
+  }
+
+  /* Form fields in the app's style: a label above, a hairline underneath. */
+  .field-label {
+    @apply mb-1 block text-xs text-mist;
+  }
+
+  .field {
+    @apply w-full rounded-none border-x-0 border-t-0 border-b border-line bg-transparent px-0 py-2.5 text-[15px] text-cream outline-none transition-colors placeholder:text-slate-500 focus:border-gold/70;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-mist;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-line bg-dial px-3.5 py-2.5 text-sm text-cream outline-none transition-colors placeholder:text-slate-500 focus:border-gold/60 focus:ring-2 focus:ring-gold/25;
+  }
+
+  .panel {
+    @apply rounded-xl border border-line bg-dial;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-gold-fill px-4 py-2.5 text-sm font-semibold text-on-gold transition-colors hover:bg-gold-fill-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-line bg-dial px-4 py-2.5 text-sm font-medium text-cream transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* A smaller button: combine with btn-primary, btn-secondary or btn-danger. */
+  .btn-xs {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  .alert-error {
+    @apply rounded-lg border border-red-400/30 bg-red-400/10 px-3.5 py-2.5 text-sm text-red-200;
+  }
+
+  .alert-success {
+    @apply rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-2.5 text-sm text-emerald-200;
+  }
+}
+
+/*
+  Hero photo transition (see router/heroTransition.js). The clicked watch photo
+  glides between the list and the detail page.
+*/
+::view-transition-group(watch-hero) {
+  animation-duration: 0.45s;
+  animation-timing-function: cubic-bezier(0.22, 0.8, 0.24, 1);
+  /* Matches the rounded corners of the big photo frame on the detail page. */
+  border-radius: 0.75rem;
+  overflow: clip;
+}
+
+/*
+  The thumbnail (4:3) and the detail frame (square) are different shapes. Without
+  this the browser stretches the old picture to fit the new shape mid-flight;
+  with it, the pictures are cropped to fill the box instead.
+*/
+::view-transition-old(watch-hero),
+::view-transition-new(watch-hero) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

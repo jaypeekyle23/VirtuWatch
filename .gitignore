@@ -13,6 +13,8 @@ doc/api/
 
 # dotenv environment variables file
 .env*
+# ...but keep the example file so others know which variables are needed
+!.env.example
 
 # Avoid committing generated Javascript files:
 *.dart.js
@@ -24,6 +26,8 @@ doc/api/
 *.js_
 *.js.deps
 *.js.map
+# ...but the Vue web portal is written in JavaScript, so keep its source
+!admin-web/**/*.js
 
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -32,14 +36,14 @@ doc/api/
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 lib/firebase_options.dart
-firebase.json
+# Firebase CLI deploy cache
+.firebase/
 
 # Release signing — never commit the real keystore or its passwords.
 # android/key.properties.example (tracked) shows the expected format.
 android/key.properties
 *.jks
 *.keystore
-admin-web/
 admin-web.zip
 
 linux/flutter/generated_plugin_registrant.*
