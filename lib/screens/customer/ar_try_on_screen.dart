@@ -80,6 +80,10 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
   // zoomed by hand, with no jitter from the tracker.
   bool _trackingOn = true;
 
+  // MediaPipe landmark overlay (for demos): off -> landmarks -> landmarks +
+  // wrist axes and stats -> off. Only available while tracking is on.
+  TryOnLandmarkMode _landmarkMode = TryOnLandmarkMode.off;
+
   // Lets the search pick scroll the carousel to the chosen watch.
   final _carouselController = ScrollController();
   static const _carouselItemExtent = 110.0 + 10.0; // card width + separator
@@ -470,6 +474,20 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
 
   void _restartCameraView() => setState(() => _cameraKey = UniqueKey());
 
+  void _cycleLandmarks() {
+    HapticFeedback.selectionClick();
+    final next = TryOnLandmarkMode
+        .values[(_landmarkMode.index + 1) % TryOnLandmarkMode.values.length];
+    setState(() => _landmarkMode = next);
+    _tryOn.setLandmarkMode(next);
+    _snack(switch (next) {
+      TryOnLandmarkMode.off => 'Landmarks hidden',
+      TryOnLandmarkMode.landmarks => 'Showing MediaPipe hand landmarks',
+      TryOnLandmarkMode.details =>
+        'Showing landmarks, wrist axes and tracking stats',
+    });
+  }
+
   void _toggleTracking() {
     HapticFeedback.selectionClick();
     setState(() => _trackingOn = !_trackingOn);
@@ -534,6 +552,85 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     );
   }
 
+  /// Shown only while the landmark overlay is on: says plainly when the hand
+  /// (or some of the points the pose is built from) can't be seen. Same dark
+  /// pill as the other messages, in the same spot, so it never covers the buttons.
+  Widget _landmarkNotice() {
+    if (_landmarkMode == TryOnLandmarkMode.off ||
+        !_trackingOn ||
+        _tryOn.phase.value != TryOnViewPhase.ready) {
+      return const SizedBox.shrink();
+    }
+    return ValueListenableBuilder<TryOnLandmarkStatus>(
+      valueListenable: _tryOn.landmarkStatus,
+      builder: (context, status, _) {
+        final (IconData, String, String)? content = status.isOk
+            ? null
+            : !status.handFound
+                ? (
+                    Icons.visibility_off_outlined,
+                    'No hand detected',
+                    "Landmarks aren't visible, so the watch can't follow your "
+                        'wrist.'
+                  )
+                : (
+                    Icons.crop_free,
+                    '${status.outOfFrame} of 5 key landmarks out of frame',
+                    'Bring your hand fully into view to keep the watch steady.'
+                  );
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: content == null
+              ? const SizedBox.shrink(key: ValueKey('landmarks-ok'))
+              : Padding(
+                  key: ValueKey('${status.handFound}-${status.outOfFrame}'),
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Icon(content.$1, size: 16, color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(content.$2,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.3)),
+                              const SizedBox(height: 2),
+                              Text(content.$3,
+                                  style: TextStyle(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.72),
+                                      fontSize: 11.5,
+                                      height: 1.35)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+
   /// Plain-language guidance under the status pill: what to change so the
   /// watch stays steady. While tracking is off it explains the touch controls.
   Widget _guidance() {
@@ -550,9 +647,13 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         ),
       );
     }
-    return ValueListenableBuilder<TryOnHint>(
-      valueListenable: _tryOn.hint,
-      builder: (context, hint, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([_tryOn.hint, _tryOn.landmarkStatus]),
+      builder: (context, _) {
+        final hint = _tryOn.hint.value;
+        // While the landmark notice is explaining a lost hand, this hint would say the same thing twice.
+        final noticeShowing = _landmarkMode != TryOnLandmarkMode.off &&
+            !_tryOn.landmarkStatus.value.isOk;
         final (IconData, String)? content = switch (hint) {
           TryOnHint.none => null,
           TryOnHint.lowLight => (
@@ -560,6 +661,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
               "It's a bit dark here. Move somewhere brighter so the watch "
                   'stays steady.'
             ),
+          TryOnHint.handNotVisible when noticeShowing => null,
           TryOnHint.handNotVisible => (
               Icons.back_hand_outlined,
               'Keep your whole hand in view, fingertips included, so the '
@@ -836,6 +938,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
             children: [
               _statusPill(),
               _guidance(),
+              _landmarkNotice(),
             ],
           ),
         ),
@@ -871,6 +974,26 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
                   onTap: _tryOn.swapHand,
                 ),
                 const SizedBox(height: 12),
+                // Tap to cycle: off -> landmarks -> landmarks + details.
+                _floatingIcon(
+                  switch (_landmarkMode) {
+                    TryOnLandmarkMode.off => Icons.back_hand_outlined,
+                    TryOnLandmarkMode.landmarks => Icons.back_hand,
+                    TryOnLandmarkMode.details => Icons.insights,
+                  },
+                  tooltip: switch (_landmarkMode) {
+                    TryOnLandmarkMode.off => 'Show hand landmarks',
+                    TryOnLandmarkMode.landmarks => 'Show landmark details',
+                    TryOnLandmarkMode.details => 'Hide hand landmarks',
+                  },
+                  highlighted: _landmarkMode != TryOnLandmarkMode.off,
+                  onTap: () {
+                    if (_tryOn.phase.value == TryOnViewPhase.ready) {
+                      _cycleLandmarks();
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
               ],
               // Lit up while tracking is OFF, so it's clear the watch is
               // in inspect mode and that this button turns tracking back on.
@@ -895,11 +1018,25 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
             ],
           ),
         ),
+        // The watch hand is in front of the camera, so the OTHER hand holds the
+        // phone. Keep the photo button on that side, under its thumb: right
+        // hand tracked -> phone in the left hand -> button bottom-left.
         if (_tryOn.phase.value == TryOnViewPhase.ready)
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: _shutterButton(),
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _tryOn.trackedHandIsLeft,
+                builder: (context, trackedLeft, _) => AnimatedAlign(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  alignment: trackedLeft
+                      ? Alignment.bottomRight
+                      : Alignment.bottomLeft,
+                  child: _shutterButton(),
+                ),
+              ),
+            ),
           ),
         if (_photo case final photo?)
           Positioned.fill(

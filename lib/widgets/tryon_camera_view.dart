@@ -10,6 +10,35 @@ import '../utils/ar_readiness.dart';
 
 /// Where the native camera view is in its start-up. The AR screen uses this
 /// to tell the user what it is actually waiting for.
+/// What the landmark overlay shows. Off = clean view; landmarks = the MediaPipe
+/// hand skeleton with the points the wrist pose uses highlighted (and a warning
+/// when the hand is lost); details = landmarks plus the wrist axes and stats.
+enum TryOnLandmarkMode { off, landmarks, details }
+
+/// Whether the hand landmarks are visible, reported while a landmark mode is on.
+class TryOnLandmarkStatus {
+  const TryOnLandmarkStatus({this.handFound = true, this.outOfFrame = 0});
+
+  static const ok = TryOnLandmarkStatus();
+
+  /// False when MediaPipe sees no hand at all.
+  final bool handFound;
+
+  /// How many of the five key landmarks (wrist + four knuckles) are outside the picture.
+  final int outOfFrame;
+
+  bool get isOk => handFound && outOfFrame == 0;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TryOnLandmarkStatus &&
+      other.handFound == handFound &&
+      other.outOfFrame == outOfFrame;
+
+  @override
+  int get hashCode => Object.hash(handFound, outOfFrame);
+}
+
 enum TryOnViewPhase {
   /// Asking for (or about to ask for) the camera permission.
   waitingForPermission,
@@ -127,6 +156,7 @@ class TryOnController {
   double _offsetM = defaultForearmOffsetM;
   bool _disposed = false;
   bool _trackingEnabled = true;
+  TryOnLandmarkMode _landmarkMode = TryOnLandmarkMode.off;
   Timer? _startTimer;
 
   /// The guidance message to show right now ([TryOnHint.none] = nothing).
@@ -135,6 +165,25 @@ class TryOnController {
 
   /// False while wrist tracking is off and the watch can be inspected freely.
   bool get trackingEnabled => _trackingEnabled;
+
+  /// Which landmark overlay is showing right now.
+  TryOnLandmarkMode get landmarkMode => _landmarkMode;
+
+  /// Landmark visibility; always [TryOnLandmarkStatus.ok] while the overlay is off.
+  final ValueNotifier<TryOnLandmarkStatus> landmarkStatus =
+      ValueNotifier(TryOnLandmarkStatus.ok);
+
+  /// True while the hand being tracked is the person's left one. Sticky: it only
+  /// changes when the tracker has a stable reading of the other hand, so it does
+  /// not flip when the hand is briefly lost. The photo button follows it.
+  final ValueNotifier<bool> trackedHandIsLeft = ValueNotifier(true);
+
+  void _setLandmarkStatus(TryOnLandmarkStatus next) {
+    scheduleMicrotask(() {
+      if (_disposed) return;
+      landmarkStatus.value = next;
+    });
+  }
 
   void _setHint(TryOnHint next) {
     // Same reason as _setPhase: never notify in the middle of a build or a dispose.
@@ -153,6 +202,23 @@ class TryOnController {
         'TOO_CLOSE' => TryOnHint.tooClose,
         _ => TryOnHint.none,
       });
+    } else if (call.method == 'hand') {
+      final isLeft = call.arguments == 'LEFT';
+      scheduleMicrotask(() {
+        if (!_disposed) trackedHandIsLeft.value = isLeft;
+      });
+    } else if (call.method == 'landmarks') {
+      final s = call.arguments as String? ?? 'OK';
+      if (!_trackingEnabled || _landmarkMode == TryOnLandmarkMode.off) {
+        _setLandmarkStatus(TryOnLandmarkStatus.ok);
+      } else if (s == 'NO_HAND') {
+        _setLandmarkStatus(const TryOnLandmarkStatus(handFound: false));
+      } else if (s.startsWith('PARTIAL:')) {
+        _setLandmarkStatus(TryOnLandmarkStatus(
+            outOfFrame: int.tryParse(s.substring(8)) ?? 1));
+      } else {
+        _setLandmarkStatus(TryOnLandmarkStatus.ok);
+      }
     }
     return null;
   }
@@ -200,6 +266,9 @@ class TryOnController {
     }
     // A restarted camera view must come back in the mode the person chose.
     if (!_trackingEnabled) _invoke<void>('setTracking', false);
+    if (_landmarkMode != TryOnLandmarkMode.off) {
+      _invoke<void>('setLandmarkMode', _landmarkMode.index);
+    }
     _setPhase(TryOnViewPhase.ready);
   }
 
@@ -237,8 +306,19 @@ class TryOnController {
   /// reset. On: the watch goes back onto the wrist.
   Future<void> setTrackingEnabled(bool enabled) {
     _trackingEnabled = enabled;
-    if (!enabled) _setHint(TryOnHint.none);
+    if (!enabled) {
+      _setHint(TryOnHint.none);
+      _setLandmarkStatus(TryOnLandmarkStatus.ok);
+    }
     return _invoke<void>('setTracking', enabled);
+  }
+
+  /// Shows or hides the MediaPipe landmark overlay (see [TryOnLandmarkMode]).
+  /// It is never part of saved photos.
+  Future<void> setLandmarkMode(TryOnLandmarkMode mode) {
+    _landmarkMode = mode;
+    if (mode == TryOnLandmarkMode.off) _setLandmarkStatus(TryOnLandmarkStatus.ok);
+    return _invoke<void>('setLandmarkMode', mode.index);
   }
 
   /// Multiplier on the watch size. 1.0 = true-to-wrist size.

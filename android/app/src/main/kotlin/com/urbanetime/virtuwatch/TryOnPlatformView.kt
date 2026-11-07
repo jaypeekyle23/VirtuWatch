@@ -61,6 +61,8 @@ class TryOnPlatformView(
         try {
             watch.submit(it)
             overlay.update(it)
+            reportHandSide(it.isLeftHand)
+            reportLandmarkStatus(it)
         } catch (e: Throwable) {
             Log.e("TryOnPlatformView", "frame handling failed: ${e.message}", e)
         }
@@ -142,11 +144,64 @@ class TryOnPlatformView(
         }
     }
 
+    // ---- reports to Flutter (tracker thread only, except the volatile reset) ----
+    private var lastSideLeft: Boolean? = null
+    @Volatile private var lastStatus = "?"
+    private var pendingStatus = ""
+    private var pendingFrames = 0
+
+    /** Which hand is being tracked, once its side is stable. The shutter button moves to the free hand's side. */
+    private fun reportHandSide(isLeft: Boolean?) {
+        if (isLeft == null || isLeft == lastSideLeft) return
+        lastSideLeft = isLeft
+        sendToFlutter("hand", if (isLeft) "LEFT" else "RIGHT")
+    }
+
+    /**
+     * Landmark visibility for the on-screen notice, only while a landmark mode is on. A new state must hold for a
+     * few frames before it is sent, so a one-frame dropout doesn't make the notice flicker.
+     */
+    private fun reportLandmarkStatus(f: TrackingFrame) {
+        val raw = when {
+            overlay.mode == TryOnOverlayView.MODE_OFF || inspecting -> "OK"
+            f.landmarks == null -> "NO_HAND"
+            else -> {
+                val n = TryOnOverlayView.outsideKeyCount(f.landmarks)
+                if (n > 0) "PARTIAL:$n" else "OK"
+            }
+        }
+        if (raw == lastStatus) {
+            pendingStatus = raw
+            pendingFrames = 0
+            return
+        }
+        if (raw == pendingStatus) pendingFrames++ else { pendingStatus = raw; pendingFrames = 1 }
+        if (pendingFrames >= 3) {
+            lastStatus = raw
+            pendingFrames = 0
+            sendToFlutter("landmarks", raw)
+        }
+    }
+
+    private fun sendToFlutter(method: String, arg: String) {
+        mainHandler.post {
+            if (disposed) return@post
+            try {
+                channel.invokeMethod(method, arg)
+            } catch (e: Throwable) {
+                Log.w("TryOnPlatformView", "$method not delivered: ${e.message}")
+            }
+        }
+    }
+
     /** Wrist tracking on/off. Off = hand tracking paused, watch shown whole and turned by touch. */
     private fun setTracking(on: Boolean) {
         inspecting = !on
         tracker.setPaused(!on)
         watch.setInspectMode(!on)
+        // No frames arrive while paused, so drop the last one rather than leave a frozen skeleton.
+        if (!on) overlay.clear()
+        lastStatus = "?" // re-send the landmark status once frames flow again
     }
 
     init {
@@ -176,7 +231,16 @@ class TryOnPlatformView(
                     result.success(null)
                 }
                 "setDebug" -> {
-                    overlay.debugVisible = call.arguments as? Boolean ?: true
+                    // Older name: true = everything (details), false = off.
+                    val on = call.arguments as? Boolean ?: true
+                    overlay.mode = if (on) TryOnOverlayView.MODE_DETAILS else TryOnOverlayView.MODE_OFF
+                    result.success(null)
+                }
+                "setLandmarkMode" -> {
+                    // 0 = off, 1 = landmarks, 2 = landmarks + wrist axes + stats.
+                    val m = (call.arguments as? Number)?.toInt() ?: TryOnOverlayView.MODE_OFF
+                    overlay.mode = m.coerceIn(TryOnOverlayView.MODE_OFF, TryOnOverlayView.MODE_DETAILS)
+                    lastStatus = "?" // force the next frame to report the status for the new mode
                     result.success(null)
                 }
                 "setGpu" -> {
