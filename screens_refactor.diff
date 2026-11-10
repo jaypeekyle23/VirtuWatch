@@ -1,0 +1,91 @@
+--- a/lib/screens/customer/screen_calibration_screen.dart
++++ b/lib/screens/customer/screen_calibration_screen.dart
+@@ -1,6 +1,7 @@
+ import 'package:flutter/material.dart';
+ import '../../services/screen_calibration_service.dart';
+ import '../../theme/app_theme.dart';
++import '../../utils/wrist_math.dart';
+ import '../../widgets/edge_match_input.dart';
+ import '../../widgets/luxe.dart';
+ 
+@@ -20,10 +21,10 @@
+ /// The card is the default because it is the largest option, so the same
+ /// small alignment error is a smaller share of the length being matched.
+ enum _ReferenceObject {
+-  card('Card', 53.98,
++  card('Card', cardReferenceMm,
+       'Lay any ID, ATM, or credit/debit card flat above or below your '
+       'phone (they are all the same standard size).'),
+-  coin20('PHP 20 coin', 30.0,
++  coin20('PHP 20 coin', php20CoinReferenceMm,
+       'Lay a PHP 20 coin flat above or below your phone.');
+ 
+   final String label;
+@@ -67,7 +68,8 @@
+ 
+   Future<void> _confirm(double offsetPx) async {
+     if (offsetPx <= 0) return;
+-    final mmPerPixel = _selected.mm / offsetPx;
++    final mmPerPixel =
++        mmPerPixelFromReference(referenceMm: _selected.mm, offsetPx: offsetPx);
+     await ScreenCalibrationService.saveMmPerPixel(mmPerPixel);
+     if (mounted) Navigator.of(context).pop(mmPerPixel);
+   }
+--- a/lib/screens/customer/wrist_measurement_screen.dart
++++ b/lib/screens/customer/wrist_measurement_screen.dart
+@@ -4,6 +4,7 @@
+ import '../../services/auth_service.dart';
+ import '../../services/screen_calibration_service.dart';
+ import '../../theme/app_theme.dart';
++import '../../utils/wrist_math.dart';
+ import '../../widgets/edge_match_input.dart';
+ import '../../widgets/luxe.dart';
+ import 'screen_calibration_screen.dart';
+@@ -11,8 +12,8 @@
+ /// Plausible adult wrist width range in millimeters. Mirrors the manual
+ /// entry validation range, and bounds the step control and the default
+ /// starting guess.
+-const double _minPlausibleMm = 30;
+-const double _maxPlausibleMm = 120;
++const double _minPlausibleMm = minPlausibleWristMm;
++const double _maxPlausibleMm = maxPlausibleWristMm;
+ const double _defaultGuessMm = 60;
+ 
+ /// Wrist measurement by direct on-screen comparison, no camera involved.
+@@ -105,12 +106,13 @@
+         _savedWristWidthMm ?? _defaultGuessMm, _minPlausibleMm, _maxPlausibleMm);
+     setState(() {
+       _mmPerPixel = mmPerPixel;
+-      _offsetPx = startMm / mmPerPixel;
++      _offsetPx = mmToPx(startMm, mmPerPixel);
+       _checkingCalibration = false;
+     });
+   }
+ 
+-  double get _currentMm => _mmPerPixel == null ? 0 : _offsetPx * _mmPerPixel!;
++  double get _currentMm =>
++      _mmPerPixel == null ? 0 : pxToMm(_offsetPx, _mmPerPixel!);
+ 
+   Future<void> _saveMeasurement() async {
+     final mm = _currentMm;
+--- a/lib/screens/customer/recommended_for_you_screen.dart
++++ b/lib/screens/customer/recommended_for_you_screen.dart
+@@ -8,6 +8,7 @@
+ import '../../services/recommendation_service.dart';
+ import '../../theme/app_theme.dart';
+ import '../../utils/ar_readiness.dart';
++import '../../utils/budget_status.dart';
+ import '../../utils/format.dart';
+ import '../../utils/match_score_color.dart';
+ import '../../widgets/network_photo.dart';
+@@ -423,7 +424,9 @@
+       if (d['caseDiameterMm'] != null) '${d['caseDiameterMm']}mm',
+       if (style.isNotEmpty) style,
+     ].join(' · ');
+-    final over = price != null ? price - (_result?.budgetMax ?? 50000) : 0;
++    final over = price != null
++        ? amountOverBudget(price: price, budgetMax: _result?.budgetMax ?? 50000)
++        : 0;
+     final fullData = rec.signalCount == 3;
+     final heroTag =
+         'recommended-${identityHashCode(ModalRoute.of(context))}-photo-${rec.watchId}';

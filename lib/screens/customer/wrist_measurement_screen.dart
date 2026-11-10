@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/screen_calibration_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/wrist_math.dart';
 import '../../widgets/edge_match_input.dart';
 import '../../widgets/luxe.dart';
 import 'screen_calibration_screen.dart';
@@ -11,8 +12,8 @@ import 'screen_calibration_screen.dart';
 /// Plausible adult wrist width range in millimeters. Mirrors the manual
 /// entry validation range, and bounds the step control and the default
 /// starting guess.
-const double _minPlausibleMm = 30;
-const double _maxPlausibleMm = 120;
+const double _minPlausibleMm = minPlausibleWristMm;
+const double _maxPlausibleMm = maxPlausibleWristMm;
 const double _defaultGuessMm = 60;
 
 /// Wrist measurement by direct on-screen comparison, no camera involved.
@@ -105,12 +106,13 @@ class _WristMeasurementScreenState extends State<WristMeasurementScreen> {
         _savedWristWidthMm ?? _defaultGuessMm, _minPlausibleMm, _maxPlausibleMm);
     setState(() {
       _mmPerPixel = mmPerPixel;
-      _offsetPx = startMm / mmPerPixel;
+      _offsetPx = mmToPx(startMm, mmPerPixel);
       _checkingCalibration = false;
     });
   }
 
-  double get _currentMm => _mmPerPixel == null ? 0 : _offsetPx * _mmPerPixel!;
+  double get _currentMm =>
+      _mmPerPixel == null ? 0 : pxToMm(_offsetPx, _mmPerPixel!);
 
   Future<void> _saveMeasurement() async {
     final mm = _currentMm;

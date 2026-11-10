@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/screen_calibration_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/wrist_math.dart';
 import '../../widgets/edge_match_input.dart';
 import '../../widgets/luxe.dart';
 
@@ -20,10 +21,10 @@ import '../../widgets/luxe.dart';
 /// The card is the default because it is the largest option, so the same
 /// small alignment error is a smaller share of the length being matched.
 enum _ReferenceObject {
-  card('Card', 53.98,
+  card('Card', cardReferenceMm,
       'Lay any ID, ATM, or credit/debit card flat above or below your '
       'phone (they are all the same standard size).'),
-  coin20('PHP 20 coin', 30.0,
+  coin20('PHP 20 coin', php20CoinReferenceMm,
       'Lay a PHP 20 coin flat above or below your phone.');
 
   final String label;
@@ -67,7 +68,8 @@ class _ScreenCalibrationScreenState extends State<ScreenCalibrationScreen> {
 
   Future<void> _confirm(double offsetPx) async {
     if (offsetPx <= 0) return;
-    final mmPerPixel = _selected.mm / offsetPx;
+    final mmPerPixel =
+        mmPerPixelFromReference(referenceMm: _selected.mm, offsetPx: offsetPx);
     await ScreenCalibrationService.saveMmPerPixel(mmPerPixel);
     if (mounted) Navigator.of(context).pop(mmPerPixel);
   }

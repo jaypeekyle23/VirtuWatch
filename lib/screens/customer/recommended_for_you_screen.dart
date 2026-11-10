@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/recommendation_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/ar_readiness.dart';
+import '../../utils/budget_status.dart';
 import '../../utils/format.dart';
 import '../../utils/match_score_color.dart';
 import '../../widgets/network_photo.dart';
@@ -423,7 +424,9 @@ class _RecommendedForYouScreenState extends State<RecommendedForYouScreen> {
       if (d['caseDiameterMm'] != null) '${d['caseDiameterMm']}mm',
       if (style.isNotEmpty) style,
     ].join(' · ');
-    final over = price != null ? price - (_result?.budgetMax ?? 50000) : 0;
+    final over = price != null
+        ? amountOverBudget(price: price, budgetMax: _result?.budgetMax ?? 50000)
+        : 0;
     final fullData = rec.signalCount == 3;
     final heroTag =
         'recommended-${identityHashCode(ModalRoute.of(context))}-photo-${rec.watchId}';
