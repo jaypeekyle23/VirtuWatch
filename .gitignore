@@ -54,3 +54,5 @@ windows/flutter/generated_plugins.cmake
 
 # Local App Check demo token (never commit)
 app_check.local.json
+
+firebase-debug.log*-debug.log
