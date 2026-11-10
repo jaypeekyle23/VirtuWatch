@@ -205,6 +205,7 @@ class TryOnPlatformView(
     }
 
     init {
+        overlay.fpsSource = { watch.renderFps }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
         root.addView(watchView, FrameLayout.LayoutParams(-1, -1))
         root.addView(overlay, FrameLayout.LayoutParams(-1, -1))

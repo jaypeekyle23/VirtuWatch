@@ -169,6 +169,13 @@ class WatchRenderer(
     private var lastProjB = 0.0
     private var lastRenderNs = 0L
 
+    // Debug HUD: frames actually drawn during the last second. This is a draw rate, not the screen's
+    // refresh rate. Because rendering is on demand (see above), it drops to about 1 when nothing moves.
+    @Volatile var renderFps = 0
+        private set
+    private var fpsWindowStartNs = 0L
+    private var fpsWindowFrames = 0
+
     // ======================================================================
     // Pose in
     // ======================================================================
@@ -654,6 +661,18 @@ class WatchRenderer(
             rend.endFrame()
             needsRender = false
             lastRenderNs = frameTimeNanos
+            countRenderedFrame(frameTimeNanos)
+        }
+    }
+
+    private fun countRenderedFrame(nowNs: Long) {
+        if (fpsWindowStartNs == 0L) fpsWindowStartNs = nowNs
+        fpsWindowFrames++
+        val elapsedNs = nowNs - fpsWindowStartNs
+        if (elapsedNs >= 1_000_000_000L) {
+            renderFps = Math.round(fpsWindowFrames * 1e9 / elapsedNs).toInt()
+            fpsWindowFrames = 0
+            fpsWindowStartNs = nowNs
         }
     }
 

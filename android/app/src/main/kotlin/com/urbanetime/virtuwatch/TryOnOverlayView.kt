@@ -45,6 +45,9 @@ class TryOnOverlayView(context: Context) : View(context) {
     @Volatile private var frame: TrackingFrame? = null
     @Volatile var mode = MODE_OFF
 
+    /** Returns the renderer's current draw rate for the details HUD (null = don't show it). */
+    @Volatile var fpsSource: (() -> Int)? = null
+
     private val d = context.resources.displayMetrics.density
 
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(170, 255, 255, 255); style = Paint.Style.FILL }
@@ -133,6 +136,10 @@ class TryOnOverlayView(context: Context) : View(context) {
         }
 
         var y = 56f
+        fpsSource?.let {
+            canvas.drawText("render fps=${it()}", 24f, y, text)
+            y += 42f
+        }
         for (line in f.hud.split("\n")) {
             canvas.drawText(line, 24f, y, text)
             y += 42f
