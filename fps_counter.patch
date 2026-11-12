@@ -1,0 +1,140 @@
+--- a/android/app/src/main/kotlin/com/urbanetime/virtuwatch/HandTracker.kt	2026-11-12 06:46:29.432869304 +0000
++++ b/android/app/src/main/kotlin/com/urbanetime/virtuwatch/HandTracker.kt	2026-11-12 06:46:29.466987126 +0000
+@@ -163,11 +163,24 @@
+     private var lastTs = 0L
+ 
+     // HUD stats
+-    private var windowStart = SystemClock.elapsedRealtime()
++    @Volatile private var windowStart = SystemClock.elapsedRealtime()
+     private var windowCount = 0
+-    private var resultFps = 0
++    @Volatile private var resultFps = 0
+     private var latencyMs = 0L
+ 
++    // FPS counter: camera frames reaching analyze() per second (analysis thread writes, UI reads).
++    @Volatile private var camWindowStart = SystemClock.elapsedRealtime()
++    private var camWindowCount = 0
++    @Volatile private var camFps = 0
++
++    /** Camera frames delivered to the analyzer per second; 0 when none have arrived for 2 s. */
++    val cameraFps: Int
++        get() = if (SystemClock.elapsedRealtime() - camWindowStart > 2000) 0 else camFps
++
++    /** Hand-landmark results per second (the same number as `landmarks/s` in the HUD). */
++    val trackerFps: Int
++        get() = if (SystemClock.elapsedRealtime() - windowStart > 2000) 0 else resultFps
++
+     fun start() {
+         // If the hand model can't be built the camera preview still works (no tracking), instead of
+         // the whole screen crashing.
+@@ -347,6 +360,13 @@
+     private fun analyze(proxy: ImageProxy) {
+         try {
+             if (stopped || paused) return
++            val nowMs = SystemClock.elapsedRealtime()
++            camWindowCount++
++            if (nowMs - camWindowStart >= 1000) {
++                camFps = Math.round(camWindowCount * 1000f / (nowMs - camWindowStart))
++                camWindowCount = 0
++                camWindowStart = nowMs
++            }
+             val t0 = SystemClock.elapsedRealtimeNanos()
+             val rotation = proxy.imageInfo.rotationDegrees
+             val rw = proxy.width
+--- a/android/app/src/main/kotlin/com/urbanetime/virtuwatch/WatchRenderer.kt	2026-11-12 06:46:29.432902319 +0000
++++ b/android/app/src/main/kotlin/com/urbanetime/virtuwatch/WatchRenderer.kt	2026-11-12 06:46:29.467215207 +0000
+@@ -169,6 +169,37 @@
+     private var lastProjB = 0.0
+     private var lastRenderNs = 0L
+ 
++    // FPS counters. All counting happens on the main thread (Choreographer); the values are
++    // @Volatile so the debug overlay can read them. [renderFps] is frames actually drawn, which
++    // is LOW by design while the hand is still (see needsRender above); [displayFps] is the
++    // Choreographer tick rate, i.e. the screen refresh rate the loop is keeping up with.
++    private var fpsWindowStartNs = 0L
++    private var fpsLoopCount = 0
++    private var fpsDrawCount = 0
++    @Volatile private var fpsDisplayValue = 0
++    @Volatile private var fpsRenderValue = 0
++    @Volatile private var fpsUpdatedNs = 0L
++
++    val renderFps: Int
++        get() = if (System.nanoTime() - fpsUpdatedNs > 2_000_000_000L) 0 else fpsRenderValue
++    val displayFps: Int
++        get() = if (System.nanoTime() - fpsUpdatedNs > 2_000_000_000L) 0 else fpsDisplayValue
++
++    private fun countFpsTick(nowNs: Long) {
++        if (fpsWindowStartNs == 0L) fpsWindowStartNs = nowNs
++        fpsLoopCount++
++        val elapsedNs = nowNs - fpsWindowStartNs
++        if (elapsedNs >= 1_000_000_000L) {
++            val secs = elapsedNs / 1e9
++            fpsDisplayValue = (fpsLoopCount / secs + 0.5).toInt()
++            fpsRenderValue = (fpsDrawCount / secs + 0.5).toInt()
++            fpsLoopCount = 0
++            fpsDrawCount = 0
++            fpsWindowStartNs = nowNs
++            fpsUpdatedNs = nowNs
++        }
++    }
++
+     // ======================================================================
+     // Pose in
+     // ======================================================================
+@@ -340,6 +371,7 @@
+                 } catch (e: Throwable) {
+                     Log.e(tag, "renderFrame failed: ${e.message}", e)
+                 }
++                countFpsTick(frameTimeNanos)
+                 choreographer?.postFrameCallback(this)
+             }
+         }
+@@ -652,6 +684,7 @@
+         if (rend.beginFrame(sc, frameTimeNanos)) {
+             rend.render(v)
+             rend.endFrame()
++            fpsDrawCount++
+             needsRender = false
+             lastRenderNs = frameTimeNanos
+         }
+--- a/android/app/src/main/kotlin/com/urbanetime/virtuwatch/TryOnOverlayView.kt	2026-11-12 06:46:29.432949012 +0000
++++ b/android/app/src/main/kotlin/com/urbanetime/virtuwatch/TryOnOverlayView.kt	2026-11-12 06:46:29.467333390 +0000
+@@ -54,6 +54,12 @@
+     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 8f; strokeCap = Paint.Cap.ROUND }
+     private val rawDot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.LTGRAY; style = Paint.Style.FILL }
+     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 34f; setShadowLayer(4f, 0f, 0f, Color.BLACK) }
++    private val fpsText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
++        color = Color.rgb(232, 192, 106); textSize = 38f; isFakeBoldText = true
++        setShadowLayer(4f, 0f, 0f, Color.BLACK)
++    }
++    /** Supplies the live FPS line (set by the platform view); drawn first in the details HUD. */
++    @Volatile var fpsLine: (() -> String)? = null
+     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+         color = Color.WHITE; textSize = 12f * d; setShadowLayer(4f, 0f, 0f, Color.BLACK)
+     }
+@@ -133,6 +139,10 @@
+         }
+ 
+         var y = 56f
++        fpsLine?.invoke()?.let {
++            canvas.drawText(it, 24f, y, fpsText)
++            y += 46f
++        }
+         for (line in f.hud.split("\n")) {
+             canvas.drawText(line, 24f, y, text)
+             y += 42f
+--- a/android/app/src/main/kotlin/com/urbanetime/virtuwatch/TryOnPlatformView.kt	2026-11-12 06:46:29.432961240 +0000
++++ b/android/app/src/main/kotlin/com/urbanetime/virtuwatch/TryOnPlatformView.kt	2026-11-12 06:46:29.467410414 +0000
+@@ -67,6 +67,12 @@
+             Log.e("TryOnPlatformView", "frame handling failed: ${e.message}", e)
+         }
+     }
++    init {
++        overlay.fpsLine = {
++            "FPS  cam=${tracker.cameraFps}  track=${tracker.trackerFps}  " +
++                "draw=${watch.renderFps}  ui=${watch.displayFps}"
++        }
++    }
+     private val channel = MethodChannel(messenger, "tryon/camera_view_$viewId")
+     private val ctx = context
+     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()

@@ -45,9 +45,6 @@ class TryOnOverlayView(context: Context) : View(context) {
     @Volatile private var frame: TrackingFrame? = null
     @Volatile var mode = MODE_OFF
 
-    /** Returns the renderer's current draw rate for the details HUD (null = don't show it). */
-    @Volatile var fpsSource: (() -> Int)? = null
-
     private val d = context.resources.displayMetrics.density
 
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(170, 255, 255, 255); style = Paint.Style.FILL }
@@ -57,6 +54,8 @@ class TryOnOverlayView(context: Context) : View(context) {
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 8f; strokeCap = Paint.Cap.ROUND }
     private val rawDot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.LTGRAY; style = Paint.Style.FILL }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 34f; setShadowLayer(4f, 0f, 0f, Color.BLACK) }
+    /** Supplies the live FPS line (set by the platform view); drawn first in the details HUD. */
+    @Volatile var fpsLine: (() -> String)? = null
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; textSize = 12f * d; setShadowLayer(4f, 0f, 0f, Color.BLACK)
     }
@@ -136,8 +135,8 @@ class TryOnOverlayView(context: Context) : View(context) {
         }
 
         var y = 56f
-        fpsSource?.let {
-            canvas.drawText("render fps=${it()}", 24f, y, text)
+        fpsLine?.invoke()?.let {
+            canvas.drawText(it, 24f, y, text)
             y += 42f
         }
         for (line in f.hud.split("\n")) {

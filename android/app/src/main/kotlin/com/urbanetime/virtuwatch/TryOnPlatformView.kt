@@ -67,6 +67,9 @@ class TryOnPlatformView(
             Log.e("TryOnPlatformView", "frame handling failed: ${e.message}", e)
         }
     }
+    init {
+        overlay.fpsLine = { "FPS: ${watch.uiFps}" }
+    }
     private val channel = MethodChannel(messenger, "tryon/camera_view_$viewId")
     private val ctx = context
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -205,7 +208,6 @@ class TryOnPlatformView(
     }
 
     init {
-        overlay.fpsSource = { watch.renderFps }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
         root.addView(watchView, FrameLayout.LayoutParams(-1, -1))
         root.addView(overlay, FrameLayout.LayoutParams(-1, -1))

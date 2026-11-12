@@ -924,7 +924,18 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
     );
   }
 
+  // The native stats HUD (TryOnOverlayView, MODE_DETAILS) is drawn in physical pixels from the top
+  // of the camera view: 4 lines, last baseline at y = 182 px. Keep this in step with it.
+  static const _statsHudHeightPx = 200.0;
+
   Widget _buildCameraArea() {
+    // While the stats overlay is on, push the status/hint/landmark messages below it so they
+    // never cover the debug text.
+    final statsShowing =
+        _trackingOn && _landmarkMode == TryOnLandmarkMode.details;
+    final messagesTop = statsShowing
+        ? _statsHudHeightPx / MediaQuery.devicePixelRatioOf(context) + 8
+        : 16.0;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -932,7 +943,7 @@ class _ArTryOnScreenState extends State<ArTryOnScreen> {
         Positioned(
           left: 16,
           right: 72, // clear of the camera buttons
-          top: 16,
+          top: messagesTop,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
