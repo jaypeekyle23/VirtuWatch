@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/sales_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
 import '../utils/sales.dart';
 import '../utils/stock.dart';
 import 'luxe.dart';
@@ -149,45 +150,110 @@ class _RecordSaleDialogState extends State<_RecordSaleDialog> {
     }
   }
 
+  // ---------- Layout helpers ----------
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Text(text, style: kLabelStyle),
+      );
+
+  Widget _errorText(String? message) => message == null
+      ? const SizedBox.shrink()
+      : Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(message,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+        );
+
+  TextStyle get _fieldStyle =>
+      TextStyle(color: AppTheme.textPrimary, fontSize: 15);
+
+  /// A text-field lookalike for pickers (the date and the payment method):
+  /// the same faint underline as the real fields, with an icon on the right.
+  Widget _pickerBox(String text, IconData icon) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppTheme.outline)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _fieldStyle),
+            ),
+            Icon(icon, size: 18, color: AppTheme.textSecondary),
+          ],
+        ),
+      );
+
+  Widget _stepButton(IconData icon, String tooltip, VoidCallback? onPressed) =>
+      IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 22),
+        style: IconButton.styleFrom(
+          foregroundColor: AppTheme.textPrimary,
+          side: BorderSide(color: AppTheme.outline),
+          minimumSize: const Size(40, 40),
+          padding: EdgeInsets.zero,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final q = _quantityValue;
     final price = _priceValue;
     final total = (q != null && price != null) ? saleTotal(price, q) : null;
     final muted = TextStyle(color: AppTheme.textSecondary, fontSize: 12);
+    const gap = SizedBox(height: 20);
 
     return AlertDialog(
       backgroundColor: AppTheme.surface,
-      title: Text('Record a sale', style: AppTheme.serif(size: 22)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Record a sale', style: AppTheme.serif(size: 24)),
+          const SizedBox(height: 4),
+          Text(
+            widget.data['name'] as String? ?? 'Unnamed Watch',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.data['name'] as String? ?? 'Unnamed Watch',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-            const SizedBox(height: 6),
             Text(
               'For a sale that already happened outside VirtuWatch. It is '
               'added to your sales history and taken out of stock.',
-              style: muted,
+              style: muted.copyWith(height: 1.4),
             ),
-            const SizedBox(height: 16),
+            gap,
 
             // Quantity
-            Text('QUANTITY SOLD', style: kLabelStyle),
+            _label('QUANTITY SOLD'),
+            const SizedBox(height: 4),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  tooltip: 'One less',
-                  onPressed: _saving ? null : () => _setQuantity((q ?? 2) - 1),
-                  icon: const Icon(Icons.remove_circle_outline),
-                ),
+                _stepButton(Icons.remove, 'One less',
+                    _saving ? null : () => _setQuantity((q ?? 2) - 1)),
+                const SizedBox(width: 12),
                 SizedBox(
-                  width: 84,
+                  width: 56,
                   child: TextField(
                     controller: _quantity,
                     enabled: !_saving,
@@ -197,126 +263,137 @@ class _RecordSaleDialogState extends State<_RecordSaleDialog> {
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(5),
                     ],
-                    style: AppTheme.serif(size: 30),
+                    style: AppTheme.serif(size: 28),
+                    decoration: luxeFieldDecoration()
+                        .copyWith(isDense: true),
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
-                IconButton(
-                  tooltip: 'One more',
-                  onPressed: _saving ? null : () => _setQuantity((q ?? 0) + 1),
-                  icon: const Icon(Icons.add_circle_outline),
-                ),
+                const SizedBox(width: 12),
+                _stepButton(Icons.add, 'One more',
+                    _saving ? null : () => _setQuantity((q ?? 0) + 1)),
               ],
             ),
-            Center(child: Text(_stockNote, style: muted)),
-            if (_shown('quantity') != null)
-              Center(
-                child: Text(_shown('quantity')!,
-                    style: const TextStyle(
-                        color: Colors.redAccent, fontSize: 12)),
-              ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Text(_stockNote, style: muted),
+            _errorText(_shown('quantity')),
+            gap,
 
             // Price and total
+            _label('PRICE PER UNIT (PHP)'),
             TextField(
               controller: _price,
               enabled: !_saving,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
                 LengthLimitingTextInputFormatter(12),
               ],
-              decoration: InputDecoration(
-                labelText: 'Price per unit (PHP)',
-                helperText: 'Filled in from your listing. Change it if you '
-                    'sold at a discount.',
-                helperMaxLines: 2,
-                errorText: _shown('unitPrice'),
-              ),
+              style: _fieldStyle,
+              decoration: luxeFieldDecoration(hint: '0')
+                  .copyWith(errorText: _shown('unitPrice')),
               onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Text('Total', style: TextStyle(color: AppTheme.textSecondary)),
-                const Spacer(),
-                Text(total == null ? '–' : formatSaleMoney(total),
-                    style: AppTheme.serif(size: 24)),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Date
-            Text('DATE SOLD', style: kLabelStyle),
-            InkWell(
-              onTap: _saving ? null : _pickDay,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${_day.year}-${_day.month.toString().padLeft(2, '0')}-${_day.day.toString().padLeft(2, '0')}',
-                        style: TextStyle(color: AppTheme.textPrimary),
-                      ),
-                    ),
-                    Icon(Icons.calendar_today_outlined,
-                        size: 18, color: AppTheme.textSecondary),
-                  ],
-                ),
+            if (_shown('unitPrice') == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('From your listing. Change it for a discount.',
+                    style: muted),
+              ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.outline),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Text('Total', style: TextStyle(color: AppTheme.textSecondary)),
+                  const Spacer(),
+                  Text(total == null ? '–' : formatSaleMoney(total),
+                      style: AppTheme.serif(size: 22)),
+                ],
               ),
             ),
-            if (_shown('soldAt') != null)
-              Text(_shown('soldAt')!,
-                  style:
-                      const TextStyle(color: Colors.redAccent, fontSize: 12)),
-            const SizedBox(height: 8),
+            gap,
 
-            // Payment method
-            Text('PAID VIA', style: kLabelStyle),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            // Date and payment method, side by side (like the web portal)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final method in paymentMethods)
-                  luxePill(
-                    method,
-                    selected: _method == method,
-                    onTap: () {
-                      if (!_saving) setState(() => _method = method);
-                    },
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label('DATE SOLD'),
+                      InkWell(
+                        onTap: _saving ? null : _pickDay,
+                        child: _pickerBox(
+                            formatDate(_day), Icons.calendar_today_outlined),
+                      ),
+                      _errorText(_shown('soldAt')),
+                    ],
                   ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label('PAID VIA'),
+                      PopupMenuButton<String>(
+                        enabled: !_saving,
+                        color: AppTheme.surface,
+                        onSelected: (value) => setState(() => _method = value),
+                        itemBuilder: (context) => [
+                          for (final method in paymentMethods)
+                            PopupMenuItem(
+                              value: method,
+                              child: Text(method,
+                                  style: TextStyle(
+                                      color: method == _method
+                                          ? AppTheme.gold
+                                          : AppTheme.textPrimary)),
+                            ),
+                        ],
+                        child: _pickerBox(_method, Icons.arrow_drop_down),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 16),
+            gap,
 
             // Optional details
+            _label('BUYER (OPTIONAL)'),
             TextField(
               controller: _buyer,
               enabled: !_saving,
               maxLength: maxBuyerLength,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Buyer (optional)',
-                counterText: '',
-              ),
+              style: _fieldStyle,
+              decoration: luxeFieldDecoration(hint: 'Name of the buyer')
+                  .copyWith(counterText: ''),
             ),
-            const SizedBox(height: 8),
+            gap,
+            _label('NOTES (OPTIONAL)'),
             TextField(
               controller: _notes,
               enabled: !_saving,
               maxLength: maxNotesLength,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                hintText: 'Reference number, meet-up details, etc.',
-                counterText: '',
-              ),
+              minLines: 1,
+              style: _fieldStyle,
+              decoration: luxeFieldDecoration(
+                      hint: 'Reference number, meet-up details, etc.')
+                  .copyWith(counterText: ''),
             ),
 
             if (_error != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(_error!,
                   style:
                       const TextStyle(color: Colors.redAccent, fontSize: 12)),
@@ -327,9 +404,13 @@ class _RecordSaleDialogState extends State<_RecordSaleDialog> {
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text('Cancel',
+              style: TextStyle(color: AppTheme.textSecondary)),
         ),
-        TextButton(
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+          ),
           onPressed: (_saving || _stock == 0) ? null : _save,
           child: _saving
               ? const SizedBox(

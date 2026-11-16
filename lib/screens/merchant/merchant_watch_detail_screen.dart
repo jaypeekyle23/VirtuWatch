@@ -139,17 +139,6 @@ class _MerchantWatchDetailScreenState extends State<MerchantWatchDetailScreen> {
                   ),
                   watchSpecsSection(data),
                   const SizedBox(height: 12),
-                  // Recording a sale is the merchant's own job, so the admin
-                  // view (showArFit) never gets the button.
-                  if (!showArFit) ...[
-                    OutlinedButton.icon(
-                      style: luxeOutlinedStyle,
-                      onPressed: () => _recordSale(context),
-                      icon: const Icon(Icons.receipt_long_outlined),
-                      label: const Text('Record sale'),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,9 +157,32 @@ class _MerchantWatchDetailScreenState extends State<MerchantWatchDetailScreen> {
                               ),
                             ),
                             icon: const Icon(Icons.edit_outlined),
-                            label: const Text('Edit details'),
+                            label: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Edit details'),
+                            ),
                           ),
                         ),
+                        // Recording a sale is the merchant's own job, so the
+                        // admin view (showArFit) never gets the button.
+                        if (!showArFit) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: luxeOutlinedStyle.copyWith(
+                                padding: const WidgetStatePropertyAll(
+                                    EdgeInsets.symmetric(vertical: 14)),
+                              ),
+                              onPressed: () => _recordSale(context),
+                              icon: const Icon(Icons.receipt_long_outlined,
+                                  size: 20),
+                              label: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('Record sale'),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 12),
                         Tooltip(
                           message: 'Delete watch',
