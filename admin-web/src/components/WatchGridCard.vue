@@ -15,9 +15,11 @@ const props = defineProps({
   showListToggle: { type: Boolean, default: false },
   // Adds "Update stock" to the actions menu. The merchant catalog turns this on.
   showStockAction: { type: Boolean, default: false },
+  // Adds "Record sale" to the actions menu. The merchant catalog turns this on.
+  showSaleAction: { type: Boolean, default: false },
 })
 
-defineEmits(['toggle-listed', 'update-stock', 'delete'])
+defineEmits(['toggle-listed', 'update-stock', 'record-sale', 'delete'])
 
 const thumbnail = computed(() => props.watch.imageUrls?.[0] || props.watch.imageUrl || '')
 const missing = computed(() => missingWatchFields(props.watch))
@@ -158,6 +160,14 @@ const menuItem = 'block w-full px-4 py-2 text-left text-xs transition-colors hov
                   @click="$emit('update-stock', watch)"
                 >
                   Update stock
+                </button>
+                <button
+                  v-if="showSaleAction"
+                  type="button"
+                  :class="[menuItem, 'text-cream']"
+                  @click="$emit('record-sale', watch)"
+                >
+                  Record sale
                 </button>
                 <button
                   type="button"

@@ -17,6 +17,7 @@ import MerchantCatalogView from '../views/merchant/MerchantCatalogView.vue'
 import MerchantAddWatchView from '../views/merchant/MerchantAddWatchView.vue'
 import MerchantEditWatchView from '../views/merchant/MerchantEditWatchView.vue'
 import MerchantAnalyticsView from '../views/merchant/MerchantAnalyticsView.vue'
+import MerchantSalesView from '../views/merchant/MerchantSalesView.vue'
 import ProfileView from '../views/shared/ProfileView.vue'
 import WatchDetailView from '../views/shared/WatchDetailView.vue'
 
@@ -48,6 +49,7 @@ const routes = [
       { path: 'watches/new', name: 'merchant-add-watch', component: MerchantAddWatchView, meta: { title: 'Add watch' } },
       { path: 'watches/:id', name: 'merchant-watch-detail', component: WatchDetailView, meta: { title: 'Watch details' } },
       { path: 'watches/:id/edit', name: 'merchant-edit-watch', component: MerchantEditWatchView, meta: { title: 'Edit watch' } },
+      { path: 'sales', name: 'merchant-sales', component: MerchantSalesView, meta: { title: 'Sales history' } },
       { path: 'analytics', name: 'merchant-analytics', component: MerchantAnalyticsView, meta: { title: 'Analytics', heroList: true } },
       { path: 'profile', name: 'merchant-profile', component: ProfileView, meta: { title: 'Profile' } },
     ],

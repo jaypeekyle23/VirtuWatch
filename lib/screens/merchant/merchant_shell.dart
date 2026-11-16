@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import 'merchant_dashboard_tab.dart';
 import 'merchant_catalog_tab.dart';
+import 'merchant_sales_tab.dart';
 import 'merchant_analytics_tab.dart';
 import 'merchant_profile_tab.dart';
 
@@ -24,6 +25,7 @@ class _MerchantShellState extends State<MerchantShell> {
         onSelectTab: (i) => setState(() => _currentIndex = i),
       ),
       const MerchantCatalogTab(),
+      const MerchantSalesTab(),
       const MerchantAnalyticsTab(),
       const MerchantProfileTab(),
     ];
@@ -62,6 +64,11 @@ class _MerchantShellState extends State<MerchantShell> {
               icon: Icon(Icons.watch_outlined),
               selectedIcon: Icon(Icons.watch, color: AppTheme.gold),
               label: 'Catalog',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long, color: AppTheme.gold),
+              label: 'Sales',
             ),
             NavigationDestination(
               icon: Icon(Icons.bar_chart_outlined),

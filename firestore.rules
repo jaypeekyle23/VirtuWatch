@@ -130,6 +130,81 @@ service cloud.firestore {
                           || isAdmin());
       }
     }
+    // Sales history. A merchant records a sale by hand after it happens
+    // OFF the platform (VirtuWatch has no checkout or payment processing), so
+    // each document is the merchant's own record, not proof of a transaction.
+    //
+    // - Each sale keeps a SNAPSHOT of the watch name, brand, photo and price, so
+    //   editing or deleting a watch never changes or breaks the history.
+    // - Merchants read only their own sales. Admins can read all of them but
+    //   cannot create or change any: the record belongs to the merchant.
+    // - A sale is never deleted. A mistake is VOIDED instead: the only allowed
+    //   change is completed -> voided, stamped with the server time, so the
+    //   history stays trustworthy and a voided sale is still visible.
+    // - Recording a sale also lowers the watch's stock in the same transaction
+    //   (see recordSale in admin-web/src/services/salesService.js).
+    match /sales/{saleId} {
+      function saleData() {
+        return request.resource.data;
+      }
+      function optionalText(field, maxLength) {
+        return saleData().get(field, '') is string
+            && saleData().get(field, '').size() <= maxLength;
+      }
+
+      allow read: if isSignedIn()
+                  && (resource.data.merchantId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn()
+                    && saleData().keys().hasOnly([
+                         'merchantId', 'watchId', 'watchName', 'watchBrand',
+                         'watchImageUrl', 'quantity', 'unitPrice', 'totalAmount',
+                         'soldAt', 'buyerName', 'paymentMethod', 'notes', 'status',
+                         'stockAdjusted', 'createdAt'
+                       ])
+                    && saleData().keys().hasAll([
+                         'merchantId', 'watchId', 'watchName', 'quantity',
+                         'unitPrice', 'totalAmount', 'soldAt', 'paymentMethod',
+                         'status', 'stockAdjusted', 'createdAt'
+                       ])
+                    // Only for your own watch, under your own uid.
+                    && saleData().merchantId == request.auth.uid
+                    && get(/databases/$(database)/documents/watches/$(saleData().watchId)).data.merchantId == request.auth.uid
+                    && saleData().status == 'completed'
+                    && saleData().quantity is int
+                    && saleData().quantity >= 1
+                    && saleData().quantity <= 99999
+                    && saleData().unitPrice is number
+                    && saleData().unitPrice >= 0
+                    && saleData().unitPrice <= 100000000
+                    && saleData().totalAmount is number
+                    && math.abs(saleData().totalAmount - saleData().unitPrice * saleData().quantity) < 0.01
+                    // Backdating is fine (the sale happened offline); the future is not.
+                    && saleData().soldAt is timestamp
+                    && saleData().soldAt <= request.time + duration.value(1, 'd')
+                    && saleData().createdAt == request.time
+                    && saleData().stockAdjusted is bool
+                    && saleData().watchName is string
+                    && saleData().watchName.size() <= 200
+                    && optionalText('watchBrand', 200)
+                    && optionalText('watchImageUrl', 2000)
+                    && optionalText('buyerName', 120)
+                    && optionalText('notes', 500)
+                    && saleData().paymentMethod in ['Cash', 'GCash', 'Maya', 'Bank transfer', 'Card', 'Other'];
+
+      // The only edit is voiding a completed sale.
+      allow update: if isSignedIn()
+                    && resource.data.merchantId == request.auth.uid
+                    && resource.data.status == 'completed'
+                    && saleData().status == 'voided'
+                    && saleData().diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'voidedAt', 'voidReason'])
+                    && saleData().voidedAt == request.time
+                    && optionalText('voidReason', 300);
+
+      allow delete: if false;
+    }
+
     match /activityLog/{logId} {
       // Only admins can read the activity feed.
       allow read: if isAdmin();

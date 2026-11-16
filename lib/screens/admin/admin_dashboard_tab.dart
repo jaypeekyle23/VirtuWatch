@@ -46,6 +46,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     'role_changed': Icons.swap_horiz,
     'watch_added': Icons.watch_outlined,
     'watch_deleted': Icons.delete_outline,
+    'sale_recorded': Icons.receipt_long_outlined,
+    'sale_voided': Icons.block_outlined,
   };
 
   void _open(Widget screen) =>

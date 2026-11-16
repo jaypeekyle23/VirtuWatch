@@ -12,9 +12,10 @@
 /// That is NOT the same as zero. Watches listed before this feature existed
 /// have no `stock`, and they must not suddenly show as sold out.
 ///
-/// There is no checkout in VirtuWatch, so nothing lowers the count by
-/// itself. The merchant types it in, or uses the stock dialog, and edits it
-/// as they sell.
+/// There is no checkout in VirtuWatch, so a customer's purchase never lowers
+/// the count. The merchant types it in, or uses the stock dialog, and edits it
+/// as they sell. Recording a sale in the sales history (see utils/sales.dart)
+/// also takes the sold units out, in the same step.
 library;
 
 /// At this many units or fewer (but more than zero), a watch counts as low.

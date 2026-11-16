@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { currentUser } from '../../composables/useAuth'
 import { getWatch, deleteWatch } from '../../services/watchService'
+import { formatMoney } from '../../utils/sales'
 import { seedWatch } from '../../utils/snapshotCache'
 import { heroFrame } from '../../composables/useHeroTransition'
 import { listLocation } from '../../router/listLocation'
@@ -13,6 +14,7 @@ import { arStatus, parseArFit } from '../../utils/arFit'
 import { StockStatus, stockStatus, merchantStockLabel } from '../../utils/stock'
 import BackLink from '../../components/BackLink.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
+import RecordSaleDialog from '../../components/RecordSaleDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,6 +41,9 @@ const watch = ref(seeded)
 const loading = ref(!seeded)
 const notFound = ref(false)
 const selectedPhoto = ref(0)
+
+// Recording a sale is the merchant's own job, so admins never get the button.
+const saleOpen = ref(false)
 
 const deleteOpen = ref(false)
 const deleting = ref(false)
@@ -137,6 +142,18 @@ function formatPrice(price) {
 function watchLabel() {
   const w = watch.value
   return w.brand ? `${w.brand} ${w.name}` : w.name
+}
+
+// A sale lowers the stock, so load the watch again to show the new count.
+async function onSaleSaved({ quantity, total, stockLeft }) {
+  const left = stockLeft === null ? '' : ` ${stockLeft} left in stock.`
+  showToast('success', `Recorded ${quantity} × "${watch.value.name}" for ${formatMoney(total)}.${left}`)
+  try {
+    const fresh = await getWatch(route.params.id)
+    if (fresh) watch.value = fresh
+  } catch (e) {
+    console.error(e)
+  }
 }
 
 function cancelDelete() {
@@ -352,6 +369,14 @@ async function confirmDelete() {
             Edit details
           </router-link>
           <button
+            v-if="!isAdminView"
+            type="button"
+            class="btn-secondary flex-1 sm:flex-none sm:px-8"
+            @click="saleOpen = true"
+          >
+            Record sale
+          </button>
+          <button
             type="button"
             class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-400/40 text-red-300 transition-colors hover:bg-red-400/10"
             aria-label="Delete watch"
@@ -365,6 +390,13 @@ async function confirmDelete() {
         </div>
       </div>
     </div>
+
+    <RecordSaleDialog
+      v-if="!isAdminView"
+      :target="saleOpen ? watch : null"
+      @saved="onSaleSaved"
+      @close="saleOpen = false"
+    />
 
     <ConfirmDialog
       :open="deleteOpen"

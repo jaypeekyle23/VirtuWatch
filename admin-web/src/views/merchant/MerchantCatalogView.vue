@@ -17,6 +17,8 @@ import WatchGridCard from '../../components/WatchGridCard.vue'
 import Pagination from '../../components/Pagination.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import StockDialog from '../../components/StockDialog.vue'
+import RecordSaleDialog from '../../components/RecordSaleDialog.vue'
+import { formatMoney } from '../../utils/sales'
 import StockLabel from '../../components/StockLabel.vue'
 import { stockAlertCounts } from '../../utils/stock'
 import {
@@ -44,6 +46,9 @@ const { search, sort, filters, needsInfoOnly, stockAlertOnly, page } = useCatalo
 
 // The watch whose stock is being changed (null = dialog closed).
 const stockTarget = ref(null)
+
+// The watch a sale is being recorded for (null = dialog closed).
+const saleTarget = ref(null)
 
 // The watch currently being confirmed for deletion (null = dialog closed).
 const deleteTarget = ref(null)
@@ -128,6 +133,14 @@ function clearAll() {
 
 function onStockSaved({ watch: saved }) {
   showToast('success', `Stock updated for "${saved.name}".`)
+}
+
+function onSaleSaved({ watch: sold, quantity, total, stockLeft }) {
+  const left = stockLeft === null ? '' : ` ${stockLeft} left in stock.`
+  showToast(
+    'success',
+    `Recorded ${quantity} × "${sold.name}" for ${formatMoney(total)}.${left}`,
+  )
 }
 
 function thumbnail(watch) {
@@ -268,7 +281,9 @@ async function confirmDelete() {
           show-list-toggle
           show-stock-action
           @toggle-listed="toggleListed"
+          show-sale-action
           @update-stock="stockTarget = $event"
+          @record-sale="saleTarget = $event"
           @delete="askDelete"
         />
       </div>
@@ -358,6 +373,14 @@ async function confirmDelete() {
                   </button>
                   <button
                     type="button"
+                    class="eyebrow transition-colors hover:text-cream"
+                    :aria-label="`Record a sale of ${watch.name}`"
+                    @click="saleTarget = watch"
+                  >
+                    Sell
+                  </button>
+                  <button
+                    type="button"
                     class="eyebrow transition-colors hover:text-red-300"
                     @click="askDelete(watch)"
                   >
@@ -381,6 +404,7 @@ async function confirmDelete() {
     </template>
 
     <StockDialog :target="stockTarget" @saved="onStockSaved" @close="stockTarget = null" />
+    <RecordSaleDialog :target="saleTarget" @saved="onSaleSaved" @close="saleTarget = null" />
 
     <ConfirmDialog
       :open="!!deleteTarget"

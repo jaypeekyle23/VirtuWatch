@@ -19,7 +19,7 @@ import 'merchant_profile_tab.dart';
 class MerchantDashboardTab extends StatefulWidget {
   final String username;
 
-  /// Switches the shell to another tab (1 = catalog, 2 = analytics) instead of
+  /// Switches the shell to another tab (1 = catalog, 2 = sales, 3 = analytics) instead of
   /// pushing a second copy of it, which would duplicate that tab's Hero photos.
   final ValueChanged<int> onSelectTab;
 
@@ -118,7 +118,8 @@ class _MerchantDashboardTabState extends State<MerchantDashboardTab> {
         ),
         luxeBand([
           _action('MY CATALOG', 1),
-          _action('ANALYTICS', 2),
+          _action('SALES', 2),
+          _action('ANALYTICS', 3),
         ]),
         const SizedBox(height: 32),
         luxeHeader('Latest watches',

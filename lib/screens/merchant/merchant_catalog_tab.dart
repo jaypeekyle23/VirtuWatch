@@ -7,7 +7,9 @@ import '../../theme/app_theme.dart';
 import '../../utils/stock.dart';
 import '../../widgets/catalog_filter_sheet.dart';
 import '../../widgets/delete_watch.dart';
+import '../../utils/sales.dart' show formatSaleMoney;
 import '../../widgets/luxe.dart';
+import '../../widgets/record_sale_dialog.dart';
 import '../../widgets/stock_badge.dart';
 import '../../widgets/watch_tile.dart';
 import 'merchant_add_watch_screen.dart';
@@ -297,6 +299,8 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
                     _open(MerchantEditWatchScreen(watchId: id, data: data));
                   case 'stock':
                     _updateStock(id, data);
+                  case 'sale':
+                    _recordSale(id, data);
                   case 'toggle':
                     _toggleListed(id, data);
                   default:
@@ -306,6 +310,7 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
               itemBuilder: (context) => [
                 item('edit', 'Edit'),
                 item('stock', 'Update stock'),
+                item('sale', 'Record sale'),
                 item('toggle', listed ? 'Unlist' : 'List in catalog'),
                 item('delete', 'Delete', color: Colors.redAccent),
               ],
@@ -425,6 +430,16 @@ class _MerchantCatalogTabState extends State<MerchantCatalogTab> {
   Future<void> _updateStock(String id, Map<String, dynamic> data) async {
     final saved = await showStockDialog(context, watchId: id, data: data);
     if (saved) _snack('Stock updated for "${data['name']}".');
+  }
+
+  Future<void> _recordSale(String id, Map<String, dynamic> data) async {
+    final receipt =
+        await showRecordSaleDialog(context, watchId: id, data: data);
+    if (receipt == null) return;
+    final left =
+        receipt.stockLeft == null ? '' : ' ${receipt.stockLeft} left in stock.';
+    _snack('Sale recorded for "${data['name']}": '
+        '${formatSaleMoney(receipt.total)}.$left');
   }
 
   Future<void> _toggleListed(String id, Map<String, dynamic> data) async {

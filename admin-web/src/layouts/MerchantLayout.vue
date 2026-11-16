@@ -10,6 +10,7 @@ const links = [
     icon: 'watch',
     activeFor: ['/merchant/catalog', '/merchant/watches'],
   },
+  { to: '/merchant/sales', label: 'Sales', icon: 'receipt' },
   { to: '/merchant/analytics', label: 'Analytics', icon: 'chart' },
   { to: '/merchant/profile', label: 'Profile', icon: 'user' },
 ]

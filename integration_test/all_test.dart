@@ -11,6 +11,7 @@ import 'it06_watch_media_ar_ready_test.dart' as it06;
 import 'it07_engagement_test.dart' as it07;
 import 'it08_security_rules_test.dart' as it08;
 import 'it09_accounts_admin_test.dart' as it09;
+import 'it11_sales_history_test.dart' as it11;
 
 void main() {
   it01.main();
@@ -21,4 +22,5 @@ void main() {
   it07.main();
   it08.main();
   it09.main();
+  it11.main();
 }

@@ -128,6 +128,7 @@ const ICONS = {
   swap: ['M4 8h14M14 4l4 4-4 4', 'M20 16H6M10 12l-4 4 4 4'],
   trash: ['M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3'],
   watch: ['M9 6l1-3h4l1 3M9 18l1 3h4l1-3', 'M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z', 'M12 9v3l2 1.5'],
+  receipt: ['M6 3h12v18l-3-2-3 2-3-2-3 2V3Z', 'M9 8h6M9 12h6'],
   dot: ['M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z'],
 }
 
@@ -148,6 +149,10 @@ function iconFor(type) {
       return ICONS.trash
     case 'watch_added':
       return ICONS.watch
+    case 'sale_recorded':
+      return ICONS.receipt
+    case 'sale_voided':
+      return ICONS.ban
     default:
       return ICONS.dot
   }

@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import '../../services/watch_service.dart';
 import '../../utils/ar_readiness.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/sales.dart' show formatSaleMoney;
 import '../../utils/stock.dart';
 import '../../widgets/delete_watch.dart';
 import '../../widgets/luxe.dart';
+import '../../widgets/record_sale_dialog.dart';
 import '../../widgets/watch_detail_parts.dart';
 import 'merchant_catalog_tab.dart' show missingWatchFields;
 import 'merchant_edit_watch_screen.dart';
@@ -137,6 +139,17 @@ class _MerchantWatchDetailScreenState extends State<MerchantWatchDetailScreen> {
                   ),
                   watchSpecsSection(data),
                   const SizedBox(height: 12),
+                  // Recording a sale is the merchant's own job, so the admin
+                  // view (showArFit) never gets the button.
+                  if (!showArFit) ...[
+                    OutlinedButton.icon(
+                      style: luxeOutlinedStyle,
+                      onPressed: () => _recordSale(context),
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      label: const Text('Record sale'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -207,6 +220,17 @@ class _MerchantWatchDetailScreenState extends State<MerchantWatchDetailScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _recordSale(BuildContext context) async {
+    final receipt = await showRecordSaleDialog(context,
+        watchId: widget.watchId, data: _data);
+    if (receipt == null || !context.mounted) return;
+    final left =
+        receipt.stockLeft == null ? '' : ' ${receipt.stockLeft} left in stock.';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Sale recorded: ${formatSaleMoney(receipt.total)}.$left'),
+    ));
   }
 
   Future<void> _delete(BuildContext context) async {

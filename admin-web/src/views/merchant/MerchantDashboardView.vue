@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { currentUser } from '../../composables/useAuth'
 import { hero } from '../../composables/useHeroTransition'
 import { listenToMyWatches, seedMyWatches } from '../../services/watchService'
+import { listenToMySales } from '../../services/salesService'
+import { isVoided, formatMoney, saleDate } from '../../utils/sales'
 import { isListed } from '../../utils/catalogFilters'
 import { showToast } from '../../composables/useToast'
 import {
@@ -22,7 +24,26 @@ const loading = ref(!seededWatches)
 const errorMessage = ref('')
 let stopListening = null
 
+// The latest sales, for the Recent sales block. A few extra are read because voided
+// ones are left out of it.
+const sales = ref([])
+const salesLoading = ref(true)
+let stopListeningSales = null
+
 onMounted(() => {
+  stopListeningSales = listenToMySales(
+    currentUser.value.uid,
+    (list) => {
+      sales.value = list
+      salesLoading.value = false
+    },
+    (err) => {
+      // The block is a nice-to-have, so a failure just hides it.
+      console.error(err)
+      salesLoading.value = false
+    },
+    { max: 10 },
+  )
   stopListening = listenToMyWatches(
     currentUser.value.uid,
     (list) => {
@@ -39,6 +60,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (stopListening) stopListening()
+  if (stopListeningSales) stopListeningSales()
 })
 
 const greeting = computed(() => {
@@ -71,6 +93,10 @@ const alertSummary = computed(() =>
     .filter(Boolean)
     .join(', '),
 )
+
+const recentSales = computed(() => sales.value.filter((s) => !isVoided(s)).slice(0, 4))
+const dayFormat = new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' })
+const soldOn = (sale) => (saleDate(sale) ? dayFormat.format(saleDate(sale)) : '')
 
 const stockTarget = ref(null)
 function onStockSaved({ watch: saved }) {
@@ -161,6 +187,37 @@ const size = (w) => (w.caseDiameterMm != null ? `${Number(w.caseDiameterMm).toFi
       </p>
     </section>
 
+    <!-- Recent sales -->
+    <section v-if="!salesLoading && recentSales.length" class="mt-12">
+      <div class="flex items-baseline justify-between gap-4">
+        <h2 class="font-serif text-3xl font-medium text-cream">Recent sales</h2>
+        <router-link
+          to="/merchant/sales"
+          class="eyebrow text-cream transition-colors hover:text-gold"
+        >
+          View history
+        </router-link>
+      </div>
+      <ul class="mt-5 divide-y divide-line border-y border-line">
+        <li
+          v-for="sale in recentSales"
+          :key="sale.id"
+          class="flex items-center gap-4 py-4"
+        >
+          <span class="w-14 shrink-0 text-xs uppercase tracking-wider text-mist">
+            {{ soldOn(sale) }}
+          </span>
+          <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-cream">
+            {{ sale.watchName }}
+          </span>
+          <span class="text-sm tabular-nums text-mist">× {{ sale.quantity }}</span>
+          <span class="w-28 text-right text-sm font-semibold tabular-nums text-cream">
+            {{ formatMoney(sale.totalAmount) }}
+          </span>
+        </li>
+      </ul>
+    </section>
+
     <div class="mt-12 grid gap-12 lg:grid-cols-[minmax(0,1fr)_21rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
       <section>
         <div class="flex items-baseline justify-between gap-4">
@@ -230,6 +287,7 @@ const size = (w) => (w.caseDiameterMm != null ? `${Number(w.caseDiameterMm).toFi
           <router-link
             v-for="l in [
               { to: '/merchant/catalog', label: 'My catalog' },
+              { to: '/merchant/sales', label: 'Sales history' },
               { to: '/merchant/analytics', label: 'Analytics' },
             ]"
             :key="l.to"

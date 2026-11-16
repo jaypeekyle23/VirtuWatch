@@ -40,7 +40,8 @@ Photos captured with the in-app AR try-on. Customers can take a photo while tryi
 ### Merchant (mobile app and web portal)
 - Add and edit watch listings, with images and 3D models hosted on Cloudinary.
 - Catalog management and watch detail pages.
-- Sales and engagement analytics (saves and views per listing).
+- Sales history: because VirtuWatch has no checkout or payment processing, a merchant records a sale by hand after it happens (in person, by message or online). Each record keeps a snapshot of the watch's name, brand, photo and price, takes the units out of stock in the same step, and can be voided (never deleted) if it was a mistake. The web portal also filters by date, payment method and search, totals revenue and units for the filtered period, and exports to CSV.
+- Engagement analytics (saves and views per listing).
 - Profile management.
 
 ### Admin (mobile app and web portal)
@@ -59,7 +60,7 @@ A Vue 3 single-page app for merchants and admins who prefer to manage listings f
 | --- | --- |
 | Public | Sign in, forgot password |
 | Admin (`/admin`) | Dashboard, watches (list, add, edit, detail), accounts (list, create), profile |
-| Merchant (`/merchant`) | Dashboard, catalog, add and edit watch, watch detail, analytics, profile |
+| Merchant (`/merchant`) | Dashboard, catalog, add and edit watch, watch detail, sales history, analytics, profile |
 
 Routes are guarded by role, so a merchant cannot open admin pages and the other way around. Access is also enforced on the backend by `firestore.rules`.
 
@@ -149,7 +150,7 @@ firebase deploy --only hosting --project virtuwatch-711e4
 ### Setup
 1. Clone the repo and run `flutter pub get`.
 2. In the Firebase console, open Firebase AI Logic, choose the Gemini Developer API, and finish the setup. The key stays on Google's side.
-3. Deploy the security rules in `firestore.rules` to your Firestore database.
+3. Deploy the security rules in `firestore.rules` and the indexes in `firestore.indexes.json` to your Firestore database (`firebase deploy --only firestore`). The portal's GitHub Action deploys Hosting only, so rules and indexes must be deployed separately; the sales history needs both.
 4. Run the app:
    ```
    flutter run
@@ -177,7 +178,7 @@ If `android/key.properties` isn't present yet, the release build falls back to t
 lib/                  # Flutter mobile app
   screens/
     customer/         # catalog, AR try-on, wrist measurement, outfit scan, recommendations, profile
-    merchant/         # listings, analytics, profile
+    merchant/         # listings, sales history, analytics, profile
     admin/            # account management, catalog moderation, dashboard
   services/           # business logic: recommendation scoring, chat, auth, etc.
   widgets/            # shared UI (e.g. EdgeMatchGuide, OffsetStepperControl, used by both the
@@ -206,6 +207,7 @@ admin-web/            # Vue 3 web portal for merchants and admins
 
 test/                 # Dart unit tests
 firestore.rules       # security rules shared by the app and the portal
+firestore.indexes.json # composite indexes (sales by merchant and date); deployed with the rules
 firebase.json         # Firebase config: Firestore rules and Hosting (admin-web/dist)
 .github/workflows/    # GitHub Actions: build and deploy the portal on push to main
 ```
@@ -227,4 +229,5 @@ None of these need Firebase Cloud Messaging or a backend component, since each i
 - Test coverage is limited to the default Flutter scaffold test and unit tests for scoring and validation logic. The Firebase-backed services, the screens, and the web portal have no automated tests yet.
 - AR/hand-tracking package versions are unpinned, and the underlying MediaPipe bindings can change API between versions.
 - AR fit numbers are measured by hand for each 3D model and entered by an admin. A watch without them does not appear in AR.
+- Sales history is merchant-entered, not system-verified. VirtuWatch has no checkout, payment processing or shipping, so a sale is only as accurate as the merchant's own record of it. Admins can read every merchant's sales but cannot create or change them. CSV export is available on the web portal only.
 - Pushes to `main` deploy straight to the live portal. There is no staging site and no automated check before a deploy, so a broken change on `main` goes live.
